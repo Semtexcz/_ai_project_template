@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "my-ai-project"
+version = "0.1.0"
+description = "AI-first engineering project"
+authors = ["Daniel Kopecký <...>"]
+readme = "README.md"
+packages = [{ include = "ai_project_template", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-cov = "^4.0"
+ruff = "^0.3"
+mypy = "^1.8"
+pre-commit = "^3.6"
+
+[tool.poetry.scripts]
+ai-project = "ai_project_template.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
