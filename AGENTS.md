@@ -75,6 +75,22 @@ Do not modify unrelated tasks.
 
 Agents should follow `docs/TASK_SEQUENCE.md` to determine correct execution order.
 
+## Task Sequence Consistency
+
+When tasks in `project/backlog/` change, update `docs/TASK_SEQUENCE.md`.
+
+Trigger conditions:
+
+- a task is added
+- a task is removed
+- a task identifier changes
+
+Rules:
+
+- keep `Order` aligned with backlog
+- update `Dependencies` if needed
+- do not leave references to non-existing tasks
+
 ---
 
 ## Testing
