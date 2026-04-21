@@ -5,6 +5,8 @@
 This repository is a Copier template for AI-first software projects.
 It intentionally preserves the project management and agent-collaboration structure instead of only scaffolding code.
 
+After generating a project, start with `docs/WORKFLOW.md` for the human-facing playbook.
+
 ## Generate a Project
 
 Install Copier, then generate a new project from this repository:

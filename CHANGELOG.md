@@ -4,6 +4,7 @@
 
 - Copier template configuration with a minimal variable set for project identity and Python packaging.
 - Template usage and maintenance documentation for generating and updating projects.
+- A workflow playbook that explains how to move from idea to implementation and how to use the Markdown artifacts with an AI agent.
 
 ### Changed
 
