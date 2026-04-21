@@ -21,7 +21,7 @@ The project requires a stable dataset export so all analytical workflows operate
 
 ## Touchpoints
 
-- `src/ai_project_template/`
+- `src/<package_name>/`
 - `tests/unit/`
 
 ## Scope

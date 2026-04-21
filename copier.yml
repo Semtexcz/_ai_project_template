@@ -1,0 +1,48 @@
+project_name:
+  type: str
+  help: Human-readable name for the generated project.
+  default: My AI Project
+
+project_slug:
+  type: str
+  help: Repository and directory slug.
+  default: "{{ project_name | lower | replace(' ', '-') | replace('_', '-') }}"
+
+package_name:
+  type: str
+  help: Python package name used under src/.
+  default: "{{ project_name | lower | replace(' ', '_') | replace('-', '_') }}"
+
+project_description:
+  type: str
+  help: Short description used in package metadata and docs.
+  default: AI-first engineering project
+
+author_name:
+  type: str
+  help: Author name for package metadata.
+  default: Your Name
+
+author_email:
+  type: str
+  help: Author email for package metadata.
+  default: you@example.com
+
+python_version:
+  type: str
+  help: Supported Python version for local development and CI.
+  default: "3.12"
+
+initial_version:
+  type: str
+  help: Initial semantic version for the generated project.
+  default: "0.1.0"
+
+_exclude:
+  - .git
+  - .pytest_cache
+  - .mypy_cache
+  - .ruff_cache
+  - .codex
+  - copier.yml
+  - docs/TEMPLATE_USAGE.md

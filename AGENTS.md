@@ -18,7 +18,7 @@ Agents must prioritize:
 
 Always read:
 
-1. `docs/architecture.md`
+1. `docs/ARCHITECTURE.md`
 2. relevant feature in `product/features/`
 3. relevant task in `project/backlog/`
 4. `context/test-strategy.md` (if exists)
@@ -31,7 +31,7 @@ Always read:
 - Do not refactor unrelated code.
 - Do not invent requirements not present in task or feature.
 - Prefer minimal, safe changes over large rewrites.
-- Keep module boundaries defined in `architecture.md`.
+- Keep module boundaries defined in `docs/ARCHITECTURE.md`.
 
 ---
 

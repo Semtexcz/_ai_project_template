@@ -1,0 +1,10 @@
+"""Smoke tests for the generated CLI entry point."""
+
+from {{ package_name }}.main import main
+
+
+def test_main_runs(capsys) -> None:
+    """The starter CLI should execute without errors."""
+    main()
+    captured = capsys.readouterr()
+    assert "{{ project_name }} running" in captured.out
