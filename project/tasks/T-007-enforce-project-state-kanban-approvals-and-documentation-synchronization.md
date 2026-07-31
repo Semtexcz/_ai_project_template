@@ -3,7 +3,7 @@ id: T-007
 
 title: Enforce project state, Kanban, approvals and documentation synchronization
 
-status: review
+status: done
 
 priority: 1
 
@@ -15,9 +15,9 @@ approval_level: A1
 
 approval_status: pending
 
-approved_by:
+approved_by: Project owner
 
-approved_at:
+approved_at: 2026-07-31T17:39:00+02:00
 
 blocked_reason:
 

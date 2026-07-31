@@ -15,7 +15,6 @@ _None_
 
 ## Review
 
-- [T-007](tasks/T-007-enforce-project-state-kanban-approvals-and-documentation-synchronization.md) - P1 - Enforce project state, Kanban, approvals and documentation synchronization
 
 ## Blocked
 
@@ -29,6 +28,7 @@ _None_
 - [T-004](tasks/T-004-make-frontend-shared-golden-path-executable.md) - P1 - Make frontend-shared golden path executable
 - [T-005](tasks/T-005-make-fullstack-local-golden-path-executable-with-generated-openapi-client.md) - P1 - Make fullstack-local golden path executable with generated OpenAPI client
 - [T-006](tasks/T-006-make-copier-update-safe-and-integration-tested.md) - P1 - Make Copier update safe and integration-tested
+- [T-007](tasks/T-007-enforce-project-state-kanban-approvals-and-documentation-synchronization.md) - P1 - Enforce project state, Kanban, approvals and documentation synchronization
 
 ## Cancelled
 
