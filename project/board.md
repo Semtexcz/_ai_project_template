@@ -32,6 +32,7 @@ _None_
 - [T-007](tasks/T-007-enforce-project-state-kanban-approvals-and-documentation-synchronization.md) - P1 - Enforce project state, Kanban, approvals and documentation synchronization
 - [T-008](tasks/T-008-make-fullstack-production-golden-path-executable.md) - P1 - Make fullstack-production golden path executable
 - [T-009](tasks/T-009-operationalize-agent-skills-hooks-and-the-complete-one-task-workflow.md) - P1 - Operationalize agent skills, hooks and the complete one-task workflow
+- [T-010](tasks/T-010-run-an-independent-release-candidate-audit.md) - P1 - Run an independent release-candidate audit
 
 ## Cancelled
 
