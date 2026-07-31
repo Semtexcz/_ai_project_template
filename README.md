@@ -9,7 +9,7 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 | Template version | 0.1.0 |
 | Supported project types | script, library, backend, frontend, fullstack |
 | Supported runtime levels | local, shared, production |
-| Current focus | fullstack-local OpenAPI contract |
+| Current focus | copier-update golden path |
 
 ## Use
 
@@ -60,6 +60,13 @@ make run
 
 ```bash
 uv run pytest
+```
+
+Targeted maintainer checks:
+
+```bash
+make test-template
+make test-copier-update
 ```
 
 ## Design Decisions

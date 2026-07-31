@@ -41,9 +41,6 @@ _skip_if_exists:
   - project/requirements.md
   - project/tasks/*.md
   - docs/decisions/*.md
-  - README.md
-  - AGENTS.md
-  - CHANGELOG.md
 
 project_name:
   type: str
@@ -94,8 +91,3 @@ include_reference_feature:
   type: bool
   help: Include the full-stack reference feature under examples/.
   default: false
-
-template_version:
-  type: str
-  help: Template version recorded in generated projects.
-  default: "0.1.0"

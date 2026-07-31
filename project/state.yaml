@@ -9,8 +9,8 @@ project:
 lifecycle:
   phase: bootstrap
   milestone: M-01
-  next_gate: copier-update-golden-path
+  next_gate: project-state-validation-golden-path
 
 work:
-  active_task: T-005
+  active_task: T-006
   blocked: false

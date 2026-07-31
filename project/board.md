@@ -14,7 +14,7 @@ _None_
 
 ## Review
 
-- [T-005](tasks/T-005-make-fullstack-local-golden-path-executable-with-generated-openapi-client.md) - Make fullstack-local golden path executable with generated OpenAPI client
+- [T-006](tasks/T-006-make-copier-update-safe-and-integration-tested.md) - Make Copier update safe and integration-tested
 
 ## Blocked
 
@@ -26,3 +26,4 @@ _None_
 - [T-002](tasks/T-002-make-library-shared-golden-path-executable.md) - Make library-shared golden path executable
 - [T-003](tasks/T-003-make-backend-shared-golden-path-executable.md) - Make backend-shared golden path executable
 - [T-004](tasks/T-004-make-frontend-shared-golden-path-executable.md) - Make frontend-shared golden path executable
+- [T-005](tasks/T-005-make-fullstack-local-golden-path-executable-with-generated-openapi-client.md) - Make fullstack-local golden path executable with generated OpenAPI client

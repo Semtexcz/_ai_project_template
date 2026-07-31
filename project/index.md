@@ -7,7 +7,7 @@
 | Runtime level | local |
 | Phase | bootstrap |
 | Milestone | M-01 |
-| Active task | T-005 |
-| Next gate | copier-update-golden-path |
+| Active task | T-006 |
+| Next gate | project-state-validation-golden-path |
 
-Next step: review T-005 and then open the Copier update golden path gate.
+Next step: review T-006 before opening the project state validation golden path gate.
