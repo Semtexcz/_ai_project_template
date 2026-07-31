@@ -14,7 +14,7 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 | Active task | None |
 | Approval | None |
 | Next gate | production-runtime-golden-path |
-| Recommended next action | No ready task exists. Create one task addressing gate production-runtime-golden-path. |
+| Recommended next action | Human A1 approval is required for T-009 before completion. |
 <!-- project-status:end -->
 
 ## Use
@@ -71,6 +71,11 @@ uv run pytest
 Targeted maintainer checks:
 
 ```bash
+make agent-status
+make agent-context TASK=<id>
+make agent-pre-task TASK=<id>
+make agent-pre-review TASK=<id>
+make agent-post-task TASK=<id>
 make project-status
 make sync-project-docs
 make validate-project

@@ -4,9 +4,7 @@ version = "0.1.0"
 description = "{{ project_name }}"
 requires-python = ">=3.12"
 dependencies = [
-{% if project_type != "library" %}
   "pyyaml>=6.0.2",
-{% endif %}
 {% if project_type == "script" %}
   "typer>=0.16.0",
 {% endif %}

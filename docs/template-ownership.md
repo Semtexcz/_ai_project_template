@@ -9,8 +9,8 @@ Template-owned files are maintained by the template and may be updated during a
 Copier upgrade:
 
 - `.github/workflows/`
-- `.codex/`
-- `.agents/`
+- `.codex/` thin adapter files
+- `.agents/` canonical skills, schemas, context map, and hooks
 - `tools/`
 - `.gitignore`
 - `.template-version`

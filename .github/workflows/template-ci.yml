@@ -71,6 +71,26 @@ jobs:
       - name: Run script-local golden path
         run: uv run pytest tests/test_script_local_golden_path.py
 
+  agent-one-task-workflow-golden-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Validate canonical agent skills
+        run: make validate-agent-skills
+      - name: Run agent one-task workflow golden path
+        run: uv run pytest tests/test_agent_one_task_workflow_golden_path.py
+
   library-shared-golden-path:
     runs-on: ubuntu-latest
     steps:

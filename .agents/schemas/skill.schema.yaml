@@ -1,0 +1,12 @@
+schema_version: 1
+required:
+  - name
+  - version
+  - purpose
+  - triggers
+  - inputs
+  - reads
+  - commands
+  - outputs
+  - approval_boundary
+  - stop_conditions

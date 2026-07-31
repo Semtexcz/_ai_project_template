@@ -15,7 +15,7 @@ _None_
 
 ## Review
 
-_None_
+- [T-009](tasks/T-009-operationalize-agent-skills-hooks-and-the-complete-one-task-workflow.md) - P1 - Operationalize agent skills, hooks and the complete one-task workflow
 
 ## Blocked
 

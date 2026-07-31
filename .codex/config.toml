@@ -1,0 +1,5 @@
+[features]
+hooks = true
+
+# Canonical guidance lives in AGENTS.md and .agents/.
+# Keep this file limited to supported Codex project-local configuration.

@@ -1,25 +1,18 @@
 # AGENTS.md
 
-## Purpose
-
-This repository follows an opinionated Python/Nuxt golden path. Keep changes small, documented, tested, and tied to the active project task.
-
 ## Required Start
 
-Run or read project status first:
+Run or read agent-oriented project status first:
 
 ```bash
-make project-status
+make agent-status
 ```
 
-Then load:
+Respect exactly one active task. Then load only context recommended by:
 
-- `AGENTS.md`
-- `project/state.yaml`
-- `project/index.md`
-- the active task from `project/tasks/`
-
-Then use `.agents/context-map.yaml` to load only task-relevant context.
+```bash
+make agent-context TASK=<id>
+```
 
 ## Architecture Rules
 
@@ -40,6 +33,11 @@ make test
 make lint
 make typecheck
 make check
+make agent-status
+make agent-context TASK=T-001
+make agent-pre-task TASK=T-001
+make agent-pre-review TASK=T-001
+make agent-post-task TASK=T-001
 make project-status
 make sync-project-docs
 make validate-project
@@ -59,4 +57,4 @@ make task-block TASK=T-001 REASON="..." UNBLOCK="..."
 
 ## Workflow
 
-Use `docs/workflow.md` for the daily change loop and `.agents/skills/` for task-specific procedures. Do not bypass controlled task transitions by silently editing task status. After task or project state changes, run `make sync-project-docs` when dashboards need refresh and then `make validate-project`.
+General rules are in `.agents/`. Codex adapter notes are in `.codex/`. Project-specific context is in `project/` and `docs/`. Run `make agent-pre-review TASK=<id>` before review, do not bypass controlled task transitions, and keep dashboards synchronized and valid.

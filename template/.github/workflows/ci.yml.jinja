@@ -29,6 +29,8 @@ jobs:
           PNPM_INSTALL_FLAGS: --frozen-lockfile
 {% endif %}
         run: make setup
+      - name: Validate agent skills
+        run: make validate-agent-skills
       - name: Check
         run: make check
 {% if project_type == "library" %}

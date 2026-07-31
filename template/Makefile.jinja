@@ -1,4 +1,4 @@
-.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build prod-up prod-smoke prod-down docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-approve down
+.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build prod-up prod-smoke prod-down docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -196,6 +196,27 @@ sync-project-docs:
 
 validate-project:
 	python tools/project.py validate
+
+agent-status:
+	python tools/agent.py status
+
+agent-context:
+	python tools/agent.py context --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
+
+validate-agent-skills:
+	python tools/agent.py validate-skills
+
+agent-pre-task:
+	python tools/agent.py pre-task --task $(TASK)
+
+agent-pre-review:
+	python tools/agent.py pre-review --task $(TASK)
+
+agent-post-task:
+	python tools/agent.py post-task --task $(TASK)
+
+agent-review-report:
+	python tools/agent.py context --task $(TASK)
 
 task-ready:
 	python tools/project.py ready $(TASK)

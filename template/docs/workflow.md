@@ -15,18 +15,25 @@ update_when:
 
 ## One Change Loop
 
-Select a ready task -> load minimal context -> verify scope -> design the smallest coherent change -> implement -> test -> self-review -> human review when required -> merge -> release when relevant -> observe -> update project state.
+Status -> select one task -> prepare -> start -> load minimal context -> verify
+scope -> implement -> run checks -> pre-review -> human approval when required
+-> complete -> post-task -> validate.
 
 ## Task Lifecycle
 
 Use the deterministic commands instead of editing task status by hand:
 
 ```bash
+make agent-status
+make agent-context TASK=T-001
+make agent-pre-task TASK=T-001
 make project-status
 make task-ready TASK=T-001
 make task-start TASK=T-001
+make agent-pre-review TASK=T-001
 make task-review TASK=T-001
 make task-complete TASK=T-001
+make agent-post-task TASK=T-001
 make task-block TASK=T-001 REASON="..." UNBLOCK="..."
 make sync-project-docs
 make validate-project
@@ -49,11 +56,14 @@ from any active state. A0 tasks may also move from `in-progress` directly to
 
 ## AI Agent Work
 
-- Load `AGENTS.md`, `project/state.yaml`, `project/index.md`, and the active task first.
-- Use `.agents/context-map.yaml` for additional context.
+- Start with `make agent-status`.
+- Use `make agent-context TASK=<id>` for the minimal context bundle.
+- Use `.agents/context-map.yaml` for context routing.
+- Use `.agents/skills/*/SKILL.md` for judgment and stop conditions.
 - Do not run `make task-approve`; approval commands are for humans only.
 - Do not bypass task transitions by silently editing status.
 - Prefer the smallest reversible change.
+- Run `make agent-pre-review TASK=<id>` before moving to review.
 
 ## Definition of Done
 
