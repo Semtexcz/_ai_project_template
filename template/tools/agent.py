@@ -418,9 +418,13 @@ def expand_context_pattern(pattern: str, *, required: bool, excludes: list[str])
 
 
 def changed_files() -> list[str]:
+    return [path for _, path in changed_file_entries()]
+
+
+def changed_file_entries() -> list[tuple[str, str]]:
     try:
         result = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD"],
+            ["git", "status", "--porcelain"],
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,
@@ -431,7 +435,16 @@ def changed_files() -> list[str]:
         return []
     if result.returncode != 0:
         return []
-    return sorted(line.strip() for line in result.stdout.splitlines() if line.strip())
+    entries: list[tuple[str, str]] = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        status = line[:2]
+        path = line[3:].strip()
+        if " -> " in path:
+            path = path.rsplit(" -> ", 1)[1]
+        entries.append((status, path))
+    return sorted(entries, key=lambda item: item[1])
 
 
 def recommended_checks(config: dict[str, Any], changes: list[str]) -> list[str]:
@@ -584,10 +597,10 @@ def pre_task(task_id: str) -> None:
 
 def diff_safety_errors() -> list[str]:
     errors: list[str] = []
-    for path in changed_files():
+    for status, path in changed_file_entries():
         if excluded(path, SENSITIVE_PATTERNS):
             errors.append(f"Sensitive file appears in Git diff: {path}.")
-        if excluded(path, BUILD_ARTIFACT_PATTERNS):
+        if excluded(path, BUILD_ARTIFACT_PATTERNS) and "D" not in status:
             errors.append(f"Build artifact appears in Git diff: {path}.")
     return errors
 

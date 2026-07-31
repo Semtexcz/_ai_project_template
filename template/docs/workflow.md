@@ -35,6 +35,8 @@ make task-review TASK=T-001
 make task-complete TASK=T-001
 make agent-post-task TASK=T-001
 make task-block TASK=T-001 REASON="..." UNBLOCK="..."
+make task-unblock TASK=T-001
+make task-cancel TASK=T-001
 make sync-project-docs
 make validate-project
 ```
@@ -89,10 +91,15 @@ with:
 make task-approve TASK=T-001 APPROVED_BY="Human Name"
 ```
 
+All mutating task commands validate a candidate state, render dashboards, write
+the control files together, and roll back if any step fails.
+
 ## Blocked Tasks
 
 Blocked tasks require `blocked_reason` and `unblock_action`. A blocked task
-cannot be the active task and is never selected as the next startable task.
+cannot be the active task and is never selected as the next startable task. Use
+`make task-unblock TASK=<id>` to return it to `ready` after the unblock action
+is complete.
 
 ## Release and Post-Release
 

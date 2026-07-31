@@ -5,12 +5,12 @@
 |---|---|
 | Project | AI Project Golden Path Template |
 | Phase | delivery |
-| Milestone | M-07 |
-| Next gate | production-runtime-golden-path |
-| Active task | None |
-| Approval | None |
+| Milestone | M-08 |
+| Next gate | release-candidate-remediation |
+| Active task | [T-012](tasks/T-012-remediate-rc-002-and-rc-005-production-runtime-readiness.md) |
+| Approval | A2 / approved |
 | Blocker | None |
-| Recommended next action | No ready task exists. Create one task addressing gate production-runtime-golden-path. |
+| Recommended next action | Complete T-012. |
 
 Links: [Board](board.md) | [Roadmap](roadmap.md)
 <!-- project-index:end -->

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,29 @@ def run(command: list[str], cwd: Path, *, expect_success: bool = True) -> subpro
     result = subprocess.run(
         command,
         cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if expect_success and result.returncode != 0:
+        raise AssertionError(result.stdout + result.stderr)
+    if not expect_success and result.returncode == 0:
+        raise AssertionError(f"Command unexpectedly passed: {' '.join(command)}")
+    return result
+
+
+def run_with_env(
+    command: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    *,
+    expect_success: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        command,
+        cwd=cwd,
+        env={**os.environ, **env},
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -112,23 +136,27 @@ def make_project(tmp_path: Path, *, profile: str = "script") -> Path:
         "\n".join(
             [
                 "project-status:",
-                "\tpython tools/project.py status",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py status",
                 "sync-project-docs:",
-                "\tpython tools/project.py sync",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py sync",
                 "validate-project:",
-                "\tpython tools/project.py validate",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py validate",
                 "task-ready:",
-                "\tpython tools/project.py ready $(TASK)",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py ready $(TASK)",
                 "task-start:",
-                "\tpython tools/project.py start $(TASK)",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py start $(TASK)",
                 "task-review:",
-                "\tpython tools/project.py review $(TASK)",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py review $(TASK)",
                 "task-complete:",
-                "\tpython tools/project.py complete $(TASK)",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py complete $(TASK)",
                 "task-block:",
-                "\tpython tools/project.py block $(TASK) --reason \"$(REASON)\" --unblock \"$(UNBLOCK)\"",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py block $(TASK) --reason \"$(REASON)\" --unblock \"$(UNBLOCK)\"",
+                "task-unblock:",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py unblock $(TASK)",
+                "task-cancel:",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py cancel $(TASK)",
                 "task-approve:",
-                "\tpython tools/project.py approve $(TASK) --approved-by \"$(APPROVED_BY)\"",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py approve $(TASK) --approved-by \"$(APPROVED_BY)\"",
                 "",
             ]
         )
@@ -201,6 +229,103 @@ def test_project_state_validation_positive_lifecycle(tmp_path: Path) -> None:
     run(["make", "sync-project-docs"], root)
     after = (root / "README.md").read_text() + (root / "project" / "index.md").read_text() + (root / "project" / "board.md").read_text()
     assert before == after
+
+
+CONTROL_PATHS = [
+    Path("project/state.yaml"),
+    Path("README.md"),
+    Path("project/index.md"),
+    Path("project/board.md"),
+]
+
+
+def control_snapshot(root: Path, task_id: str) -> dict[Path, bytes]:
+    paths = [root / "project" / "tasks" / f"{task_id}-task.md"]
+    paths.extend(root / path for path in CONTROL_PATHS)
+    return {path: path.read_bytes() for path in paths}
+
+
+def assert_control_snapshot(root: Path, before: dict[Path, bytes]) -> None:
+    for path, content in before.items():
+        assert path.read_bytes() == content, path
+    leftovers = sorted(root.rglob("*.tmp")) + sorted(root.rglob("*.tmp-*"))
+    assert leftovers == []
+
+
+def prepare_transaction_command(root: Path, name: str) -> tuple[list[str], str]:
+    if name == "approve":
+        return ["make", "task-approve", "TASK=T-002", "APPROVED_BY=Test Human"], "T-002"
+    if name == "ready":
+        run(["make", "task-complete", "TASK=T-001"], root)
+        return ["make", "task-ready", "TASK=T-002"], "T-002"
+    if name == "start":
+        run(["make", "task-complete", "TASK=T-001"], root)
+        run(["make", "task-ready", "TASK=T-002"], root)
+        return ["make", "task-start", "TASK=T-002"], "T-002"
+    if name == "review":
+        return ["make", "task-review", "TASK=T-001"], "T-001"
+    if name == "complete":
+        return ["make", "task-complete", "TASK=T-001"], "T-001"
+    if name == "block":
+        return [
+            "make",
+            "task-block",
+            "TASK=T-001",
+            "REASON=Waiting",
+            "UNBLOCK=Continue",
+        ], "T-001"
+    if name == "unblock":
+        run(
+            [
+                "make",
+                "task-block",
+                "TASK=T-001",
+                "REASON=Waiting",
+                "UNBLOCK=Continue",
+            ],
+            root,
+        )
+        return ["make", "task-unblock", "TASK=T-001"], "T-001"
+    if name == "cancel":
+        return ["make", "task-cancel", "TASK=T-001"], "T-001"
+    raise AssertionError(name)
+
+
+def test_mutating_task_commands_are_transactional_on_failure(tmp_path: Path) -> None:
+    failures = {
+        "validation": "PROJECT_TOOL_FAIL_VALIDATION",
+        "render": "PROJECT_TOOL_FAIL_RENDER",
+        "write": "PROJECT_TOOL_FAIL_WRITE",
+        "final-validation": "PROJECT_TOOL_FAIL_FINAL_VALIDATE",
+    }
+    commands = ["approve", "ready", "start", "review", "complete", "block", "unblock", "cancel"]
+    for command_name in commands:
+        for failure_name, env_name in failures.items():
+            root = make_project(tmp_path / f"{command_name}-{failure_name}")
+            command, task_id = prepare_transaction_command(root, command_name)
+            run(["make", "validate-project"], root)
+            before = control_snapshot(root, task_id)
+            result = run_with_env(command, root, {env_name: "1"}, expect_success=False)
+            output = result.stdout + result.stderr
+            assert "ERROR:" in output, (command_name, failure_name, output)
+            assert_control_snapshot(root, before)
+            run(["make", "validate-project"], root)
+
+
+def test_failed_approval_does_not_persist_metadata(tmp_path: Path) -> None:
+    root = make_project(tmp_path)
+    before = control_snapshot(root, "T-002")
+    result = run_with_env(
+        ["make", "task-approve", "TASK=T-002", "APPROVED_BY=Test Human"],
+        root,
+        {"PROJECT_TOOL_FAIL_FINAL_VALIDATE": "1"},
+        expect_success=False,
+    )
+    assert "final validation failure" in result.stdout
+    assert_control_snapshot(root, before)
+    task_text = (root / "project" / "tasks" / "T-002-task.md").read_text()
+    assert "approval_status: pending" in task_text
+    assert "approved_by: Test Human" not in task_text
 
 
 def test_project_state_validation_fullstack_profile(tmp_path: Path) -> None:

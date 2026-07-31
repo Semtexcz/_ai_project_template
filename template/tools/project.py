@@ -3,6 +3,8 @@ from __future__ import annotations
 # ruff: noqa: E501
 # pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportArgumentType=false, reportOptionalMemberAccess=false, reportUnnecessaryIsInstance=false
 import argparse
+import copy
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -160,7 +162,7 @@ def parse_simple_yaml(text: str) -> dict[str, Any]:
 def dump_simple_yaml(data: dict[str, Any]) -> str:
     def scalar(value: Any) -> str:
         if value is None:
-            return ""
+            return "null"
         if isinstance(value, bool):
             return "true" if value else "false"
         if isinstance(value, list):
@@ -192,7 +194,10 @@ def read_state() -> dict[str, Any]:
 
 
 def split_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
-    text = path.read_text(encoding="utf-8")
+    return split_frontmatter_text(path.read_text(encoding="utf-8"), path)
+
+
+def split_frontmatter_text(text: str, path: Path) -> tuple[dict[str, Any], str]:
     match = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
     if not match:
         raise ProjectError(f"{relative(path)} is missing YAML frontmatter. Add task metadata.")
@@ -238,6 +243,19 @@ def load_tasks() -> list[Task]:
     tasks = []
     for path in sorted(TASKS_DIR.glob("*.md")):
         data, body = split_frontmatter(path)
+        tasks.append(normalize_task_data(data, path, body))
+    return sorted(tasks, key=task_sort_key)
+
+
+def load_tasks_with_overrides(overrides: dict[Path, str]) -> list[Task]:
+    if not TASKS_DIR.exists():
+        return []
+    tasks = []
+    for path in sorted(TASKS_DIR.glob("*.md")):
+        data, body = split_frontmatter_text(
+            overrides.get(path, path.read_text(encoding="utf-8")),
+            path,
+        )
         tasks.append(normalize_task_data(data, path, body))
     return sorted(tasks, key=task_sort_key)
 
@@ -370,6 +388,17 @@ def validate_all(*, check_drift: bool = True) -> list[str]:
     errors.extend(validate_active_task(state, tasks, tasks_by))
     if check_drift:
         errors.extend(validate_drift(state, tasks))
+    errors.extend(validate_markdown_links())
+    return errors
+
+
+def validate_candidate(state: dict[str, Any], tasks: list[Task]) -> list[str]:
+    errors: list[str] = []
+    tasks_by = task_by_id(tasks)
+    errors.extend(validate_state_schema(state, tasks_by))
+    errors.extend(validate_tasks(tasks, state))
+    errors.extend(validate_task_graph(tasks, tasks_by))
+    errors.extend(validate_active_task(state, tasks, tasks_by))
     errors.extend(validate_markdown_links())
     return errors
 
@@ -804,13 +833,9 @@ def write_if_changed(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def sync() -> None:
-    state = read_state()
-    tasks = load_tasks()
-    errors = validate_all(check_drift=False)
-    if errors:
-        print_errors(errors)
-        raise SystemExit(1)
+def rendered_dashboard_texts(state: dict[str, Any], tasks: list[Task]) -> dict[Path, str]:
+    if os.environ.get("PROJECT_TOOL_FAIL_RENDER") == "1":
+        raise ProjectError("Injected dashboard rendering failure.")
     replacements = {
         ROOT / "README.md": (STATE_START, STATE_END, dashboard_block(state, tasks)),
         ROOT / "project" / "index.md": (
@@ -820,10 +845,121 @@ def sync() -> None:
         ),
         ROOT / "project" / "board.md": (KANBAN_START, KANBAN_END, kanban_block(tasks)),
     }
+    rendered: dict[Path, str] = {}
     for path, (start, end, content) in replacements.items():
-        updated = replace_block_text(path.read_text(encoding="utf-8"), start, end, content, path)
+        rendered[path] = replace_block_text(
+            path.read_text(encoding="utf-8"), start, end, content, path
+        )
+    return rendered
+
+
+def sync() -> None:
+    state = read_state()
+    tasks = load_tasks()
+    errors = validate_all(check_drift=False)
+    if errors:
+        print_errors(errors)
+        raise SystemExit(1)
+    for path, updated in rendered_dashboard_texts(state, tasks).items():
         write_if_changed(path, updated)
     print("Project docs synchronized.")
+
+
+def dump_task_text(data: dict[str, Any], body: str) -> str:
+    if "approval" in data:
+        data.pop("approval")
+    return "---\n" + dump_simple_yaml(data).strip() + "\n---\n" + body
+
+
+def project_control_paths(task_file: Path) -> list[Path]:
+    return [
+        task_file,
+        STATE_PATH,
+        ROOT / "README.md",
+        ROOT / "project" / "index.md",
+        ROOT / "project" / "board.md",
+    ]
+
+
+def assert_no_tmp_files(paths: list[Path]) -> None:
+    leftovers: list[Path] = []
+    for path in paths:
+        leftovers.extend(path.parent.glob(path.name + ".tmp-*"))
+    if leftovers:
+        raise ProjectError(
+            "Temporary mutation files remain: "
+            + ", ".join(relative(path) for path in sorted(leftovers))
+        )
+
+
+def commit_files_atomically(files: dict[Path, str]) -> None:
+    paths = list(files)
+    snapshots = {path: path.read_bytes() if path.exists() else None for path in paths}
+    tmp_paths: list[Path] = []
+    try:
+        for path, content in files.items():
+            tmp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
+            tmp.write_text(content, encoding="utf-8")
+            tmp_paths.append(tmp)
+        if os.environ.get("PROJECT_TOOL_FAIL_WRITE") == "1":
+            raise ProjectError("Injected write failure.")
+        for tmp, path in zip(tmp_paths, paths, strict=True):
+            tmp.replace(path)
+        if os.environ.get("PROJECT_TOOL_FAIL_FINAL_VALIDATE") == "1":
+            raise ProjectError("Injected final validation failure.")
+        errors = validate_all(check_drift=True)
+        if errors:
+            raise ProjectError("\n".join(errors))
+    except Exception:
+        for path, content in snapshots.items():
+            if content is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(content)
+        for tmp in tmp_paths:
+            tmp.unlink(missing_ok=True)
+        assert_no_tmp_files(paths)
+        raise
+    assert_no_tmp_files(paths)
+
+
+def transactional_task_mutation(
+    task_id: str,
+    task_updates: dict[str, Any],
+    state: dict[str, Any],
+) -> None:
+    path = task_path(task_id)
+    data, body = split_frontmatter(path)
+    data.update(task_updates)
+    task_text = dump_task_text(data, body)
+    task_overrides = {path: task_text}
+    candidate_tasks = load_tasks_with_overrides(task_overrides)
+    if os.environ.get("PROJECT_TOOL_FAIL_VALIDATION") == "1":
+        candidate_tasks = [
+            task
+            if task.id != task_id
+            else normalize_task_data(
+                {**data, "status": "__invalid_candidate_status__"},
+                path,
+                body,
+            )
+            for task in candidate_tasks
+        ]
+    errors = validate_candidate(state, candidate_tasks)
+    if errors:
+        print_errors(errors)
+        raise SystemExit(1)
+    rendered = rendered_dashboard_texts(state, candidate_tasks)
+    files = {
+        path: task_text,
+        STATE_PATH: dump_simple_yaml(state),
+        **rendered,
+    }
+    try:
+        commit_files_atomically(files)
+    except ProjectError as exc:
+        print_errors([str(exc)])
+        raise SystemExit(1) from exc
 
 
 def print_errors(errors: list[str]) -> None:
@@ -866,10 +1002,8 @@ def task_path(task_id: str) -> Path:
 def update_task_frontmatter(task_id: str, updates: dict[str, Any]) -> None:
     path = task_path(task_id)
     data, body = split_frontmatter(path)
-    if "approval" in data:
-        data.pop("approval")
     data.update(updates)
-    text = "---\n" + dump_simple_yaml(data).strip() + "\n---\n" + body
+    text = dump_task_text(data, body)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(path)
@@ -889,6 +1023,7 @@ def controlled_transition(
     unblock: str | None = None,
 ) -> None:
     state = read_state()
+    candidate_state = copy.deepcopy(state)
     tasks = load_tasks()
     tasks_by = task_by_id(tasks)
     task = tasks_by.get(task_id)
@@ -923,7 +1058,7 @@ def controlled_transition(
             raise ProjectError(f"{task.id} is not ready: {', '.join(missing)}.")
         if not dependencies_done(task, tasks_by):
             raise ProjectError(f"{task.id} cannot start until all dependencies are done.")
-        state["work"]["active_task"] = task.id
+        candidate_state["work"]["active_task"] = task.id
     if new_status == "ready":
         missing = definition_of_ready(task)
         if missing:
@@ -939,16 +1074,17 @@ def controlled_transition(
         if missing:
             raise ProjectError(f"{task.id} cannot be done: {', '.join(missing)}.")
     if task.status == "in-progress" and new_status != "in-progress":
-        state["work"]["active_task"] = None
+        candidate_state["work"]["active_task"] = None
     if new_status == "blocked":
-        state["work"]["active_task"] = None
-    update_task_frontmatter(task_id, candidate)
-    refreshed = load_tasks()
-    state["work"]["blocked"] = any(item.status == "blocked" for item in refreshed)
+        candidate_state["work"]["active_task"] = None
+    path = task_path(task_id)
+    data, body = split_frontmatter(path)
+    data.update(candidate)
+    refreshed = load_tasks_with_overrides({path: dump_task_text(data, body)})
+    candidate_state["work"]["blocked"] = any(item.status == "blocked" for item in refreshed)
     if not any(item.status == "in-progress" for item in refreshed):
-        state["work"]["active_task"] = None
-    write_state(state)
-    sync()
+        candidate_state["work"]["active_task"] = None
+    transactional_task_mutation(task_id, candidate, candidate_state)
     print(f"Task {task_id} moved to {new_status}.")
 
 
@@ -960,15 +1096,16 @@ def approve(task_id: str, approved_by: str) -> None:
         raise ProjectError(f"Task {task_id} does not exist.")
     if task.approval_level == "A0":
         raise ProjectError(f"{task_id} is A0 and does not require approval.")
-    update_task_frontmatter(
+    state = read_state()
+    transactional_task_mutation(
         task_id,
         {
             "approval_status": "approved",
             "approved_by": approved_by.strip(),
             "approved_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         },
+        state,
     )
-    sync()
     print(f"Task {task_id} approved by {approved_by.strip()}.")
 
 
@@ -978,7 +1115,7 @@ def main() -> None:
     sub.add_parser("status")
     sub.add_parser("sync")
     sub.add_parser("validate")
-    for name in ["ready", "start", "review", "complete"]:
+    for name in ["ready", "start", "review", "complete", "unblock", "cancel"]:
         command = sub.add_parser(name)
         command.add_argument("task")
     block = sub.add_parser("block")
@@ -1004,6 +1141,10 @@ def main() -> None:
             controlled_transition(args.task, "review")
         elif args.command == "complete":
             controlled_transition(args.task, "done")
+        elif args.command == "unblock":
+            controlled_transition(args.task, "ready")
+        elif args.command == "cancel":
+            controlled_transition(args.task, "cancelled")
         elif args.command == "block":
             controlled_transition(args.task, "blocked", reason=args.reason, unblock=args.unblock)
         elif args.command == "approve":

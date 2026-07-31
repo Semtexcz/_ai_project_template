@@ -3,7 +3,8 @@
 <!-- kanban:start -->
 ## Backlog
 
-_None_
+- [T-013](tasks/T-013-remediate-rc-003-rc-004-and-rc-006-release-hygiene-and-gate.md) - P1 - Remediate RC-003 RC-004 and RC-006 release hygiene and gate
+- [T-014](tasks/T-014-run-targeted-remediation-audit.md) - P1 - Run targeted remediation audit
 
 ## Ready
 
@@ -11,7 +12,7 @@ _None_
 
 ## In Progress
 
-_None_
+- [T-012](tasks/T-012-remediate-rc-002-and-rc-005-production-runtime-readiness.md) - P1 - Remediate RC-002 and RC-005 production runtime readiness
 
 ## Review
 
@@ -33,6 +34,7 @@ _None_
 - [T-008](tasks/T-008-make-fullstack-production-golden-path-executable.md) - P1 - Make fullstack-production golden path executable
 - [T-009](tasks/T-009-operationalize-agent-skills-hooks-and-the-complete-one-task-workflow.md) - P1 - Operationalize agent skills, hooks and the complete one-task workflow
 - [T-010](tasks/T-010-run-an-independent-release-candidate-audit.md) - P1 - Run an independent release-candidate audit
+- [T-011](tasks/T-011-remediate-rc-001-transactional-project-mutations.md) - P1 - Remediate RC-001 transactional project mutations
 
 ## Cancelled
 

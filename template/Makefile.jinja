@@ -1,4 +1,4 @@
-.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build prod-up prod-smoke prod-down docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report down
+.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build prod-up prod-smoke prod-down docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -189,52 +189,58 @@ docs:
 	python tools/project.py status
 
 project-status:
-	python tools/project.py status
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py status
 
 sync-project-docs:
-	python tools/project.py sync
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py sync
 
 validate-project:
-	python tools/project.py validate
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py validate
 
 agent-status:
-	python tools/agent.py status
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py status
 
 agent-context:
-	python tools/agent.py context --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py context --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
 
 validate-agent-skills:
-	python tools/agent.py validate-skills
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py validate-skills
 
 agent-pre-task:
-	python tools/agent.py pre-task --task $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py pre-task --task $(TASK)
 
 agent-pre-review:
-	python tools/agent.py pre-review --task $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py pre-review --task $(TASK)
 
 agent-post-task:
-	python tools/agent.py post-task --task $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py post-task --task $(TASK)
 
 agent-review-report:
-	python tools/agent.py context --task $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py context --task $(TASK)
 
 task-ready:
-	python tools/project.py ready $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py ready $(TASK)
 
 task-start:
-	python tools/project.py start $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py start $(TASK)
 
 task-review:
-	python tools/project.py review $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py review $(TASK)
 
 task-complete:
-	python tools/project.py complete $(TASK)
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py complete $(TASK)
 
 task-block:
-	python tools/project.py block $(TASK) --reason "$(REASON)" --unblock "$(UNBLOCK)"
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py block $(TASK) --reason "$(REASON)" --unblock "$(UNBLOCK)"
+
+task-unblock:
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py unblock $(TASK)
+
+task-cancel:
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py cancel $(TASK)
 
 task-approve:
-	python tools/project.py approve $(TASK) --approved-by "$(APPROVED_BY)"
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py approve $(TASK) --approved-by "$(APPROVED_BY)"
 
 down:
 {% if project_type == "fullstack" and runtime_level == "production" %}

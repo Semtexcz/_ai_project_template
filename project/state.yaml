@@ -9,11 +9,11 @@ project:
 
 lifecycle:
   phase: delivery
-  milestone: M-07
-  next_gate: production-runtime-golden-path
+  milestone: M-08
+  next_gate: release-candidate-remediation
 
 work:
-  active_task:
+  active_task: T-012
   blocked: false
 
 template:

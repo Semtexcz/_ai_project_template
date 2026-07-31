@@ -10,11 +10,11 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 | Project type | template |
 | Runtime level | local |
 | Phase | delivery |
-| Milestone | M-07 |
-| Active task | None |
-| Approval | None |
-| Next gate | production-runtime-golden-path |
-| Recommended next action | No ready task exists. Create one task addressing gate production-runtime-golden-path. |
+| Milestone | M-08 |
+| Active task | [T-012](project/tasks/T-012-remediate-rc-002-and-rc-005-production-runtime-readiness.md) |
+| Approval | A2 / approved |
+| Next gate | release-candidate-remediation |
+| Recommended next action | Complete T-012. |
 <!-- project-status:end -->
 
 ## Use

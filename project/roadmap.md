@@ -2,9 +2,8 @@
 
 ## Current Milestone
 
-M-07 focuses on deterministic project-state validation and synchronized project
-dashboards.
+M-08 focuses on release-candidate remediation for RC-001 through RC-006.
 
 ## Next Gate
 
-production-runtime-golden-path
+release-candidate-remediation
