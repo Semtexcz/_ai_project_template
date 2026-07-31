@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 
@@ -30,7 +31,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Stateless FastAPI backend service.",
         lifespan=lifespan,
         openapi_tags=[
-            {"name": "system", "description": "Process health and readiness endpoints."},
+            {
+                "name": "system",
+                "description": "Process health, readiness, and local system information endpoints.",
+            },
             {"name": "example", "description": "Example feature endpoint."},
         ],
     )
@@ -45,6 +49,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
     app.add_exception_handler(Exception, unhandled_exception_handler)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET"],
+        allow_headers=["*"],
+    )
     app.include_router(system_router)
     app.include_router(example_router)
     return app

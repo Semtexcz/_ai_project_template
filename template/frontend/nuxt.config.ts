@@ -1,6 +1,11 @@
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint'],
   devtools: { enabled: false },
+  runtimeConfig: {
+    public: {
+      apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000'
+    }
+  },
   typescript: {
     strict: true
   }

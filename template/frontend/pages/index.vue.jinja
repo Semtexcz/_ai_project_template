@@ -1,4 +1,7 @@
 <script setup lang="ts">
+{% if project_type == "fullstack" %}
+import SystemInfoPanel from '~/features/system-info/components/SystemInfoPanel.vue'
+{% else %}
 import WelcomePanel from '~/features/welcome/components/WelcomePanel.vue'
 import type { WelcomeContent } from '~/features/welcome/types/welcome'
 
@@ -8,11 +11,16 @@ const welcomeContent: WelcomeContent = {
   nextStepHref: '/project/index.md',
   nextStepLabel: 'Open project/index.md to continue with the project plan.'
 }
+{% endif %}
 </script>
 
 <template>
   <main class="page-shell">
+{% if project_type == "fullstack" %}
+    <SystemInfoPanel />
+{% else %}
     <WelcomePanel :content="welcomeContent" />
+{% endif %}
   </main>
 </template>
 

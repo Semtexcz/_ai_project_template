@@ -9,8 +9,8 @@ project:
 lifecycle:
   phase: bootstrap
   milestone: M-01
-  next_gate: frontend-shared-golden-path
+  next_gate: copier-update-golden-path
 
 work:
-  active_task: T-004
+  active_task: T-005
   blocked: false

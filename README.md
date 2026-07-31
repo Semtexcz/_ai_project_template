@@ -9,7 +9,7 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 | Template version | 0.1.0 |
 | Supported project types | script, library, backend, frontend, fullstack |
 | Supported runtime levels | local, shared, production |
-| Current focus | frontend-shared golden path |
+| Current focus | fullstack-local OpenAPI contract |
 
 ## Use
 
@@ -39,6 +39,18 @@ Shared frontend:
 copier copy --defaults --data project_type=frontend --data runtime_level=shared . ../my-frontend
 cd ../my-frontend
 make setup
+make check
+make build
+make run
+```
+
+Local full-stack:
+
+```bash
+copier copy --defaults --data project_type=fullstack --data runtime_level=local . ../my-fullstack
+cd ../my-fullstack
+make setup
+make api-check
 make check
 make build
 make run

@@ -1,10 +1,11 @@
-.PHONY: setup dev run test format-check lint typecheck check build docs project-status sync-project-docs validate-project down
+.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e check build docs project-status sync-project-docs validate-project down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
 HOST ?= 127.0.0.1
 PORT ?= 8000
 PNPM_INSTALL_FLAGS ?=
+OPENAPI_SCHEMA ?= artifacts/openapi.json
 
 setup:
 {% if project_type in ["script", "library"] %}
@@ -16,6 +17,8 @@ setup:
 {% else %}
 	cd backend && uv sync
 	pnpm --dir frontend install $(PNPM_INSTALL_FLAGS)
+	$(MAKE) api-schema
+	$(MAKE) api-generate
 {% endif %}
 
 dev:
@@ -26,7 +29,7 @@ dev:
 {% elif project_type == "frontend" %}
 	pnpm --dir frontend dev
 {% else %}
-	docker compose up --build
+	python tools/fullstack.py dev
 {% endif %}
 
 run:
@@ -37,7 +40,7 @@ run:
 {% elif project_type == "frontend" %}
 	cd frontend && HOST=$(HOST) PORT=$(PORT) node .output/server/index.mjs
 {% else %}
-	docker compose up --build
+	python tools/fullstack.py run
 {% endif %}
 
 test:
@@ -87,7 +90,39 @@ typecheck:
 	pnpm --dir frontend typecheck
 {% endif %}
 
+api-schema:
+{% if project_type == "fullstack" %}
+	cd backend && uv run python -m app.export_openapi ../$(OPENAPI_SCHEMA)
+{% else %}
+	@true
+{% endif %}
+
+api-generate: api-schema
+{% if project_type == "fullstack" %}
+	python tools/api_client.py generate
+{% else %}
+	@true
+{% endif %}
+
+api-check: api-schema
+{% if project_type == "fullstack" %}
+	python tools/api_client.py check
+{% else %}
+	@true
+{% endif %}
+
+e2e:
+{% if project_type == "fullstack" %}
+	pnpm --dir frontend e2e
+{% else %}
+	@true
+{% endif %}
+
+{% if project_type == "fullstack" %}
+check: sync-project-docs validate-project format-check lint typecheck api-check test
+{% else %}
 check: sync-project-docs validate-project format-check lint typecheck test
+{% endif %}
 
 build:
 {% if project_type in ["script", "library"] %}
@@ -99,6 +134,8 @@ build:
 	rm -rf frontend/.output
 	pnpm --dir frontend build
 {% else %}
+	$(MAKE) api-check
+	rm -rf backend/dist frontend/.output
 	cd backend && uv build
 	pnpm --dir frontend build
 {% endif %}
@@ -117,7 +154,7 @@ validate-project:
 
 down:
 {% if project_type == "fullstack" %}
-	docker compose down
+	@true
 {% else %}
 	@true
 {% endif %}

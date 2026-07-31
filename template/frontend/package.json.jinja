@@ -14,7 +14,8 @@
     "prepare": "nuxt prepare",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
-    "test": "vitest run"
+    "test": "vitest run"{% if project_type == "fullstack" %},
+    "e2e": "playwright test"{% endif %}
   },
   "dependencies": {
     "nuxt": "^4.0.0",
@@ -22,6 +23,10 @@
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.9.0",
+{% if project_type == "fullstack" %}
+    "@hey-api/openapi-ts": "0.99.0",
+    "@playwright/test": "^1.54.0",
+{% endif %}
     "@types/node": "^22.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "@vue/test-utils": "^2.4.0",

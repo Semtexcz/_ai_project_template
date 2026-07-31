@@ -1,0 +1,13 @@
+import { expect, test } from '@playwright/test'
+
+test('renders system information loaded from the backend API', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByText('Loading system information...')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '{{ project_name }}' })).toBeVisible()
+  await expect(page.getByText('Version')).toBeVisible()
+  await expect(page.getByText('0.1.0')).toBeVisible()
+  await expect(page.getByText('Environment')).toBeVisible()
+  await expect(page.getByText('local', { exact: true })).toBeVisible()
+  await expect(page.getByText('Open project/index.md')).toBeVisible()
+  await expect(page.getByText('Backend system information is unavailable.')).toHaveCount(0)
+})

@@ -82,6 +82,76 @@ make check
 Vitest. The main page composes a small `welcome` feature from `frontend/features/`.
 {% endif %}
 
+{% if project_type == "fullstack" %}
+## Full-Stack Local Runtime
+
+The FastAPI backend lives in `backend/`. The Nuxt frontend lives in `frontend/`.
+The frontend API client is generated from the backend OpenAPI contract; do not
+edit files under `frontend/shared/api/generated/` by hand.
+
+Install dependencies and generate the initial client:
+
+```bash
+make setup
+```
+
+OpenAPI and generated client commands:
+
+```bash
+make api-schema
+make api-generate
+make api-check
+```
+
+`make api-schema` loads the real FastAPI app and writes
+`artifacts/openapi.json`. The schema is not committed; it is regenerated before
+client generation and drift checks. `make api-generate` writes the TypeScript
+SDK and types to `frontend/shared/api/generated/`. The generator is
+`@hey-api/openapi-ts` because it produces typed SDK functions from OpenAPI
+operation IDs without adding a Nuxt-specific runtime lock-in. `make api-check`
+generates into a temporary directory and compares it with the current generated
+client.
+
+Run development servers with reload/HMR:
+
+```bash
+make dev
+```
+
+Build both artifacts:
+
+```bash
+make build
+```
+
+`make build` writes the backend wheel and sdist to `backend/dist/` and the Nuxt
+server output to `frontend/.output/`.
+
+Run the already built backend and Nuxt server together:
+
+```bash
+make run
+```
+
+Override ports with `BACKEND_HOST`, `BACKEND_PORT`, `FRONTEND_HOST`, and
+`FRONTEND_PORT`. The frontend API base URL defaults to the backend URL and can
+be overridden with `NUXT_PUBLIC_API_BASE_URL`; see `frontend/.env.example`.
+
+Quality and browser checks:
+
+```bash
+make check
+make e2e
+```
+
+`make check` validates the project dashboard, runs backend Ruff, Pyright and
+pytest, verifies OpenAPI/client drift, and runs frontend ESLint, Nuxt typecheck
+and Vitest. `make e2e` expects the built app to already be running and uses
+Playwright against `E2E_BASE_URL`.
+
+Current project direction is tracked in `project/index.md`.
+{% endif %}
+
 {% if project_type == "backend" %}
 ## Backend Runtime
 

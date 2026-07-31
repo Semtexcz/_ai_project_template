@@ -1,7 +1,7 @@
 ---
 id: T-004
 title: Make frontend-shared golden path executable
-status: review
+status: done
 priority: high
 approval: A1
 depends_on: [T-001, T-002, T-003]

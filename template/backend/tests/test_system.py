@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.main import create_app
+from app.modules.system.api.routes import SystemInfoResponse
 from app.shared.config.settings import Settings
 
 
@@ -36,7 +37,7 @@ def response_schema(paths: dict[str, object], path: str) -> dict[str, object]:
 def test_create_app() -> None:
     app = create_app(Settings(environment="test"))
 
-    assert app.title == "Example Backend"
+    assert app.title == Settings().app_name
     assert app.version == "0.1.0"
 
 
@@ -54,12 +55,25 @@ def test_readiness_endpoint() -> None:
     assert payload == {"status": "ready"}
 
 
+def test_system_info_endpoint() -> None:
+    status_code, payload = get_json("/api/system/info")
+
+    assert status_code == 200
+    response = SystemInfoResponse.model_validate(payload)
+    assert response == SystemInfoResponse(
+        name=Settings().app_name,
+        version="0.1.0",
+        environment="local",
+        next_step="Open project/index.md",
+    )
+
+
 def test_openapi_contract() -> None:
     status_code, document = get_json("/openapi.json")
 
     assert status_code == 200
     assert document["info"] == {
-        "title": "Example Backend",
+        "title": Settings().app_name,
         "description": "Stateless FastAPI backend service.",
         "version": "0.1.0",
     }
@@ -67,9 +81,45 @@ def test_openapi_contract() -> None:
     paths = cast(dict[str, object], document["paths"])
     assert "/health" in paths
     assert "/ready" in paths
+    assert "/api/system/info" in paths
+
+    system_info_route = cast(dict[str, object], paths["/api/system/info"])
+    system_info_operation = cast(dict[str, object], system_info_route["get"])
+    assert system_info_operation["operationId"] == "getSystemInfo"
+    system_info_responses = cast(dict[str, object], system_info_operation["responses"])
+    assert "200" in system_info_responses
 
     assert response_schema(paths, "/health")["$ref"] == "#/components/schemas/HealthResponse"
     assert response_schema(paths, "/ready")["$ref"] == "#/components/schemas/ReadinessResponse"
+    assert (
+        response_schema(paths, "/api/system/info")["$ref"]
+        == "#/components/schemas/SystemInfoResponse"
+    )
+
+
+def test_cors_allows_documented_local_frontend_origin() -> None:
+    app = create_app(
+        Settings(
+            environment="test",
+            cors_allowed_origins=["http://127.0.0.1:3000"],
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async def request_options() -> httpx.Response:
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.options(
+                "/api/system/info",
+                headers={
+                    "Origin": "http://127.0.0.1:3000",
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
+
+    response = asyncio.run(request_options())
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"
 
 
 def test_missing_endpoint_returns_404() -> None:

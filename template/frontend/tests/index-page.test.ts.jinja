@@ -5,7 +5,19 @@ import IndexPage from '../pages/index.vue'
 
 describe('index page', () => {
   it('renders one semantic main region with the generated project content', () => {
+{% if project_type == "fullstack" %}
+    const wrapper = mount(IndexPage, {
+      global: {
+        stubs: {
+          SystemInfoPanel: {
+            template: '<section><h1>{{ project_name }}</h1><p>Open project/index.md</p></section>'
+          }
+        }
+      }
+    })
+{% else %}
     const wrapper = mount(IndexPage)
+{% endif %}
 
     expect(wrapper.findAll('main')).toHaveLength(1)
     expect(wrapper.get('h1').text()).toBe('{{ project_name }}')
