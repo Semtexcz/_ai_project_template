@@ -3,7 +3,7 @@ id: T-013
 
 title: Remediate RC-003 RC-004 and RC-006 release hygiene and gate
 
-status: review
+status: done
 
 priority: 1
 

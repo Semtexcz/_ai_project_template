@@ -3,7 +3,7 @@ id: T-014
 
 title: Run targeted remediation audit
 
-status: backlog
+status: review
 
 priority: 1
 
@@ -13,11 +13,15 @@ depends_on: [T-013]
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
-blocked_reason:
+blocked_reason: null
 
-unblock_action:
+unblock_action: null
+
+approved_by: <human>
+
+approved_at: 2026-07-31T21:10:51+02:00
 ---
 
 # T-014: Run Targeted Remediation Audit
@@ -51,22 +55,30 @@ checks.
 
 ## Acceptance Criteria
 
-- [ ] RC-001 through RC-006 each have reproduction, root cause, fix, regression
+- [x] RC-001 through RC-006 each have reproduction, root cause, fix, regression
   test, and pass/fail result recorded.
-- [ ] `make release-check` passes.
-- [ ] Project workflow, agent workflow, Copier update, context security, and
+- [x] `make release-check` passes.
+- [x] Project workflow, agent workflow, Copier update, context security, and
   all profile regressions pass.
-- [ ] Git status and any unverified risks are explicitly reported.
+- [x] Git status and any unverified risks are explicitly reported.
 
 ## Verification
 
-- Run all commands required by the release-candidate audit remediation plan.
-- Run `make sync-project-docs` and `make validate-project`.
+- Added `audits/release-candidate-remediation-audit.md`.
+- `UV_CACHE_DIR=/tmp/t014-uv-cache UV_LINK_MODE=copy make release-check`
+  passed after clearing prior pytest temporary directories from `/tmp`: 25
+  tests passed in 336.85s.
+- `git ls-files '*__pycache__*' '*.pyc' '*.pyo'` returned no output.
+- `find . -path './.git' -prune -o -path '*/__pycache__/*' -o -name '*.pyc' -print` returned no output.
+- `make validate-project` passed.
+- `make validate-agent-skills` passed.
 
 ## Documentation Impact
 
-Add or update the targeted remediation audit report.
+Added the targeted remediation audit report.
 
 ## Completion Notes
 
-Pending implementation.
+Targeted remediation audit completed for RC-001 through RC-006. The report
+records original reproductions, root causes, fixes, regression tests, command
+results, remaining risks, and the required recommendation.
