@@ -3,7 +3,7 @@ id: T-009
 
 title: Operationalize agent skills, hooks and the complete one-task workflow
 
-status: review
+status: done
 
 priority: 1
 
@@ -13,11 +13,11 @@ depends_on: [T-008]
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
-approved_by:
+approved_by: Daniel Kopecký
 
-approved_at:
+approved_at: 2026-07-31T19:09:37+02:00
 
 blocked_reason:
 

@@ -15,7 +15,7 @@ _None_
 
 ## Review
 
-- [T-009](tasks/T-009-operationalize-agent-skills-hooks-and-the-complete-one-task-workflow.md) - P1 - Operationalize agent skills, hooks and the complete one-task workflow
+_None_
 
 ## Blocked
 
@@ -31,6 +31,7 @@ _None_
 - [T-006](tasks/T-006-make-copier-update-safe-and-integration-tested.md) - P1 - Make Copier update safe and integration-tested
 - [T-007](tasks/T-007-enforce-project-state-kanban-approvals-and-documentation-synchronization.md) - P1 - Enforce project state, Kanban, approvals and documentation synchronization
 - [T-008](tasks/T-008-make-fullstack-production-golden-path-executable.md) - P1 - Make fullstack-production golden path executable
+- [T-009](tasks/T-009-operationalize-agent-skills-hooks-and-the-complete-one-task-workflow.md) - P1 - Operationalize agent skills, hooks and the complete one-task workflow
 
 ## Cancelled
 
