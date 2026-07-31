@@ -14,7 +14,7 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 | Active task | None |
 | Approval | None |
 | Next gate | production-runtime-golden-path |
-| Recommended next action | Human A1 approval is required for T-007 before completion. |
+| Recommended next action | No ready task exists. Create one task addressing gate production-runtime-golden-path. |
 <!-- project-status:end -->
 
 ## Use

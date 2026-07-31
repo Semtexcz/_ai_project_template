@@ -1,9 +1,15 @@
-.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e check build docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-approve down
+.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build prod-up prod-smoke prod-down docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-approve down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
+PROJECT_SLUG := {{ project_slug }}
 HOST ?= 127.0.0.1
 PORT ?= 8000
+PROD_BACKEND_PORT ?= 8000
+PROD_FRONTEND_PORT ?= 3000
+BACKEND_IMAGE ?= $(PROJECT_SLUG)-backend:production
+FRONTEND_IMAGE ?= $(PROJECT_SLUG)-frontend:production
+COMPOSE ?= docker compose
 PNPM_INSTALL_FLAGS ?=
 OPENAPI_SCHEMA ?= artifacts/openapi.json
 
@@ -118,6 +124,13 @@ e2e:
 	@true
 {% endif %}
 
+e2e-production:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	E2E_BASE_URL=$${E2E_BASE_URL:-http://127.0.0.1:$(PROD_FRONTEND_PORT)} pnpm --dir frontend e2e
+{% else %}
+	@true
+{% endif %}
+
 {% if project_type == "fullstack" %}
 check: sync-project-docs validate-project format-check lint typecheck api-check test
 {% else %}
@@ -138,6 +151,38 @@ build:
 	rm -rf backend/dist frontend/.output
 	cd backend && uv build
 	pnpm --dir frontend build
+{% endif %}
+
+image-build:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	$(COMPOSE) build
+{% elif project_type == "backend" and runtime_level == "production" %}
+	docker build -t $(BACKEND_IMAGE) backend
+{% elif project_type == "frontend" and runtime_level == "production" %}
+	docker build -t $(FRONTEND_IMAGE) frontend
+{% else %}
+	@true
+{% endif %}
+
+prod-up:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	BACKEND_IMAGE=$(BACKEND_IMAGE) FRONTEND_IMAGE=$(FRONTEND_IMAGE) PROD_BACKEND_PORT=$(PROD_BACKEND_PORT) PROD_FRONTEND_PORT=$(PROD_FRONTEND_PORT) $(COMPOSE) up -d
+{% else %}
+	@true
+{% endif %}
+
+prod-smoke:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	PROD_BACKEND_URL=$${PROD_BACKEND_URL:-http://127.0.0.1:$(PROD_BACKEND_PORT)} PROD_FRONTEND_URL=$${PROD_FRONTEND_URL:-http://127.0.0.1:$(PROD_FRONTEND_PORT)} python tools/fullstack.py prod-smoke
+{% else %}
+	@true
+{% endif %}
+
+prod-down:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	BACKEND_IMAGE=$(BACKEND_IMAGE) FRONTEND_IMAGE=$(FRONTEND_IMAGE) PROD_BACKEND_PORT=$(PROD_BACKEND_PORT) PROD_FRONTEND_PORT=$(PROD_FRONTEND_PORT) $(COMPOSE) down --timeout 10
+{% else %}
+	@true
 {% endif %}
 
 docs:
@@ -171,7 +216,9 @@ task-approve:
 	python tools/project.py approve $(TASK) --approved-by "$(APPROVED_BY)"
 
 down:
-{% if project_type == "fullstack" %}
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	$(MAKE) prod-down
+{% elif project_type == "fullstack" %}
 	@true
 {% else %}
 	@true

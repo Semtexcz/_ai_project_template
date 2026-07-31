@@ -169,4 +169,18 @@ jobs:
           name: frontend-nuxt-output
           path: frontend/.output
 {% endif %}
+{% elif project_type == "fullstack" %}
+      - name: Build full-stack artifacts
+        run: make build
+{% if runtime_level == "production" %}
+      - name: Install Playwright browser
+        run: npx --yes playwright@1.62.1 install --with-deps chromium
+      - name: Verify production image workflow
+        run: |
+          make image-build
+          make prod-up
+          make prod-smoke
+          make e2e-production
+          make prod-down
+{% endif %}
 {% endif %}

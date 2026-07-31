@@ -1,10 +1,9 @@
-from __future__ import annotations
-
-import asyncio
+# pyright: reportUnknownMemberType=false
 from typing import cast
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.main import create_app
@@ -12,16 +11,10 @@ from app.modules.system.api.routes import SystemInfoResponse
 from app.shared.config.settings import Settings
 
 
-async def request_json(path: str) -> tuple[int, dict[str, object]]:
-    transport = httpx.ASGITransport(app=create_app(Settings(environment="test")))
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        response = await client.get(path)
-
-    return response.status_code, cast(dict[str, object], response.json())
-
-
 def get_json(path: str) -> tuple[int, dict[str, object]]:
-    return asyncio.run(request_json(path))
+    with TestClient(create_app(Settings(environment="test"))) as client:
+        response = cast(httpx.Response, client.get(path))
+    return response.status_code, cast(dict[str, object], response.json())
 
 
 def response_schema(paths: dict[str, object], path: str) -> dict[str, object]:
@@ -104,19 +97,17 @@ def test_cors_allows_documented_local_frontend_origin() -> None:
             cors_allowed_origins=["http://127.0.0.1:3000"],
         )
     )
-    transport = httpx.ASGITransport(app=app)
-
-    async def request_options() -> httpx.Response:
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            return await client.options(
+    with TestClient(app) as client:
+        response = cast(
+            httpx.Response,
+            client.options(
                 "/api/system/info",
                 headers={
                     "Origin": "http://127.0.0.1:3000",
                     "Access-Control-Request-Method": "GET",
                 },
-            )
-
-    response = asyncio.run(request_options())
+            ),
+        )
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"

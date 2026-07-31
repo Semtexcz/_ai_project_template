@@ -149,6 +149,53 @@ and Vitest. `make e2e` expects the built app to already be running and uses
 Playwright against `E2E_BASE_URL`.
 
 Current project direction is tracked in `project/index.md`.
+
+{% if runtime_level == "production" %}
+## Production-Like Runtime
+
+This production profile creates local, deployable OCI artifacts and verifies the
+runtime contract without deploying to cloud infrastructure.
+
+End-to-end production artifact path:
+
+```bash
+make setup
+make api-check
+make check
+make build
+make image-build
+make prod-up
+make prod-smoke
+make e2e-production
+make prod-down
+```
+
+`make image-build` builds separate backend and frontend images. The backend
+runtime image runs Uvicorn without reload as a non-root user. The frontend
+runtime image runs the Nuxt server output with Node, without HMR or source
+mounts. `make prod-up` starts both images through Compose, `make prod-smoke`
+checks backend health, readiness, OpenAPI, API data, and frontend HTML, and
+`make e2e-production` runs Playwright against the production-like frontend.
+
+Runtime configuration is environment-driven:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROD_BACKEND_PORT` | `8000` | Host port mapped to backend container port `8000`. |
+| `PROD_FRONTEND_PORT` | `3000` | Host port mapped to frontend container port `3000`. |
+| `NUXT_PUBLIC_API_BASE_URL` | `http://127.0.0.1:${PROD_BACKEND_PORT}` | Browser-visible API base URL. |
+| `BACKEND_IMAGE` | `{{ project_slug }}-backend:production` | Backend image tag. |
+| `FRONTEND_IMAGE` | `{{ project_slug }}-frontend:production` | Frontend image tag. |
+| `COMPOSE` | `docker compose` | Compose command used by production targets. |
+
+The production profile means reproducible local OCI images, production process
+commands, health/readiness checks, graceful Compose shutdown, minimal runtime
+dependencies, and CI-verifiable smoke and browser checks.
+
+It does not mean automatic deployment, high availability, Kubernetes readiness,
+database backups, unlimited scale, public registry publishing, real production
+secrets, or complete future security/compliance coverage.
+{% endif %}
 {% endif %}
 
 {% if project_type == "backend" %}

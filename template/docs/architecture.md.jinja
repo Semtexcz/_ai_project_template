@@ -43,6 +43,22 @@ Rules:
 Nuxt pages compose feature components and shared UI. Feature-specific logic belongs in `features/*/composables` or `features/*/api`.
 {% endif %}
 
+{% if project_type == "fullstack" and runtime_level == "production" %}
+## Production Runtime
+
+The production profile has two deployable OCI artifacts:
+
+- Backend image: FastAPI served by Uvicorn from an installed Python
+  environment, without reload or development server commands.
+- Frontend image: Nuxt server output served by Node from `.output/`, without HMR
+  or host-mounted source code.
+
+Compose is the local production-like orchestrator. It wires environment
+configuration, port mappings, service health checks, backend-to-frontend startup
+ordering, and graceful shutdown. It is an artifact verification environment, not
+a cloud runtime architecture.
+{% endif %}
+
 ## Progressive Infrastructure
 
 Do not add a database, cache, queue, object storage, CDN, API gateway, Kubernetes, or service mesh without:

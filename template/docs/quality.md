@@ -40,3 +40,20 @@ update_when:
 ## Observability
 
 Critical operations should be diagnosable. Production projects require logs, readiness checks, rollback, incident workflow, and tested restore for stateful systems.
+
+## Production Runtime Checks
+
+Production full-stack projects verify the runtime artifact path with:
+
+```bash
+make image-build
+make prod-up
+make prod-smoke
+make e2e-production
+make prod-down
+```
+
+These checks prove local OCI image buildability, production process startup,
+health/readiness, API contract availability, browser behavior, and graceful
+Compose shutdown. They do not replace environment-specific deployment,
+capacity, security, backup, or compliance validation.

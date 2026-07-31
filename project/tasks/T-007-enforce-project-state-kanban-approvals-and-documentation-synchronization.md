@@ -13,11 +13,11 @@ depends_on: [T-006]
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
-approved_by: Project owner
+approved_by: <human>
 
-approved_at: 2026-07-31T17:39:00+02:00
+approved_at: 2026-07-31T17:42:57+02:00
 
 blocked_reason:
 

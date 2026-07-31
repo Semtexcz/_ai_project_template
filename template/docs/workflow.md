@@ -87,3 +87,21 @@ cannot be the active task and is never selected as the next startable task.
 ## Release and Post-Release
 
 Local projects may stop at verified checks. Shared and production projects need release notes, rollback notes, and post-release verification appropriate to their runtime level.
+
+For production full-stack projects, the minimum local release candidate check is:
+
+```bash
+make setup
+make api-check
+make check
+make build
+make image-build
+make prod-up
+make prod-smoke
+make e2e-production
+make prod-down
+```
+
+Treat that as artifact readiness only. Actual deployment still needs a target
+environment, secret handling, rollout and rollback ownership, and any required
+A2 approval.
