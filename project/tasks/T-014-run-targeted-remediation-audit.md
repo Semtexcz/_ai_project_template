@@ -3,7 +3,7 @@ id: T-014
 
 title: Run targeted remediation audit
 
-status: review
+status: done
 
 priority: 1
 

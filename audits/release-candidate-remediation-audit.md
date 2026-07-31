@@ -13,7 +13,7 @@ report and should be rerun on a fresh independent audit before release.
 | T-011 | A2 / approved | done | RC-001 transactional project mutations |
 | T-012 | A2 / approved | done | RC-002 production inspection/status and RC-005 security headers |
 | T-013 | A1 / approved | done | RC-003, RC-004, RC-006 release hygiene and release gate |
-| T-014 | A1 / pending | in-progress | Targeted remediation audit |
+| T-014 | A1 / approved | done | Targeted remediation audit |
 
 ## Findings Remediation
 
@@ -264,7 +264,8 @@ untracked cache artifacts at the time this report was written.
   capacity issue, not a test or product regression.
 - TLS and HSTS are not locally solved by the generated containers; they remain
   explicit external ingress or reverse proxy responsibilities.
-- T-014 remains A1 / pending until a human records approval before completion.
+- T-014 received human A1 approval and was completed after this report was
+  finalized.
 
 ## Recommendation
 
