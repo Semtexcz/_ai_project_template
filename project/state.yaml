@@ -9,7 +9,7 @@ project:
 lifecycle:
   phase: bootstrap
   milestone: M-01
-  next_gate: script-local-golden-path
+  next_gate: backend-shared-golden-path
 
 work:
   active_task: none

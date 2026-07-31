@@ -33,6 +33,20 @@ make check
 make build
 ```
 
+{% if project_type == "library" %}
+## Package
+
+Build artifacts are written to `dist/`. Verify the wheel from a clean environment:
+
+```bash
+uv venv /tmp/{{ project_slug }}-consumer
+uv pip install --python /tmp/{{ project_slug }}-consumer/bin/python dist/*.whl
+/tmp/{{ project_slug }}-consumer/bin/python -c "from {{ python_package }} import package_name; print(package_name())"
+```
+
+The public API is exported from `src/{{ python_package }}/__init__.py`. Publishing is not automated.
+{% endif %}
+
 ## Where to Go
 
 | Need | Open |

@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "{{ project_name }}"
 requires-python = ">=3.12"
 dependencies = [
+{% if project_type != "library" %}
   "pyyaml>=6.0.2",
-{% if project_type in ["script", "library"] %}
+{% endif %}
+{% if project_type == "script" %}
   "typer>=0.16.0",
 {% endif %}
 ]
@@ -21,8 +23,11 @@ dev = [
 ]
 
 {% if project_type in ["script", "library"] %}
+
+{% if project_type == "script" %}
 [project.scripts]
 {{ project_slug|replace('-', '_') }} = "{{ python_package }}.__main__:main"
+{% endif %}
 
 [build-system]
 requires = ["hatchling>=1.26"]

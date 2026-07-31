@@ -1,3 +1,14 @@
-__all__ = ["__version__"]
+{% if project_type == "library" -%}
+__all__ = ["__version__", "package_name"]
 
 __version__ = "0.1.0"
+
+
+def package_name() -> str:
+    return "{{ project_name }}"
+{% else -%}
+__all__ = ["__version__"]
+
+
+__version__ = "0.1.0"
+{% endif -%}

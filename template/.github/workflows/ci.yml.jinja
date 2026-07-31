@@ -27,3 +27,14 @@ jobs:
         run: make setup
       - name: Check
         run: make check
+{% if project_type == "library" %}
+      - name: Build distribution
+        run: make build
+{% if runtime_level == "shared" %}
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distribution
+          path: dist/*
+{% endif %}
+{% endif %}

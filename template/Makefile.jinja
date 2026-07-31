@@ -77,6 +77,7 @@ check: sync-project-docs validate-project format-check lint typecheck test
 
 build:
 {% if project_type in ["script", "library"] %}
+	rm -rf dist
 	uv build
 {% elif project_type == "backend" %}
 	cd backend && uv build

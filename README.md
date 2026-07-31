@@ -13,9 +13,21 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 
 ## Use
 
+Script:
+
 ```bash
 copier copy --defaults --data project_type=script --data runtime_level=local . ../my-project
 cd ../my-project
+make setup
+make check
+make build
+```
+
+Shared library:
+
+```bash
+copier copy --defaults --data project_type=library --data runtime_level=shared . ../my-library
+cd ../my-library
 make setup
 make check
 make build
