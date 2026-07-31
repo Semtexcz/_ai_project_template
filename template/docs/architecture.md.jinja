@@ -57,6 +57,10 @@ Compose is the local production-like orchestrator. It wires environment
 configuration, port mappings, service health checks, backend-to-frontend startup
 ordering, and graceful shutdown. It is an artifact verification environment, not
 a cloud runtime architecture.
+
+The frontend runtime owns the local HTTP security header baseline for content
+type hardening, referrer policy, CSP defaults, and frame blocking. TLS and HSTS
+remain an external ingress or reverse proxy responsibility.
 {% endif %}
 
 ## Progressive Infrastructure

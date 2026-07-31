@@ -169,7 +169,9 @@ make api-check
 make check
 make build
 make image-build
+make image-inspect
 make prod-up
+make prod-status
 make prod-smoke
 make e2e-production
 make prod-down
@@ -178,9 +180,21 @@ make prod-down
 `make image-build` builds separate backend and frontend images. The backend
 runtime image runs Uvicorn without reload as a non-root user. The frontend
 runtime image runs the Nuxt server output with Node, without HMR or source
-mounts. `make prod-up` starts both images through Compose, `make prod-smoke`
-checks backend health, readiness, OpenAPI, API data, and frontend HTML, and
-`make e2e-production` runs Playwright against the production-like frontend.
+mounts. `make image-inspect` checks image existence, non-root users,
+entrypoint/command, exposed ports, and absence of development runtime commands.
+`make prod-up` starts both images through Compose, `make prod-status` reports
+service state, health, images, and ports, `make prod-smoke` checks backend
+health, readiness, OpenAPI, API data, frontend HTML, and frontend security
+headers, and `make e2e-production` runs Playwright against the production-like
+frontend.
+
+The frontend production runtime sets a minimal local security header baseline:
+`X-Content-Type-Options: nosniff`,
+`Referrer-Policy: strict-origin-when-cross-origin`, and a CSP with
+`default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, and
+`frame-ancestors 'none'`. The CSP permits Nuxt hydration with inline scripts
+and styles. TLS and HSTS are intentionally left to the required external
+ingress or reverse proxy contract.
 
 Runtime configuration is environment-driven:
 

@@ -1,4 +1,4 @@
-.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build prod-up prod-smoke prod-down docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report down
+.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build image-inspect prod-up prod-status prod-smoke prod-down docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -164,9 +164,23 @@ image-build:
 	@true
 {% endif %}
 
+image-inspect:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	BACKEND_IMAGE=$(BACKEND_IMAGE) FRONTEND_IMAGE=$(FRONTEND_IMAGE) python tools/fullstack.py image-inspect
+{% else %}
+	@true
+{% endif %}
+
 prod-up:
 {% if project_type == "fullstack" and runtime_level == "production" %}
 	BACKEND_IMAGE=$(BACKEND_IMAGE) FRONTEND_IMAGE=$(FRONTEND_IMAGE) PROD_BACKEND_PORT=$(PROD_BACKEND_PORT) PROD_FRONTEND_PORT=$(PROD_FRONTEND_PORT) $(COMPOSE) up -d
+{% else %}
+	@true
+{% endif %}
+
+prod-status:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+	BACKEND_IMAGE=$(BACKEND_IMAGE) FRONTEND_IMAGE=$(FRONTEND_IMAGE) PROD_BACKEND_PORT=$(PROD_BACKEND_PORT) PROD_FRONTEND_PORT=$(PROD_FRONTEND_PORT) COMPOSE='$(COMPOSE)' python tools/fullstack.py prod-status
 {% else %}
 	@true
 {% endif %}

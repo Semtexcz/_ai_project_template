@@ -7,10 +7,10 @@
 | Phase | delivery |
 | Milestone | M-08 |
 | Next gate | release-candidate-remediation |
-| Active task | [T-012](tasks/T-012-remediate-rc-002-and-rc-005-production-runtime-readiness.md) |
-| Approval | A2 / approved |
+| Active task | None |
+| Approval | None |
 | Blocker | None |
-| Recommended next action | Complete T-012. |
+| Recommended next action | No ready task exists. Create one task addressing gate release-candidate-remediation. |
 
 Links: [Board](board.md) | [Roadmap](roadmap.md)
 <!-- project-index:end -->

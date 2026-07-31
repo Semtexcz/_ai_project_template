@@ -113,7 +113,9 @@ make api-check
 make check
 make build
 make image-build
+make image-inspect
 make prod-up
+make prod-status
 make prod-smoke
 make e2e-production
 make prod-down

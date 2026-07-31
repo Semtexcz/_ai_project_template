@@ -3,7 +3,7 @@ id: T-012
 
 title: Remediate RC-002 and RC-005 production runtime readiness
 
-status: in-progress
+status: done
 
 priority: 1
 
@@ -60,25 +60,35 @@ minimal production runtime baseline.
 
 ## Acceptance Criteria
 
-- [ ] `make image-inspect` passes on healthy generated production images and
+- [x] `make image-inspect` passes on healthy generated production images and
   fails on mutated insecure images or dev commands.
-- [ ] `make prod-status` shows service state, health, images, and ports and
+- [x] `make prod-status` shows service state, health, images, and ports and
   fails on a stopped or unhealthy stack.
-- [ ] Required production security headers are present without breaking Nuxt
+- [x] Required production security headers are present without breaking Nuxt
   hydration.
-- [ ] CI exercises the new production inspection, status, and header tests.
+- [x] CI exercises the new production inspection, status, and header tests.
 
 ## Verification
 
-- Run targeted fullstack-production tests.
-- Run HTTP smoke assertions and negative header mutation tests.
-- Run `make sync-project-docs` and `make validate-project`.
+- Reproduced RC-002 with generated fullstack-production: `make image-inspect`
+  and `make prod-status` both failed with "No rule to make target".
+- Reproduced RC-005 with source search showing no security header contract in
+  generated frontend runtime.
+- `UV_CACHE_DIR=/tmp/t012-uv-cache UV_LINK_MODE=copy uv run pytest tests/test_fullstack_production_golden_path.py::test_production_inspection_and_header_negative_checks` passed.
+- `UV_CACHE_DIR=/tmp/t012-uv-cache UV_LINK_MODE=copy uv run pytest tests/test_fullstack_production_golden_path.py` passed after approved Docker/socket/network access.
+- `UV_CACHE_DIR=/tmp/t012-uv-cache UV_LINK_MODE=copy make check` passed.
+- `make validate-project` passed.
+- `make validate-agent-skills` passed.
 
 ## Documentation Impact
 
-Document `image-inspect`, `prod-status`, and the production security header
-contract.
+Documented `image-inspect`, `prod-status`, and the production security header
+contract in generated README, workflow, quality, and architecture docs.
 
 ## Completion Notes
 
-Pending implementation.
+Implemented production inspection and status commands in generated
+fullstack-production projects. Added Docker image contract inspection,
+Compose status/health reporting with retry, frontend security headers via Nuxt
+route rules, production smoke header assertions, and positive/negative
+regression coverage.

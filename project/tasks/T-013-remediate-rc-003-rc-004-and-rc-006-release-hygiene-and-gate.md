@@ -3,7 +3,7 @@ id: T-013
 
 title: Remediate RC-003 RC-004 and RC-006 release hygiene and gate
 
-status: backlog
+status: review
 
 priority: 1
 
@@ -13,11 +13,15 @@ depends_on: [T-012]
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
-blocked_reason:
+blocked_reason: null
 
-unblock_action:
+unblock_action: null
+
+approved_by: <human>
+
+approved_at: 2026-07-31T20:55:33+02:00
 ---
 
 # T-013: Remediate RC-003 RC-004 and RC-006 Release Hygiene and Gate
@@ -52,26 +56,35 @@ remediation path.
 
 ## Acceptance Criteria
 
-- [ ] The repository has no tracked cache artifacts.
-- [ ] Running the test suite does not leave unexpected Git diff.
-- [ ] Generated projects contain no inherited cache artifacts.
-- [ ] `make release-check` runs every release-candidate suite and propagates
+- [x] The repository has no tracked cache artifacts.
+- [x] Running the test suite does not leave unexpected Git diff.
+- [x] Generated projects contain no inherited cache artifacts.
+- [x] `make release-check` runs every release-candidate suite and propagates
   errors without `|| true`.
-- [ ] Documentation accurately distinguishes `make check` and
+- [x] Documentation accurately distinguishes `make check` and
   `make release-check`.
 
 ## Verification
 
-- Run targeted release hygiene tests.
-- Run generated profile hygiene assertions.
-- Run `make release-check`.
-- Run `make sync-project-docs` and `make validate-project`.
+- Reproduced RC-003/RC-006 via tracked and generated `__pycache__`/`.pyc`
+  audit evidence, then removed tracked cache artifacts and added ignore/static
+  coverage.
+- Reproduced RC-004 from root `Makefile`: `make check` was a narrow subset
+  with no full release gate target.
+- `UV_CACHE_DIR=/tmp/t013-uv-cache UV_LINK_MODE=copy uv run pytest tests/test_template_static.py` passed.
+- `UV_CACHE_DIR=/tmp/t013-uv-cache UV_LINK_MODE=copy make check` passed.
+- `UV_CACHE_DIR=/tmp/t013-uv-cache UV_LINK_MODE=copy make release-check` passed: 25 tests in 310.37s after approved Docker/socket/network access.
+- `git ls-files '*__pycache__*' '*.pyc' '*.pyo'` returned no tracked cache artifacts.
+- `find . -path './.git' -prune -o -path '*/__pycache__/*' -o -name '*.pyc' -print` returned no cache artifacts after the full suite.
 
 ## Documentation Impact
 
-Update maintainer and generated project documentation for release hygiene and
-release gate semantics.
+Updated root README and generated quality docs for release gate semantics.
 
 ## Completion Notes
 
-Pending implementation.
+Added root and generated `.gitignore` coverage, release hygiene static tests,
+rendered-project cache assertions across all profiles, a full `make
+release-check` target, and CI coverage for the release gate. The full release
+gate now exercises all maintained profile and workflow tests and propagates
+failures directly.

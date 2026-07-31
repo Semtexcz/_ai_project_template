@@ -12,6 +12,18 @@ from collections.abc import Sequence
 from typing import Any
 
 
+EXPECTED_SECURITY_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "strict-origin-when-cross-origin",
+}
+EXPECTED_CSP_TOKENS = [
+    "default-src 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+]
+
+
 def env_value(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
@@ -52,6 +64,159 @@ def get_json(url: str) -> dict[str, Any]:
     return payload
 
 
+def run_checked(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        list(command),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "\n".join(
+                [
+                    f"Command failed: {' '.join(command)}",
+                    "--- stdout ---",
+                    result.stdout,
+                    "--- stderr ---",
+                    result.stderr,
+                ]
+            )
+        )
+    return result
+
+
+def docker_json(command: Sequence[str]) -> Any:
+    output = run_checked(command).stdout
+    if not output.strip():
+        raise RuntimeError("No Compose services are running")
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        return [json.loads(line) for line in output.splitlines() if line.strip()]
+
+
+def compose_command(*args: str) -> list[str]:
+    command = env_value("COMPOSE", "docker compose").split()
+    command.extend(args)
+    return command
+
+
+def image_inspect(image: str) -> dict[str, Any]:
+    payload = docker_json(["docker", "image", "inspect", image])
+    if not isinstance(payload, list) or not payload:
+        raise RuntimeError(f"Image does not exist or cannot be inspected: {image}")
+    item = payload[0]
+    if not isinstance(item, dict):
+        raise RuntimeError(f"Unexpected image inspect payload for {image}")
+    return item
+
+
+def image_config(image: str) -> dict[str, Any]:
+    config = image_inspect(image).get("Config")
+    if not isinstance(config, dict):
+        raise RuntimeError(f"{image} is missing image config")
+    return config
+
+
+def assert_image_contract(
+    image: str,
+    *,
+    expected_port: str,
+    forbidden_terms: Sequence[str],
+) -> None:
+    config = image_config(image)
+    user = str(config.get("User") or "")
+    if user in {"", "0", "root"}:
+        raise RuntimeError(f"{image} must use a non-root runtime user, got {user!r}")
+    command = [str(value) for value in config.get("Cmd") or []]
+    entrypoint = [str(value) for value in config.get("Entrypoint") or []]
+    process = " ".join(entrypoint + command)
+    if not process.strip():
+        raise RuntimeError(f"{image} must define a command or entrypoint")
+    lowered = process.lower()
+    for term in forbidden_terms:
+        if term in lowered:
+            raise RuntimeError(f"{image} runtime process contains forbidden term {term!r}: {process}")
+    exposed = config.get("ExposedPorts")
+    if not isinstance(exposed, dict) or f"{expected_port}/tcp" not in exposed:
+        raise RuntimeError(f"{image} must expose TCP port {expected_port}")
+    if not config.get("Env"):
+        raise RuntimeError(f"{image} must include basic environment metadata")
+
+
+def run_image_inspect() -> None:
+    backend_image = env_value("BACKEND_IMAGE", "app-backend:production")
+    frontend_image = env_value("FRONTEND_IMAGE", "app-frontend:production")
+    assert_image_contract(
+        backend_image,
+        expected_port="8000",
+        forbidden_terms=["--reload", "reload", "fastapi dev"],
+    )
+    assert_image_contract(
+        frontend_image,
+        expected_port="3000",
+        forbidden_terms=["nuxt dev", "pnpm dev", "vite", "hmr"],
+    )
+    print(f"Image inspection passed: {backend_image}, {frontend_image}")
+
+
+def run_prod_status() -> None:
+    deadline = time.monotonic() + 60
+    services: list[Any] = []
+    failures: list[str] = []
+    while time.monotonic() < deadline:
+        payload = docker_json(compose_command("ps", "--format", "json"))
+        services = payload if isinstance(payload, list) else [payload]
+        if not services:
+            raise RuntimeError("No Compose services are running")
+        failures = compose_status_failures(services)
+        if not failures:
+            break
+        if any("health is unhealthy" in failure.lower() for failure in failures):
+            break
+        time.sleep(1)
+    for service in services:
+        if not isinstance(service, dict):
+            raise RuntimeError(f"Unexpected Compose status payload: {service!r}")
+        name = service.get("Service") or service.get("Name")
+        state = str(service.get("State") or "")
+        health = str(service.get("Health") or "")
+        image = service.get("Image")
+        ports = service.get("Publishers") or service.get("Ports") or []
+        print(f"{name}: state={state} health={health or 'none'} image={image} ports={ports}")
+    if failures:
+        raise RuntimeError("; ".join(failures))
+
+
+def compose_status_failures(services: Sequence[Any]) -> list[str]:
+    failures: list[str] = []
+    for service in services:
+        if not isinstance(service, dict):
+            raise RuntimeError(f"Unexpected Compose status payload: {service!r}")
+        name = service.get("Service") or service.get("Name")
+        state = str(service.get("State") or "")
+        health = str(service.get("Health") or "")
+        if state.lower() != "running":
+            failures.append(f"{name} is {state}")
+        if health and health.lower() != "healthy":
+            failures.append(f"{name} health is {health}")
+    return failures
+
+
+def assert_security_headers(headers: Any) -> None:
+    lowered = {key.lower(): value for key, value in headers.items()}
+    for key, expected in EXPECTED_SECURITY_HEADERS.items():
+        actual = lowered.get(key)
+        if actual != expected:
+            raise RuntimeError(f"Missing or invalid {key}: expected {expected!r}, got {actual!r}")
+    csp = lowered.get("content-security-policy", "")
+    for token in EXPECTED_CSP_TOKENS:
+        if token not in csp:
+            raise RuntimeError(f"Content-Security-Policy is missing {token!r}: {csp!r}")
+
+
 def wait_for_http(url: str, name: str) -> None:
     deadline = time.monotonic() + 60
     last_error: BaseException | None = None
@@ -90,6 +255,7 @@ def run_prod_smoke() -> None:
     with urllib.request.urlopen(f"{frontend_url}/", timeout=3) as response:
         body = response.read().decode("utf-8")
         content_type = response.headers.get("content-type", "")
+        assert_security_headers(response.headers)
     if "text/html" not in content_type:
         raise RuntimeError(f"Frontend returned unexpected content type: {content_type}")
     if "Backend system information is unavailable." in body:
@@ -194,10 +360,16 @@ def run_fullstack(mode: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in {"dev", "run", "prod-smoke"}:
-        raise SystemExit("Usage: python tools/fullstack.py <dev|run|prod-smoke>")
+    if len(sys.argv) != 2 or sys.argv[1] not in {"dev", "run", "prod-smoke", "image-inspect", "prod-status"}:
+        raise SystemExit("Usage: python tools/fullstack.py <dev|run|prod-smoke|image-inspect|prod-status>")
     if sys.argv[1] == "prod-smoke":
         run_prod_smoke()
+        return
+    if sys.argv[1] == "image-inspect":
+        run_image_inspect()
+        return
+    if sys.argv[1] == "prod-status":
+        run_prod_status()
         return
     run_fullstack(sys.argv[1])
 

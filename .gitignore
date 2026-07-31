@@ -8,7 +8,9 @@ __pycache__/
 .mypy_cache/
 .pyright/
 .coverage
+coverage/
 htmlcov/
+
 dist/
 build/
 *.egg-info/
@@ -16,9 +18,9 @@ build/
 node_modules/
 .nuxt/
 .output/
-coverage/
 playwright-report/
 test-results/
+
 artifacts/
 frontend/shared/api/generated/
 

@@ -11,10 +11,10 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Active task | [T-012](project/tasks/T-012-remediate-rc-002-and-rc-005-production-runtime-readiness.md) |
-| Approval | A2 / approved |
+| Active task | None |
+| Approval | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Complete T-012. |
+| Recommended next action | No ready task exists. Create one task addressing gate release-candidate-remediation. |
 <!-- project-status:end -->
 
 ## Use
@@ -64,9 +64,23 @@ make run
 
 ## Verify Template
 
+Fast local/pre-review check:
+
 ```bash
-uv run pytest
+make check
 ```
+
+Full release-candidate gate:
+
+```bash
+make release-check
+```
+
+`make check` intentionally runs a narrow maintainer subset for quick feedback.
+`make release-check` runs the complete release-candidate pytest suite,
+including all profile golden paths, Copier update, project-state workflow,
+agent workflow, context security, transactional mutation tests, production
+inspection/status tests, release hygiene tests, and security header tests.
 
 Targeted maintainer checks:
 

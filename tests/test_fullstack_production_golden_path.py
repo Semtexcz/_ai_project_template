@@ -55,6 +55,9 @@ def assert_production_runtime_files(generated: Path) -> None:
     compose = (generated / "compose.yaml").read_text()
     backend_dockerfile = (generated / "backend" / "Dockerfile").read_text()
     frontend_dockerfile = (generated / "frontend" / "Dockerfile").read_text()
+    makefile = (generated / "Makefile").read_text()
+    fullstack_tool = (generated / "tools" / "fullstack.py").read_text()
+    nuxt_config = (generated / "frontend" / "nuxt.config.ts").read_text()
 
     forbidden = ("fastapi dev", "uvicorn --reload", "pnpm dev", "nuxt dev", "volumes:")
     for value in forbidden:
@@ -75,6 +78,100 @@ def assert_production_runtime_files(generated: Path) -> None:
     assert "USER app" in frontend_dockerfile
     assert "nuxt dev" not in frontend_dockerfile
     assert "pnpm dev" not in frontend_dockerfile
+
+    assert "image-inspect:" in makefile
+    assert "prod-status:" in makefile
+    assert "run_image_inspect" in fullstack_tool
+    assert "run_prod_status" in fullstack_tool
+    assert "X-Content-Type-Options" in nuxt_config
+    assert "Referrer-Policy" in nuxt_config
+    assert "Content-Security-Policy" in nuxt_config
+    assert "frame-ancestors 'none'" in nuxt_config
+
+
+def run_python_snippet(generated: Path, snippet: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-c", snippet],
+        cwd=generated,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+
+def test_production_inspection_and_header_negative_checks(tmp_path: Path) -> None:
+    generated = tmp_path / "generated"
+    env = {
+        **os.environ,
+        "UV_LINK_MODE": "copy",
+        "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
+        "PNPM_HOME": str(tmp_path / "pnpm-home"),
+        "PNPM_STORE_DIR": str(tmp_path / "pnpm-store"),
+    }
+    run_command(
+        [
+            sys.executable,
+            "-m",
+            "copier",
+            "copy",
+            "--defaults",
+            "--data",
+            "project_name=ExampleProductionNegatives",
+            "--data",
+            "project_type=fullstack",
+            "--data",
+            "runtime_level=production",
+            "--data",
+            "include_reference_feature=false",
+            "--trust",
+            "--vcs-ref=HEAD",
+            str(ROOT),
+            str(generated),
+        ],
+        cwd=ROOT,
+        env=env,
+    )
+    assert_production_runtime_files(generated)
+
+    result = run_python_snippet(
+        generated,
+        "from tools.fullstack import assert_security_headers\n"
+        "assert_security_headers({'X-Content-Type-Options':'nosniff',"
+        "'Referrer-Policy':'strict-origin-when-cross-origin',"
+        "'Content-Security-Policy':\"default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\"})\n",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    result = run_python_snippet(
+        generated,
+        "from tools.fullstack import assert_security_headers\n"
+        "assert_security_headers({'X-Content-Type-Options':'nosniff',"
+        "'Content-Security-Policy':\"default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'\"})\n",
+    )
+    assert result.returncode != 0
+    assert "referrer-policy" in result.stderr.lower()
+
+    result = run_python_snippet(
+        generated,
+        "from tools.fullstack import assert_image_contract\n"
+        "assert_image_contract('fake:latest', expected_port='3000', forbidden_terms=['hmr'])\n",
+    )
+    assert result.returncode != 0
+    assert "Command failed: docker image inspect fake:latest" in result.stderr
+
+    result = subprocess.run(
+        ["make", "prod-status"],
+        cwd=generated,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        timeout=60,
+    )
+    assert result.returncode != 0
+    assert "No Compose services are running" in result.stdout + result.stderr
 
 
 def test_fullstack_production_golden_path(tmp_path: Path) -> None:
@@ -128,7 +225,9 @@ def test_fullstack_production_golden_path(tmp_path: Path) -> None:
         assert_production_runtime_files(generated)
 
         run_command(["make", "image-build"], generated, env, timeout=900)
+        run_command(["make", "image-inspect"], generated, env, timeout=180)
         run_command(["make", "prod-up"], generated, env, timeout=300)
+        run_command(["make", "prod-status"], generated, env, timeout=180)
         run_command(["make", "prod-smoke"], generated, env, timeout=180)
         run_command(["make", "e2e-production"], generated, env, timeout=180)
     finally:

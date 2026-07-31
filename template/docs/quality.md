@@ -19,7 +19,9 @@ update_when:
 - Formatting and linting run through `make lint`.
 - Type checking runs through `make typecheck`.
 - Tests run through `make test`.
-- Full verification runs through `make check`.
+- `make check` is the fast local/pre-review gate for the generated project.
+- In the template repository, `make release-check` is the full
+  release-candidate gate across every generated profile and workflow.
 
 ## Test Expectations
 
@@ -47,13 +49,17 @@ Production full-stack projects verify the runtime artifact path with:
 
 ```bash
 make image-build
+make image-inspect
 make prod-up
+make prod-status
 make prod-smoke
 make e2e-production
 make prod-down
 ```
 
 These checks prove local OCI image buildability, production process startup,
-health/readiness, API contract availability, browser behavior, and graceful
-Compose shutdown. They do not replace environment-specific deployment,
-capacity, security, backup, or compliance validation.
+image metadata, non-root runtime users, absence of development runtime
+commands, health/readiness, API contract availability, browser behavior,
+frontend security headers, and graceful Compose shutdown. They do not replace
+environment-specific deployment, capacity, backup, compliance validation, or
+the external TLS/HSTS ingress contract.
