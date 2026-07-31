@@ -4,6 +4,7 @@ PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
 HOST ?= 127.0.0.1
 PORT ?= 8000
+PNPM_INSTALL_FLAGS ?=
 
 setup:
 {% if project_type in ["script", "library"] %}
@@ -11,10 +12,10 @@ setup:
 {% elif project_type == "backend" %}
 	cd backend && uv sync
 {% elif project_type == "frontend" %}
-	pnpm install
+	pnpm --dir frontend install $(PNPM_INSTALL_FLAGS)
 {% else %}
 	cd backend && uv sync
-	pnpm install --dir frontend
+	pnpm --dir frontend install $(PNPM_INSTALL_FLAGS)
 {% endif %}
 
 dev:
@@ -34,7 +35,7 @@ run:
 {% elif project_type == "backend" %}
 	cd backend && uv run uvicorn app.main:app --app-dir src --host $(HOST) --port $(PORT)
 {% elif project_type == "frontend" %}
-	pnpm --dir frontend start
+	cd frontend && HOST=$(HOST) PORT=$(PORT) node .output/server/index.mjs
 {% else %}
 	docker compose up --build
 {% endif %}
@@ -95,6 +96,7 @@ build:
 {% elif project_type == "backend" %}
 	cd backend && uv build
 {% elif project_type == "frontend" %}
+	rm -rf frontend/.output
 	pnpm --dir frontend build
 {% else %}
 	cd backend && uv build

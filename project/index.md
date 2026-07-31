@@ -7,7 +7,7 @@
 | Runtime level | local |
 | Phase | bootstrap |
 | Milestone | M-01 |
-| Active task | T-003 |
+| Active task | T-004 |
 | Next gate | frontend-shared-golden-path |
 
-Next step: review T-003, then make the frontend-shared golden path executable.
+Next step: review T-004 and then open the fullstack-local OpenAPI contract gate.

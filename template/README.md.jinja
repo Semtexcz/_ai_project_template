@@ -33,6 +33,55 @@ make check
 make build
 ```
 
+{% if project_type == "frontend" %}
+## Frontend Runtime
+
+The Nuxt application lives in `frontend/` and is a standalone frontend. This
+profile does not include a backend, external API integration, or generated
+OpenAPI client; the generated TypeScript OpenAPI client belongs to a later
+full-stack profile.
+
+Install dependencies:
+
+```bash
+make setup
+```
+
+Run the Nuxt development server with HMR:
+
+```bash
+make dev
+```
+
+Build the production Nuxt output:
+
+```bash
+make build
+```
+
+`make build` writes the Nuxt server output to `frontend/.output/`. The server
+entry point is `frontend/.output/server/index.mjs`.
+
+Run the already built application without HMR:
+
+```bash
+make run
+```
+
+By default the built server listens on `http://127.0.0.1:8000`; override with
+`HOST` and `PORT`. This is a shared-environment runtime smoke path, not a
+production deployment.
+
+Quality checks:
+
+```bash
+make check
+```
+
+`make check` validates the project dashboard, runs ESLint, Nuxt typecheck, and
+Vitest. The main page composes a small `welcome` feature from `frontend/features/`.
+{% endif %}
+
 {% if project_type == "backend" %}
 ## Backend Runtime
 

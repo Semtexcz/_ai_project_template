@@ -1,7 +1,7 @@
 ---
 id: T-003
 title: Make backend-shared golden path executable
-status: review
+status: done
 priority: high
 approval: A1
 depends_on: [T-001, T-002]

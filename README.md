@@ -9,7 +9,7 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 | Template version | 0.1.0 |
 | Supported project types | script, library, backend, frontend, fullstack |
 | Supported runtime levels | local, shared, production |
-| Current focus | Bootstrap complete template skeleton |
+| Current focus | frontend-shared golden path |
 
 ## Use
 
@@ -31,6 +31,17 @@ cd ../my-library
 make setup
 make check
 make build
+```
+
+Shared frontend:
+
+```bash
+copier copy --defaults --data project_type=frontend --data runtime_level=shared . ../my-frontend
+cd ../my-frontend
+make setup
+make check
+make build
+make run
 ```
 
 ## Verify Template

@@ -94,3 +94,21 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Run backend-shared golden path
         run: uv run pytest tests/test_backend_shared_golden_path.py
+
+  frontend-shared-golden-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Run frontend-shared golden path
+        run: uv run pytest tests/test_frontend_shared_golden_path.py

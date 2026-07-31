@@ -1,0 +1,14 @@
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+
+import IndexPage from '../pages/index.vue'
+
+describe('index page', () => {
+  it('renders one semantic main region with the generated project content', () => {
+    const wrapper = mount(IndexPage)
+
+    expect(wrapper.findAll('main')).toHaveLength(1)
+    expect(wrapper.get('h1').text()).toBe('{{ project_name }}')
+    expect(wrapper.text()).toContain('project/index.md')
+  })
+})

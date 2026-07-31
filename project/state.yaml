@@ -12,5 +12,5 @@ lifecycle:
   next_gate: frontend-shared-golden-path
 
 work:
-  active_task: T-003
+  active_task: T-004
   blocked: false

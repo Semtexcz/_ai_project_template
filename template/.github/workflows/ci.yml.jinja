@@ -24,6 +24,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
       - name: Install dependencies
+{% if project_type in ["frontend", "fullstack"] %}
+        env:
+          PNPM_INSTALL_FLAGS: --frozen-lockfile
+{% endif %}
         run: make setup
       - name: Check
         run: make check
@@ -105,5 +109,64 @@ jobs:
         with:
           name: backend-python-distribution
           path: backend/dist/*
+{% endif %}
+{% elif project_type == "frontend" %}
+      - name: Build frontend application
+        run: make build
+      - name: Smoke test frontend runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="$(python - <<'PY'
+          import socket
+
+          with socket.socket() as sock:
+              sock.bind(("127.0.0.1", 0))
+              print(sock.getsockname()[1])
+          PY
+          )"
+          setsid env HOST=127.0.0.1 PORT="${port}" make run > /tmp/frontend.stdout 2> /tmp/frontend.stderr &
+          server_pid="$!"
+          cleanup() {
+              kill -- "-${server_pid}" 2>/dev/null || true
+              wait "${server_pid}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          python - "${port}" <<'PY'
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          port = sys.argv[1]
+          url = f"http://127.0.0.1:{port}/"
+          deadline = time.monotonic() + 20
+          last_error = None
+
+          while time.monotonic() < deadline:
+              try:
+                  with urllib.request.urlopen(url, timeout=2) as response:
+                      body = response.read().decode("utf-8")
+                      assert response.status == 200
+                      assert "text/html" in response.headers.get("content-type", "")
+                      assert "{{ project_name }}" in body
+                      assert "project/index.md" in body
+                      break
+              except (AssertionError, ConnectionError, TimeoutError, urllib.error.URLError) as exc:
+                  last_error = exc
+                  time.sleep(0.25)
+          else:
+              print("--- stdout ---")
+              print(open("/tmp/frontend.stdout", encoding="utf-8").read())
+              print("--- stderr ---")
+              print(open("/tmp/frontend.stderr", encoding="utf-8").read())
+              raise AssertionError(f"frontend did not become ready: {last_error!r}")
+          PY
+{% if runtime_level == "shared" %}
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-nuxt-output
+          path: frontend/.output
 {% endif %}
 {% endif %}

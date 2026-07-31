@@ -1,9 +1,28 @@
 <script setup lang="ts">
-import ExamplePanel from '~/features/example/components/ExamplePanel.vue'
+import WelcomePanel from '~/features/welcome/components/WelcomePanel.vue'
+import type { WelcomeContent } from '~/features/welcome/types/welcome'
+
+const welcomeContent: WelcomeContent = {
+  projectName: '{{ project_name }}',
+  description: 'A standalone Nuxt application generated from the frontend-shared golden path.',
+  nextStepHref: '/project/index.md',
+  nextStepLabel: 'Open project/index.md to continue with the project plan.'
+}
 </script>
 
 <template>
-  <main class="min-h-screen p-8">
-    <ExamplePanel />
+  <main class="page-shell">
+    <WelcomePanel :content="welcomeContent" />
   </main>
 </template>
+
+<style scoped>
+.page-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: #f6f8fb;
+  color: #172033;
+}
+</style>
