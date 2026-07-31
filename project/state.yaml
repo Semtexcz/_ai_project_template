@@ -1,0 +1,16 @@
+schema_version: 1
+
+project:
+  name: AI Project Golden Path Template
+  type: template
+  runtime_level: local
+  status: active
+
+lifecycle:
+  phase: bootstrap
+  milestone: M-01
+  next_gate: script-local-golden-path
+
+work:
+  active_task: none
+  blocked: false

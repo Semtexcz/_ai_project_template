@@ -9,6 +9,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "copier>=9.7.0",
   "pytest>=8.3",
 ]
 

@@ -14,17 +14,17 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 ## Use
 
 ```bash
-copier copy . ../my-project
+copier copy --defaults --data project_type=script --data runtime_level=local . ../my-project
 cd ../my-project
-make sync-project-docs
-make validate-project
+make setup
 make check
+make build
 ```
 
 ## Verify Template
 
 ```bash
-python -m pytest
+uv run pytest
 ```
 
 ## Design Decisions

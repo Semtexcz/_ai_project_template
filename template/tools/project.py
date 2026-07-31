@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / "project" / "state.yaml"
 TASKS_DIR = ROOT / "project" / "tasks"

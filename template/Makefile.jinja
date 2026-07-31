@@ -1,4 +1,4 @@
-.PHONY: setup dev test lint typecheck check docs project-status sync-project-docs validate-project down
+.PHONY: setup dev test format-check lint typecheck check build docs project-status sync-project-docs validate-project down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -50,6 +50,17 @@ lint:
 	pnpm --dir frontend lint
 {% endif %}
 
+format-check:
+{% if project_type in ["script", "library"] %}
+	uv run ruff format --check .
+{% elif project_type == "backend" %}
+	cd backend && uv run ruff format --check .
+{% elif project_type == "frontend" %}
+	@true
+{% else %}
+	cd backend && uv run ruff format --check .
+{% endif %}
+
 typecheck:
 {% if project_type in ["script", "library"] %}
 	uv run pyright
@@ -62,7 +73,19 @@ typecheck:
 	pnpm --dir frontend typecheck
 {% endif %}
 
-check: sync-project-docs validate-project lint typecheck test
+check: sync-project-docs validate-project format-check lint typecheck test
+
+build:
+{% if project_type in ["script", "library"] %}
+	uv build
+{% elif project_type == "backend" %}
+	cd backend && uv build
+{% elif project_type == "frontend" %}
+	pnpm --dir frontend build
+{% else %}
+	cd backend && uv build
+	pnpm --dir frontend build
+{% endif %}
 
 docs:
 	python tools/project.py status
