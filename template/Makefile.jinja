@@ -1,0 +1,84 @@
+.PHONY: setup dev test lint typecheck check docs project-status sync-project-docs validate-project down
+
+PROJECT_TYPE := {{ project_type }}
+RUNTIME_LEVEL := {{ runtime_level }}
+
+setup:
+{% if project_type in ["script", "library"] %}
+	uv sync
+{% elif project_type == "backend" %}
+	cd backend && uv sync
+{% elif project_type == "frontend" %}
+	pnpm install
+{% else %}
+	cd backend && uv sync
+	pnpm install --dir frontend
+{% endif %}
+
+dev:
+{% if project_type in ["script", "library"] %}
+	uv run python -m {{ python_package }}
+{% elif project_type == "backend" %}
+	cd backend && uv run fastapi dev src/app/main.py
+{% elif project_type == "frontend" %}
+	pnpm --dir frontend dev
+{% else %}
+	docker compose up --build
+{% endif %}
+
+test:
+{% if project_type in ["script", "library"] %}
+	uv run pytest
+{% elif project_type == "backend" %}
+	cd backend && uv run pytest
+{% elif project_type == "frontend" %}
+	pnpm --dir frontend test
+{% else %}
+	cd backend && uv run pytest
+	pnpm --dir frontend test
+{% endif %}
+
+lint:
+{% if project_type in ["script", "library"] %}
+	uv run ruff check .
+{% elif project_type == "backend" %}
+	cd backend && uv run ruff check .
+{% elif project_type == "frontend" %}
+	pnpm --dir frontend lint
+{% else %}
+	cd backend && uv run ruff check .
+	pnpm --dir frontend lint
+{% endif %}
+
+typecheck:
+{% if project_type in ["script", "library"] %}
+	uv run pyright
+{% elif project_type == "backend" %}
+	cd backend && uv run pyright
+{% elif project_type == "frontend" %}
+	pnpm --dir frontend typecheck
+{% else %}
+	cd backend && uv run pyright
+	pnpm --dir frontend typecheck
+{% endif %}
+
+check: sync-project-docs validate-project lint typecheck test
+
+docs:
+	python tools/project.py status
+
+project-status:
+	python tools/project.py status
+
+sync-project-docs:
+	python tools/project.py sync
+
+validate-project:
+	python tools/project.py validate
+
+down:
+{% if project_type == "fullstack" %}
+	docker compose down
+{% else %}
+	@true
+{% endif %}

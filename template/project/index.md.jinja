@@ -1,0 +1,37 @@
+---
+type: project-dashboard
+status: active
+source_of_truth_for:
+  - current-project-navigation
+read_when:
+  - start-work
+  - choose-next-task
+update_when:
+  - project-state-change
+  - task-state-change
+---
+
+# Project Dashboard
+
+<!-- project-index:start -->
+| Item | Current State |
+|---|---|
+| Project | {{ project_name }} |
+| Type | {{ project_type }} |
+| Runtime level | {{ runtime_level }} |
+| Phase | definition |
+| Milestone | M-01 |
+| Active task | T-001 |
+| Next gate | ready-for-development |
+
+Next step: [Complete the active task](tasks/T-001-initialize-project.md).
+<!-- project-index:end -->
+
+## Navigation
+
+- Brief: [brief.md](brief.md)
+- Roadmap: [roadmap.md](roadmap.md)
+- Requirements: [requirements.md](requirements.md)
+- Board: [board.md](board.md)
+- Lifecycle: [../docs/lifecycle.md](../docs/lifecycle.md)
+- Workflow: [../docs/workflow.md](../docs/workflow.md)

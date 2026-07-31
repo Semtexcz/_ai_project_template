@@ -1,0 +1,44 @@
+---
+type: requirements
+status: draft
+source_of_truth_for:
+  - current-requirements
+read_when:
+  - ready-for-development
+  - implement-feature
+update_when:
+  - requirement-change
+  - scope-change
+---
+
+# Requirements
+
+## Functional
+
+| ID | Requirement | Verification |
+|---|---|---|
+| FR-001 | The project exposes one documented way to run the main workflow. | `make dev` or documented command succeeds. |
+
+## Quality
+
+| ID | Requirement | Verification |
+|---|---|---|
+| QR-001 | The project has lint, typecheck, and tests behind `make check`. | `make check` succeeds. |
+
+## Security
+
+| ID | Requirement | Verification |
+|---|---|---|
+| SR-001 | Secrets are not committed or printed by project tooling. | Secret scan or review passes. |
+
+## Operations
+
+| ID | Requirement | Verification |
+|---|---|---|
+| OR-001 | Runtime level `{{ runtime_level }}` has matching verification commands. | `make validate-project` succeeds. |
+
+## Traceability
+
+| Requirement | Task | Test |
+|---|---|---|
+| FR-001 | T-001 | project validation |

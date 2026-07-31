@@ -1,0 +1,34 @@
+# AI Project Golden Path Template
+
+Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, GitHub Actions, documentation-as-code, and AI-assisted development.
+
+## Status
+
+| Item | Current State |
+|---|---|
+| Template version | 0.1.0 |
+| Supported project types | script, library, backend, frontend, fullstack |
+| Supported runtime levels | local, shared, production |
+| Current focus | Bootstrap complete template skeleton |
+
+## Use
+
+```bash
+copier copy . ../my-project
+cd ../my-project
+make sync-project-docs
+make validate-project
+make check
+```
+
+## Verify Template
+
+```bash
+python -m pytest
+```
+
+## Design Decisions
+
+- [ADR-0001: Use Copier as the update mechanism](docs/decisions/ADR-0001-use-copier.md)
+- [ADR-0002: Keep `.agents` canonical and `.codex` thin](docs/decisions/ADR-0002-agent-layer.md)
+- [ADR-0003: Use feature-oriented modular monoliths](docs/decisions/ADR-0003-modular-monolith.md)

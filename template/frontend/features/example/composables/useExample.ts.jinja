@@ -1,0 +1,22 @@
+import { reactive } from 'vue'
+
+type ExampleState =
+  | { title: string; status: 'loading' }
+  | { title: string; status: 'empty' }
+  | { title: string; status: 'error'; error: string }
+  | { title: string; status: 'success'; message: string }
+
+export function useExample() {
+  const state = reactive<ExampleState>({
+    title: '{{ project_name }}',
+    status: 'success',
+    message: 'Ready'
+  })
+
+  function refresh() {
+    state.status = 'success'
+    state.message = 'Ready'
+  }
+
+  return { state, refresh }
+}

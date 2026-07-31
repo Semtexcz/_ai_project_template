@@ -1,0 +1,32 @@
+always:
+  - AGENTS.md
+  - project/state.yaml
+  - project/index.md
+  - active-task
+
+tasks:
+  feature:
+    required:
+      - docs/product.md
+      - docs/architecture.md
+      - docs/quality.md
+      - project/requirements.md
+  architecture:
+    required:
+      - docs/architecture.md
+      - docs/decisions/index.md
+  documentation:
+    required:
+      - docs/workflow.md
+      - docs/lifecycle.md
+  release:
+    required:
+      - docs/workflow.md
+      - docs/quality.md
+  reassessment:
+    required:
+      - README.md
+      - project/state.yaml
+      - project/roadmap.md
+      - project/board.md
+      - docs/decisions/index.md

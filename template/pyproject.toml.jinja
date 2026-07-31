@@ -1,0 +1,42 @@
+[project]
+name = "{{ project_slug }}"
+version = "0.1.0"
+description = "{{ project_name }}"
+requires-python = ">=3.12"
+dependencies = [
+  "pyyaml>=6.0.2",
+{% if project_type in ["script", "library"] %}
+  "typer>=0.16.0",
+{% endif %}
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+{% if project_type in ["script", "library"] %}
+  "pytest-cov>=6.0",
+  "ruff>=0.12",
+  "pyright>=1.1",
+{% endif %}
+]
+
+{% if project_type in ["script", "library"] %}
+[project.scripts]
+{{ project_slug|replace('-', '_') }} = "{{ python_package }}.__main__:main"
+{% endif %}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+include = ["src", "tests", "tools"]

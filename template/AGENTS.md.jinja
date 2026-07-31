@@ -1,0 +1,50 @@
+# AGENTS.md
+
+## Purpose
+
+This repository follows an opinionated Python/Nuxt golden path. Keep changes small, documented, tested, and tied to the active project task.
+
+## Required Start
+
+Always load:
+
+- `AGENTS.md`
+- `project/state.yaml`
+- `project/index.md`
+- the active task from `project/tasks/`
+
+Then use `.agents/context-map.yaml` to load only task-relevant context.
+
+## Architecture Rules
+
+- Start from the current project type: `{{ project_type }}`.
+- Start from the current runtime level: `{{ runtime_level }}`.
+- Do not add databases, queues, caches, external services, authentication, Kubernetes, or production deployment unless a requirement, ADR, and approval level justify it.
+- Backend business logic belongs outside FastAPI routes.
+- Backend domain code must not import FastAPI, SQLAlchemy, or infrastructure clients.
+- Frontend pages compose features; feature logic belongs in feature composables or services.
+- API types must be generated from OpenAPI once a backend API contract exists.
+
+## Standard Commands
+
+```bash
+make setup
+make dev
+make test
+make lint
+make typecheck
+make check
+make project-status
+make sync-project-docs
+make validate-project
+```
+
+## Approval Boundaries
+
+- A0: small fixes, tests, documentation, local refactors, next-task proposals.
+- A1: public behavior changes, new endpoints, new modules, non-destructive schema changes.
+- A2: scope changes, production deployment, destructive data changes, auth changes, new infrastructure services, paid external services, project retirement.
+
+## Workflow
+
+Use `docs/workflow.md` for the daily change loop and `.agents/skills/` for task-specific procedures.

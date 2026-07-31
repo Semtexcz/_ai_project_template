@@ -1,0 +1,30 @@
+{
+  "description": "Project validation hooks for the golden-path template.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .agents/hooks/pre-task.py",
+            "timeout": 30,
+            "statusMessage": "Checking project state"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .agents/hooks/post-task.py",
+            "timeout": 30,
+            "statusMessage": "Synchronizing project dashboard"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+[project]
+name = "{{ project_slug }}-backend"
+version = "0.1.0"
+description = "{{ project_name }} backend"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi[standard]>=0.116",
+  "pydantic-settings>=2.10",
+  "structlog>=25.4",
+  "httpx>=0.28",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+  "ruff>=0.12",
+  "pyright>=1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+include = ["src", "tests"]

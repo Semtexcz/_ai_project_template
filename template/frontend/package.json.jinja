@@ -1,0 +1,28 @@
+{
+  "name": "{{ project_slug }}-frontend",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@nuxt/test-utils": "^3.19.0",
+    "@unocss/nuxt": "^66.3.0",
+    "nuxt": "^4.0.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.0",
+    "@vue/test-utils": "^2.4.0",
+    "eslint": "^9.30.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0",
+    "vue-tsc": "^3.0.0"
+  }
+}

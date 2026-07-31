@@ -1,0 +1,17 @@
+[project]
+name = "ai-project-golden-path-template"
+version = "0.1.0"
+description = "Tests and tooling for the AI project golden-path Copier template."
+requires-python = ">=3.12"
+dependencies = [
+  "pyyaml>=6.0.2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -1,0 +1,21 @@
+schema_version: 1
+
+project:
+  name: "{{ project_name }}"
+  slug: "{{ project_slug }}"
+  type: "{{ project_type }}"
+  runtime_level: "{{ runtime_level }}"
+  risk: medium
+  status: active
+
+lifecycle:
+  phase: definition
+  milestone: M-01
+  next_gate: ready-for-development
+
+work:
+  active_task: T-001
+  blocked: false
+
+template:
+  version: "{{ template_version }}"

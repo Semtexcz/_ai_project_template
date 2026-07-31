@@ -1,0 +1,31 @@
+---
+id: T-001
+title: Initialize project knowledge
+status: in-progress
+priority: 1
+milestone: M-01
+depends_on: []
+approval: A0
+---
+
+# T-001: Initialize Project Knowledge
+
+## Goal
+
+Replace template placeholders with the first concrete project brief, scope, non-goals, success criteria, and next ready task.
+
+## Acceptance Criteria
+
+- `project/brief.md` names the problem, target user, desired outcome, scope, non-goals, assumptions, risks, and success criteria.
+- `project/roadmap.md` has at least the active milestone updated for this project.
+- `project/requirements.md` contains only concrete and verifiable requirements for the current scope.
+- `make sync-project-docs` and `make validate-project` pass.
+
+## Definition of Ready
+
+- This task is active in `project/state.yaml`.
+- Approval level is A0.
+
+## Notes
+
+Do not implement product code before the ready-for-development gate passes.

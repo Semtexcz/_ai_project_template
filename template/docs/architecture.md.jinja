@@ -1,0 +1,59 @@
+---
+type: architecture
+status: draft
+source_of_truth_for:
+  - current-architecture
+read_when:
+  - architecture-change
+  - new-module
+  - ready-for-development
+update_when:
+  - module-boundary-change
+  - runtime-component-change
+---
+
+# Architecture
+
+## Style
+
+Project type: `{{ project_type }}`. Runtime level: `{{ runtime_level }}`.
+
+Use the smallest coherent architecture that supports the active task.
+
+{% if project_type in ["backend", "fullstack"] %}
+## Backend
+
+The backend is a feature-oriented modular monolith:
+
+```text
+domain <- application <- infrastructure <- api/framework wiring
+```
+
+Rules:
+
+- `domain` does not import FastAPI, SQLAlchemy, HTTP clients, or infrastructure.
+- `application` owns use cases.
+- `infrastructure` implements persistence and external integration adapters.
+- `api` maps HTTP requests to application use cases.
+{% endif %}
+
+{% if project_type in ["frontend", "fullstack"] %}
+## Frontend
+
+Nuxt pages compose feature components and shared UI. Feature-specific logic belongs in `features/*/composables` or `features/*/api`.
+{% endif %}
+
+## Progressive Infrastructure
+
+Do not add a database, cache, queue, object storage, CDN, API gateway, Kubernetes, or service mesh without:
+
+- a concrete requirement
+- an ADR
+- an operating plan
+- the required approval level
+
+## Related
+
+- [workflow.md](workflow.md)
+- [quality.md](quality.md)
+- [decisions/index.md](decisions/index.md)
