@@ -1,7 +1,9 @@
-.PHONY: setup dev test format-check lint typecheck check build docs project-status sync-project-docs validate-project down
+.PHONY: setup dev run test format-check lint typecheck check build docs project-status sync-project-docs validate-project down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
+HOST ?= 127.0.0.1
+PORT ?= 8000
 
 setup:
 {% if project_type in ["script", "library"] %}
@@ -19,9 +21,20 @@ dev:
 {% if project_type in ["script", "library"] %}
 	uv run python -m {{ python_package }}
 {% elif project_type == "backend" %}
-	cd backend && uv run fastapi dev src/app/main.py
+	cd backend && uv run uvicorn app.main:app --app-dir src --host $(HOST) --port $(PORT) --reload
 {% elif project_type == "frontend" %}
 	pnpm --dir frontend dev
+{% else %}
+	docker compose up --build
+{% endif %}
+
+run:
+{% if project_type in ["script", "library"] %}
+	uv run python -m {{ python_package }}
+{% elif project_type == "backend" %}
+	cd backend && uv run uvicorn app.main:app --app-dir src --host $(HOST) --port $(PORT)
+{% elif project_type == "frontend" %}
+	pnpm --dir frontend start
 {% else %}
 	docker compose up --build
 {% endif %}

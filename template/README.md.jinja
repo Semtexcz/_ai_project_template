@@ -33,6 +33,40 @@ make check
 make build
 ```
 
+{% if project_type == "backend" %}
+## Backend Runtime
+
+Run the backend without auto-reload:
+
+```bash
+make run
+```
+
+Run the local development server with auto-reload:
+
+```bash
+make dev
+```
+
+The FastAPI entry point is `backend/src/app/main.py` (`app.main:app`). By default the
+service listens on `http://127.0.0.1:8000`; override with `HOST` and `PORT`.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Process health check. |
+| `GET /ready` | Readiness check. Without external services, readiness means the app loaded successfully. |
+| `GET /openapi.json` | OpenAPI document. |
+
+`make build` writes a wheel and source distribution to `backend/dist/`. The wheel is
+installable in a clean Python environment and can run with:
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+This is a shared-environment baseline, not a production deployment.
+{% endif %}
+
 {% if project_type == "library" %}
 ## Package
 

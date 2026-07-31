@@ -14,7 +14,7 @@ _None_
 
 ## Review
 
-_None_
+- [T-003](tasks/T-003-make-backend-shared-golden-path-executable.md) - Make backend-shared golden path executable
 
 ## Blocked
 

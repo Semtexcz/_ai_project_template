@@ -9,8 +9,8 @@ project:
 lifecycle:
   phase: bootstrap
   milestone: M-01
-  next_gate: backend-shared-golden-path
+  next_gate: frontend-shared-golden-path
 
 work:
-  active_task: none
+  active_task: T-003
   blocked: false

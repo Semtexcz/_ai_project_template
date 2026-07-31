@@ -37,4 +37,73 @@ jobs:
           name: python-distribution
           path: dist/*
 {% endif %}
+{% elif project_type == "backend" %}
+      - name: Build backend distribution
+        run: make build
+      - name: Smoke test backend runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="$(python - <<'PY'
+          import socket
+
+          with socket.socket() as sock:
+              sock.bind(("127.0.0.1", 0))
+              print(sock.getsockname()[1])
+          PY
+          )"
+          setsid env HOST=127.0.0.1 PORT="${port}" make run > /tmp/backend.stdout 2> /tmp/backend.stderr &
+          server_pid="$!"
+          cleanup() {
+              kill -- "-${server_pid}" 2>/dev/null || true
+              wait "${server_pid}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          python - "${port}" <<'PY'
+          import json
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          port = sys.argv[1]
+          base_url = f"http://127.0.0.1:{port}"
+
+          def get_json(path: str) -> dict:
+              with urllib.request.urlopen(f"{base_url}{path}", timeout=2) as response:
+                  if response.status != 200:
+                      raise AssertionError(f"{path} returned {response.status}")
+                  payload = json.loads(response.read().decode("utf-8"))
+                  if not isinstance(payload, dict):
+                      raise AssertionError(f"{path} did not return a JSON object")
+                  return payload
+
+          deadline = time.monotonic() + 20
+          while True:
+              try:
+                  if get_json("/ready") == {"status": "ready"}:
+                      break
+              except (ConnectionError, TimeoutError, urllib.error.URLError):
+                  if time.monotonic() >= deadline:
+                      print("--- stdout ---")
+                      print(open("/tmp/backend.stdout", encoding="utf-8").read())
+                      print("--- stderr ---")
+                      print(open("/tmp/backend.stderr", encoding="utf-8").read())
+                      raise
+                  time.sleep(0.25)
+
+          assert get_json("/health") == {"status": "ok"}
+          assert get_json("/ready") == {"status": "ready"}
+          openapi = get_json("/openapi.json")
+          assert openapi["info"]["title"]
+          assert "/health" in openapi["paths"]
+          assert "/ready" in openapi["paths"]
+          PY
+{% if runtime_level == "shared" %}
+      - name: Upload backend distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-python-distribution
+          path: backend/dist/*
+{% endif %}
 {% endif %}

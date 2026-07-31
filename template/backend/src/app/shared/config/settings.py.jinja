@@ -1,9 +1,12 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_name: str = "{{ project_name }}"
     version: str = "0.1.0"
-    log_level: str = "INFO"
+    environment: Literal["local", "test", "shared", "production"] = "local"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
-    model_config = SettingsConfigDict(env_prefix="APP_")
+    model_config = SettingsConfigDict(env_prefix="APP_", env_file=".env", extra="ignore")
