@@ -4,13 +4,17 @@ project:
   name: AI Project Golden Path Template
   type: template
   runtime_level: local
+  risk: medium
   status: active
 
 lifecycle:
-  phase: bootstrap
-  milestone: M-01
-  next_gate: project-state-validation-golden-path
+  phase: delivery
+  milestone: M-07
+  next_gate: production-runtime-golden-path
 
 work:
-  active_task: T-006
+  active_task:
   blocked: false
+
+template:
+  version: v1.1.0

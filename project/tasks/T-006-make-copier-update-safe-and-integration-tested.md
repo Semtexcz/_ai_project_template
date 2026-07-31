@@ -1,11 +1,16 @@
 ---
 id: T-006
 title: Make Copier update safe and integration-tested
-status: review
-priority: high
+status: done
+priority: 1
 milestone: M-01
-approval: A2
 depends_on: [T-001, T-002, T-003, T-004, T-005]
+approval_level: A2
+approval_status: approved
+approved_by: Project owner
+approved_at: 2026-07-31T10:00:00+02:00
+blocked_reason:
+unblock_action:
 ---
 
 # T-006: Make Copier Update Safe and Integration-Tested

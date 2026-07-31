@@ -1,14 +1,94 @@
 from __future__ import annotations
 
+# ruff: noqa: E501
+# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportArgumentType=false, reportOptionalMemberAccess=false, reportUnnecessaryIsInstance=false
 import argparse
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
+
+def discover_root() -> Path:
+    cwd = Path.cwd()
+    if (cwd / "project" / "state.yaml").exists():
+        return cwd
+    return Path(__file__).resolve().parents[1]
+
+
+ROOT = discover_root()
 STATE_PATH = ROOT / "project" / "state.yaml"
 TASKS_DIR = ROOT / "project" / "tasks"
+
+STATE_START = "<!-- project-status:start -->"
+STATE_END = "<!-- project-status:end -->"
+INDEX_START = "<!-- project-index:start -->"
+INDEX_END = "<!-- project-index:end -->"
+KANBAN_START = "<!-- kanban:start -->"
+KANBAN_END = "<!-- kanban:end -->"
+
+TASK_ID_RE = re.compile(r"^T-\d{3}$")
+TASK_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+CHECKBOX_RE = re.compile(r"^\s*-\s+\[( |x|X)\]\s+(.+)$")
+
+PROJECT_TYPES = {"script", "library", "backend", "frontend", "fullstack", "template"}
+RUNTIME_LEVELS = {"local", "shared", "production"}
+RISKS = {"low", "medium", "high"}
+PROJECT_STATUSES = {"active", "paused", "done", "retired"}
+LIFECYCLE_PHASES = {
+    "inception",
+    "discovery",
+    "definition",
+    "architecture",
+    "bootstrap",
+    "delivery",
+    "production-readiness",
+    "operation",
+    "evolution",
+    "retirement",
+}
+TASK_STATUSES = {
+    "backlog",
+    "ready",
+    "in-progress",
+    "review",
+    "blocked",
+    "done",
+    "cancelled",
+}
+APPROVAL_LEVELS = {"A0", "A1", "A2"}
+APPROVAL_STATUSES = {"not-required", "pending", "approved", "rejected"}
+COLUMNS = [
+    ("Backlog", "backlog"),
+    ("Ready", "ready"),
+    ("In Progress", "in-progress"),
+    ("Review", "review"),
+    ("Blocked", "blocked"),
+    ("Done", "done"),
+    ("Cancelled", "cancelled"),
+]
+DOR_SECTIONS = [
+    "Goal",
+    "Context",
+    "Scope",
+    "Out of Scope",
+    "Acceptance Criteria",
+    "Verification",
+    "Documentation Impact",
+]
+DOD_SECTIONS = ["Verification", "Completion Notes", "Documentation Impact"]
+TRANSITIONS = {
+    "backlog": {"ready", "cancelled"},
+    "ready": {"in-progress", "cancelled"},
+    "in-progress": {"review", "blocked", "cancelled"},
+    "review": {"in-progress", "done", "cancelled"},
+    "blocked": {"ready", "in-progress", "cancelled"},
+}
+
+
+class ProjectError(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -18,262 +98,919 @@ class Task:
     status: str
     priority: int
     milestone: str
-    approval: str
+    depends_on: tuple[str, ...]
+    approval_level: str
+    approval_status: str
+    approved_by: str | None
+    approved_at: str | None
+    blocked_reason: str | None
+    unblock_action: str | None
     path: Path
-
-
-def load_state() -> dict[str, Any]:
-    return parse_simple_yaml(STATE_PATH.read_text())
+    body: str
 
 
 def parse_scalar(value: str) -> Any:
+    value = value.strip()
+    if value in {"", "null", "~"}:
+        return None
     if value in {"true", "false"}:
         return value == "true"
-    if value == "[]":
-        return []
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [parse_scalar(part.strip()) for part in inner.split(",")]
     if value.isdigit():
         return int(value)
-    return value.strip('"')
+    return value.strip('"').strip("'")
 
 
 def parse_simple_yaml(text: str) -> dict[str, Any]:
     root: dict[str, Any] = {}
     stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
-    lines = text.splitlines()
-    index = 0
-    while index < len(lines):
-        raw = lines[index]
-        index += 1
+    current_list_key: dict[int, str] = {}
+    for raw in text.splitlines():
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         indent = len(raw) - len(raw.lstrip(" "))
-        key, _, value = raw.strip().partition(":")
+        stripped = raw.strip()
         while stack and indent <= stack[-1][0]:
             stack.pop()
         parent = stack[-1][1]
+        if stripped.startswith("- "):
+            key = current_list_key.get(indent)
+            if key is None:
+                raise ProjectError(f"Invalid YAML list item: {raw}")
+            parent.setdefault(key, []).append(parse_scalar(stripped[2:]))
+            continue
+        key, sep, value = stripped.partition(":")
+        if not sep:
+            raise ProjectError(f"Invalid YAML line: {raw}")
         value = value.strip()
         if value:
             parent[key] = parse_scalar(value)
         else:
             child: dict[str, Any] = {}
             parent[key] = child
+            current_list_key[indent + 2] = key
             stack.append((indent, child))
     return root
 
 
-def parse_task(path: Path) -> Task:
-    text = path.read_text()
-    match = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+def dump_simple_yaml(data: dict[str, Any]) -> str:
+    def scalar(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, list):
+            return "[" + ", ".join(str(item) for item in value) + "]"
+        return str(value)
+
+    lines: list[str] = []
+    for key, value in data.items():
+        if isinstance(value, dict):
+            lines.append(f"{key}:")
+            for child_key, child_value in value.items():
+                lines.append(f"  {child_key}: {scalar(child_value)}".rstrip())
+            lines.append("")
+        else:
+            lines.append(f"{key}: {scalar(value)}".rstrip())
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def read_state() -> dict[str, Any]:
+    if not STATE_PATH.exists():
+        raise ProjectError(
+            "project/state.yaml does not exist. Create project state before validating."
+        )
+    data = parse_simple_yaml(STATE_PATH.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ProjectError("project/state.yaml must be a mapping.")
+    return data
+
+
+def split_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
+    text = path.read_text(encoding="utf-8")
+    match = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
     if not match:
-        raise ValueError(f"{path} is missing YAML frontmatter")
-    data = parse_simple_yaml(match.group(1))
+        raise ProjectError(f"{relative(path)} is missing YAML frontmatter. Add task metadata.")
+    return parse_simple_yaml(match.group(1)), match.group(2)
+
+
+def normalize_task_data(data: dict[str, Any], path: Path, body: str) -> Task:
+    approval_level = str(data.get("approval_level", data.get("approval", "")))
+    approval_status = str(
+        data.get(
+            "approval_status",
+            "not-required" if approval_level == "A0" else "pending",
+        )
+    )
+    depends = data.get("depends_on", [])
+    if depends is None:
+        depends = []
+    if not isinstance(depends, list):
+        depends = [depends]
+    priority_raw = data.get("priority")
+    priority = int(priority_raw) if str(priority_raw).isdigit() else 999
     return Task(
-        id=str(data["id"]),
-        title=str(data["title"]),
-        status=str(data["status"]),
-        priority=int(data["priority"]),
-        milestone=str(data["milestone"]),
-        approval=str(data["approval"]),
+        id=str(data.get("id", "")),
+        title=str(data.get("title", "")),
+        status=str(data.get("status", "")),
+        priority=priority,
+        milestone=str(data.get("milestone", "")),
+        depends_on=tuple(str(item) for item in depends),
+        approval_level=approval_level,
+        approval_status=approval_status,
+        approved_by=nonempty(data.get("approved_by")),
+        approved_at=nonempty(data.get("approved_at")),
+        blocked_reason=nonempty(data.get("blocked_reason")),
+        unblock_action=nonempty(data.get("unblock_action")),
         path=path,
+        body=body,
     )
 
 
 def load_tasks() -> list[Task]:
-    return sorted(
-        (parse_task(path) for path in TASKS_DIR.glob("*.md")),
-        key=lambda task: (task.priority, task.id),
+    if not TASKS_DIR.exists():
+        return []
+    tasks = []
+    for path in sorted(TASKS_DIR.glob("*.md")):
+        data, body = split_frontmatter(path)
+        tasks.append(normalize_task_data(data, path, body))
+    return sorted(tasks, key=task_sort_key)
+
+
+def task_sort_key(task: Task) -> tuple[int, int, str]:
+    number = int(task.id.split("-")[1]) if TASK_ID_RE.match(task.id) else 999999
+    return (task.priority, number, task.title)
+
+
+def relative(path: Path, base: Path = ROOT) -> str:
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def nonempty(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, dict) and not value:
+        return None
+    if isinstance(value, list) and not value:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def task_by_id(tasks: list[Task]) -> dict[str, Task]:
+    return {task.id: task for task in tasks}
+
+
+def section_content(body: str, title: str) -> str:
+    pattern = re.compile(rf"^##\s+{re.escape(title)}\s*$", re.MULTILINE)
+    match = pattern.search(body)
+    if not match:
+        return ""
+    start = match.end()
+    next_match = re.search(r"^##\s+", body[start:], re.MULTILINE)
+    end = start + next_match.start() if next_match else len(body)
+    return body[start:end].strip()
+
+
+def has_real_content(body: str, title: str) -> bool:
+    content = section_content(body, title)
+    meaningful = [line.strip() for line in content.splitlines() if line.strip()]
+    return any(not line.startswith("<!--") for line in meaningful)
+
+
+def acceptance_checkboxes(task: Task) -> list[tuple[bool, str]]:
+    content = section_content(task.body, "Acceptance Criteria")
+    boxes = []
+    for line in content.splitlines():
+        match = CHECKBOX_RE.match(line)
+        if match:
+            boxes.append((match.group(1).lower() == "x", match.group(2)))
+    return boxes
+
+
+def definition_of_ready(task: Task) -> list[str]:
+    return [section for section in DOR_SECTIONS if not has_real_content(task.body, section)]
+
+
+def definition_of_done(task: Task) -> list[str]:
+    missing = [section for section in DOD_SECTIONS if not has_real_content(task.body, section)]
+    boxes = acceptance_checkboxes(task)
+    if boxes and any(not checked for checked, _ in boxes):
+        missing.append("all Acceptance Criteria checkboxes checked")
+    if "TBD" in section_content(task.body, "Documentation Impact").upper():
+        missing.append("Documentation Impact resolved")
+    return missing
+
+
+def valid_datetime(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def dependency_cycle(tasks: list[Task]) -> list[str] | None:
+    graph = {task.id: list(task.depends_on) for task in tasks}
+    visiting: list[str] = []
+    visited: set[str] = set()
+
+    def visit(node: str) -> list[str] | None:
+        if node in visiting:
+            start = visiting.index(node)
+            return visiting[start:] + [node]
+        if node in visited:
+            return None
+        visiting.append(node)
+        for dep in graph.get(node, []):
+            cycle = visit(dep)
+            if cycle:
+                return cycle
+        visiting.pop()
+        visited.add(node)
+        return None
+
+    for task in tasks:
+        cycle = visit(task.id)
+        if cycle:
+            return cycle
+    return None
+
+
+def dependencies_done(task: Task, tasks_by_id: dict[str, Task]) -> bool:
+    return all(
+        tasks_by_id[dep].status in {"done", "cancelled"}
+        for dep in task.depends_on
+        if dep in tasks_by_id
     )
 
 
-def find_task(tasks: list[Task], task_id: str) -> Task | None:
-    return next((task for task in tasks if task.id == task_id), None)
+def validate_all(*, check_drift: bool = True) -> list[str]:
+    errors: list[str] = []
+    try:
+        state = read_state()
+        tasks = load_tasks()
+    except ProjectError as exc:
+        return [str(exc)]
+    tasks_by = task_by_id(tasks)
+
+    errors.extend(validate_state_schema(state, tasks_by))
+    errors.extend(validate_tasks(tasks, state))
+    errors.extend(validate_task_graph(tasks, tasks_by))
+    errors.extend(validate_active_task(state, tasks, tasks_by))
+    if check_drift:
+        errors.extend(validate_drift(state, tasks))
+    errors.extend(validate_markdown_links())
+    return errors
 
 
-def dashboard_block(state: dict[str, Any], active: Task | None) -> str:
+def validate_state_schema(state: dict[str, Any], tasks_by: dict[str, Task]) -> list[str]:
+    errors: list[str] = []
+    if state.get("schema_version") != 1:
+        errors.append("project/state.yaml schema_version must be 1. Fix schema_version.")
+    project = state.get("project")
+    lifecycle = state.get("lifecycle")
+    work = state.get("work")
+    template = state.get("template")
+    for key, section in [
+        ("project", project),
+        ("lifecycle", lifecycle),
+        ("work", work),
+        ("template", template),
+    ]:
+        if not isinstance(section, dict):
+            errors.append(f"project/state.yaml is missing mapping '{key}'. Add the {key} section.")
+    if errors:
+        return errors
+    if project.get("type") not in PROJECT_TYPES:
+        errors.append(
+            f"project.type '{project.get('type')}' is invalid. Use one of: {', '.join(sorted(PROJECT_TYPES))}."
+        )
+    if project.get("runtime_level") not in RUNTIME_LEVELS:
+        errors.append("project.runtime_level is invalid. Use local, shared, or production.")
+    if project.get("risk") not in RISKS:
+        errors.append("project.risk is invalid. Use low, medium, or high.")
+    if project.get("status") not in PROJECT_STATUSES:
+        errors.append("project.status is invalid. Use active, paused, done, or retired.")
+    if lifecycle.get("phase") not in LIFECYCLE_PHASES:
+        errors.append("lifecycle.phase is invalid. Use a documented lifecycle phase.")
+    if project.get("status") == "active":
+        if not nonempty(lifecycle.get("milestone")):
+            errors.append("Active project requires lifecycle.milestone. Set the current milestone.")
+        if not nonempty(lifecycle.get("next_gate")):
+            errors.append("Active project requires lifecycle.next_gate. Set the next gate.")
+    active = nonempty(work.get("active_task"))
+    if active and not TASK_ID_RE.match(active):
+        errors.append(
+            f"work.active_task '{active}' is invalid. Use format T-001 or leave it empty."
+        )
+    if active and active not in tasks_by:
+        errors.append(
+            f"work.active_task '{active}' does not exist. Create the task or clear active_task."
+        )
+    if not nonempty(template.get("version")):
+        errors.append("template.version is required. Set the template version.")
+    return errors
+
+
+def validate_tasks(tasks: list[Task], state: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    seen: set[str] = set()
+    current_milestone = str(state.get("lifecycle", {}).get("milestone", ""))
+    for task in tasks:
+        prefix = f"{task.id or relative(task.path)}:"
+        if not TASK_ID_RE.match(task.id):
+            errors.append(f"{prefix} invalid task id. Use format T-001.")
+        if task.id in seen:
+            errors.append(f"Duplicate task id {task.id}. Keep task IDs unique.")
+        seen.add(task.id)
+        if not task.title:
+            errors.append(f"{prefix} title is required.")
+        if task.status not in TASK_STATUSES:
+            errors.append(
+                f"{prefix} invalid status '{task.status}'. Use one of: {', '.join(sorted(TASK_STATUSES))}."
+            )
+        if not isinstance(task.priority, int) or task.priority < 1:
+            errors.append(f"{prefix} priority must be a positive integer.")
+        if not task.milestone:
+            errors.append(f"{prefix} milestone is required.")
+        if (
+            task.status in {"ready", "in-progress", "review"}
+            and task.milestone != current_milestone
+        ):
+            errors.append(
+                f"{prefix} milestone '{task.milestone}' is not the current milestone '{current_milestone}'. Move it or update project/state.yaml."
+            )
+        if task.approval_level not in APPROVAL_LEVELS:
+            errors.append(
+                f"{prefix} invalid approval_level '{task.approval_level}'. Use A0, A1, or A2."
+            )
+        if task.approval_status not in APPROVAL_STATUSES:
+            errors.append(
+                f"{prefix} invalid approval_status '{task.approval_status}'. Use not-required, pending, approved, or rejected."
+            )
+        errors.extend(validate_approval(task))
+        errors.extend(validate_blocker(task))
+        if task.status in {"ready", "in-progress", "review"}:
+            missing = definition_of_ready(task)
+            if missing:
+                errors.append(
+                    f"{prefix} Definition of Ready is incomplete: {', '.join(missing)}. Fill the required sections before ready/start."
+                )
+        if task.status == "done":
+            missing = definition_of_done(task)
+            if missing:
+                errors.append(
+                    f"{prefix} Definition of Done is incomplete: {', '.join(missing)}. Complete verification, notes, docs impact, and checked criteria."
+                )
+    return errors
+
+
+def validate_approval(task: Task) -> list[str]:
+    errors: list[str] = []
+    prefix = f"{task.id}:"
+    if task.approval_level == "A0":
+        if task.approval_status != "not-required":
+            errors.append(f"{prefix} A0 tasks must use approval_status not-required.")
+        if task.approved_by or task.approved_at:
+            errors.append(f"{prefix} A0 tasks must not carry human approval metadata.")
+    if task.approval_level in {"A1", "A2"}:
+        if task.approval_status == "approved":
+            if not task.approved_by:
+                errors.append(
+                    f"{prefix} approved task requires approved_by. Record the human approver."
+                )
+            if not valid_datetime(task.approved_at):
+                errors.append(
+                    f"{prefix} approved_at is invalid. Use ISO datetime, for example 2026-07-31T10:00:00+02:00."
+                )
+        if task.approval_status != "approved" and (task.approved_by or task.approved_at):
+            errors.append(
+                f"{prefix} approval metadata is present but approval_status is not approved. Clear it or approve explicitly."
+            )
+    if task.approval_level == "A1" and task.status == "done" and task.approval_status != "approved":
+        errors.append(
+            f'{prefix} A1 task cannot be done without human approval. Run: make task-approve TASK={task.id} APPROVED_BY="<human>".'
+        )
+    if (
+        task.approval_level == "A2"
+        and task.status in {"in-progress", "review", "done"}
+        and task.approval_status != "approved"
+    ):
+        errors.append(
+            f'{prefix} A2 task cannot start or finish without prior human approval. Human must run: make task-approve TASK={task.id} APPROVED_BY="<human>".'
+        )
+    return errors
+
+
+def validate_blocker(task: Task) -> list[str]:
+    errors: list[str] = []
+    prefix = f"{task.id}:"
+    if task.status == "blocked":
+        if not task.blocked_reason:
+            errors.append(
+                f'{prefix} blocked task requires blocked_reason. Use make task-block TASK={task.id} REASON="..." UNBLOCK="...".'
+            )
+        if not task.unblock_action:
+            errors.append(
+                f'{prefix} blocked task requires unblock_action. Use make task-block TASK={task.id} REASON="..." UNBLOCK="...".'
+            )
+    elif task.blocked_reason or task.unblock_action:
+        errors.append(
+            f"{prefix} blocker metadata is only allowed when status is blocked. Clear blocked_reason and unblock_action."
+        )
+    return errors
+
+
+def validate_task_graph(tasks: list[Task], tasks_by: dict[str, Task]) -> list[str]:
+    errors: list[str] = []
+    for task in tasks:
+        if len(set(task.depends_on)) != len(task.depends_on):
+            errors.append(
+                f"{task.id}: duplicate dependencies are not allowed. Remove duplicates from depends_on."
+            )
+        if task.id in task.depends_on:
+            errors.append(
+                f"{task.id}: task cannot depend on itself. Remove {task.id} from depends_on."
+            )
+        for dep in task.depends_on:
+            if dep not in tasks_by:
+                errors.append(
+                    f"{task.id}: dependency {dep} does not exist. Create it or remove the dependency."
+                )
+    cycle = dependency_cycle(tasks)
+    if cycle:
+        errors.append(
+            f"Task dependency cycle detected: {' -> '.join(cycle)}. Break the cycle before continuing."
+        )
+    for task in tasks:
+        if task.status in {"ready", "in-progress"} and not dependencies_done(task, tasks_by):
+            missing = [
+                dep
+                for dep in task.depends_on
+                if dep in tasks_by and tasks_by[dep].status not in {"done", "cancelled"}
+            ]
+            errors.append(
+                f"{task.id}: cannot be {task.status}; dependencies are not done: {', '.join(missing)}. Complete dependencies first."
+            )
+    return errors
+
+
+def validate_active_task(
+    state: dict[str, Any], tasks: list[Task], tasks_by: dict[str, Task]
+) -> list[str]:
+    errors: list[str] = []
+    active = nonempty(state.get("work", {}).get("active_task"))
+    in_progress = [task for task in tasks if task.status == "in-progress"]
+    blocked_flag = bool(state.get("work", {}).get("blocked"))
+    any_blocked = any(task.status == "blocked" for task in tasks)
+    if len(in_progress) > 1:
+        errors.append(
+            "More than one task is in-progress. Finish, review, block, or cancel one task."
+        )
+    if len(in_progress) == 1 and active != in_progress[0].id:
+        errors.append(
+            f"work.active_task must be {in_progress[0].id}. Run the controlled task transition or update state consistently."
+        )
+    if not in_progress and active:
+        errors.append(
+            "work.active_task is set but no task is in-progress. Clear work.active_task or start the task through make task-start."
+        )
+    if active and active in tasks_by and tasks_by[active].status == "blocked":
+        errors.append(
+            f"Active task {active} is blocked. Active task cannot be blocked; unblock it or clear active_task."
+        )
+    if blocked_flag != any_blocked:
+        errors.append(
+            "work.blocked does not match blocked tasks. Run: make sync-project-docs after fixing blocker state."
+        )
+    return errors
+
+
+def validate_drift(state: dict[str, Any], tasks: list[Task]) -> list[str]:
+    errors: list[str] = []
+    expected = {
+        ROOT / "README.md": (STATE_START, STATE_END, dashboard_block(state, tasks)),
+        ROOT / "project" / "index.md": (
+            INDEX_START,
+            INDEX_END,
+            project_index_block(state, tasks),
+        ),
+        ROOT / "project" / "board.md": (KANBAN_START, KANBAN_END, kanban_block(tasks)),
+    }
+    for path, (start, end, content) in expected.items():
+        try:
+            current = extract_block(path, start, end)
+        except ProjectError as exc:
+            errors.append(str(exc))
+            continue
+        if normalize_block(current) != normalize_block(content):
+            errors.append(f"{relative(path)} generated block is stale. Run: make sync-project-docs")
+    return errors
+
+
+def validate_markdown_links() -> list[str]:
+    roots = [ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "project", ROOT / "docs"]
+    files: list[Path] = []
+    for root in roots:
+        if root.is_file():
+            files.append(root)
+        elif root.exists():
+            files.extend(sorted(root.rglob("*.md")))
+    errors: list[str] = []
+    for path in files:
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            for match in TASK_LINK_RE.finditer(line):
+                target = match.group(2).strip()
+                if target.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                target_path = target.split("#", 1)[0]
+                if not target_path:
+                    continue
+                resolved = (path.parent / target_path).resolve()
+                if not resolved.exists():
+                    errors.append(
+                        f"{relative(path)}:{lineno}: broken internal Markdown link target '{target_path}'. Fix the relative path."
+                    )
+    return errors
+
+
+def extract_block(path: Path, start: str, end: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    pattern = re.compile(rf"{re.escape(start)}\n(.*?)\n{re.escape(end)}", re.DOTALL)
+    match = pattern.search(text)
+    if not match:
+        raise ProjectError(
+            f"{relative(path)} must contain exactly one generated block {start} ... {end}."
+        )
+    if len(pattern.findall(text)) != 1:
+        raise ProjectError(f"{relative(path)} contains more than one generated block {start}.")
+    return match.group(1)
+
+
+def normalize_block(text: str) -> str:
+    return text.strip().replace("\r\n", "\n")
+
+
+def find_active(tasks: list[Task], state: dict[str, Any]) -> Task | None:
+    active = nonempty(state.get("work", {}).get("active_task"))
+    return task_by_id(tasks).get(active) if active else None
+
+
+def task_link(task: Task, base: Path) -> str:
+    return f"[{task.id}]({relative(task.path, base)})"
+
+
+def approval_text(task: Task | None) -> str:
+    if not task:
+        return "None"
+    return f"{task.approval_level} / {task.approval_status}"
+
+
+def recommended_next_action(
+    state: dict[str, Any], tasks: list[Task], *, invalid: bool = False
+) -> str:
+    if invalid:
+        return "Fix project validation errors, then run: make validate-project."
+    tasks_by = task_by_id(tasks)
+    blocked = sorted((task for task in tasks if task.status == "blocked"), key=task_sort_key)
+    if blocked:
+        task = blocked[0]
+        return f"Unblock {task.id} by {task.unblock_action}."
+    pending_a2 = sorted(
+        (
+            task
+            for task in tasks
+            if task.approval_level == "A2"
+            and task.approval_status != "approved"
+            and task.status == "ready"
+        ),
+        key=task_sort_key,
+    )
+    if pending_a2:
+        return f"Human A2 approval is required for {pending_a2[0].id} before work starts."
+    in_progress = [task for task in tasks if task.status == "in-progress"]
+    if in_progress:
+        return f"Complete {in_progress[0].id}."
+    review_waiting = sorted(
+        (
+            task
+            for task in tasks
+            if task.status == "review"
+            and task.approval_level in {"A1", "A2"}
+            and task.approval_status != "approved"
+        ),
+        key=task_sort_key,
+    )
+    if review_waiting:
+        task = review_waiting[0]
+        return f"Human {task.approval_level} approval is required for {task.id} before completion."
+    ready = sorted(
+        (task for task in tasks if task.status == "ready" and dependencies_done(task, tasks_by)),
+        key=task_sort_key,
+    )
+    if ready:
+        return f"Start {ready[0].id}."
+    gate = state.get("lifecycle", {}).get("next_gate", "current-gate")
+    return f"No ready task exists. Create one task addressing gate {gate}."
+
+
+def dashboard_block(state: dict[str, Any], tasks: list[Task]) -> str:
     project = state["project"]
     lifecycle = state["lifecycle"]
-    work = state["work"]
-    active_link = (
-        f"[{active.id}]({active.path.relative_to(ROOT).as_posix()})"
-        if active
-        else str(work.get("active_task", "none"))
-    )
+    active = find_active(tasks, state)
+    active_value = task_link(active, ROOT) if active else "None"
     return "\n".join(
         [
-            "## Project Status",
-            "",
-            "| Item | Current State |",
+            "| Item | Value |",
             "|---|---|",
-            f"| Type | {project['type']} |",
+            f"| Project type | {project['type']} |",
             f"| Runtime level | {project['runtime_level']} |",
             f"| Phase | {lifecycle['phase']} |",
             f"| Milestone | {lifecycle['milestone']} |",
-            f"| Active task | {work['active_task']} |",
+            f"| Active task | {active_value} |",
+            f"| Approval | {approval_text(active)} |",
             f"| Next gate | {lifecycle['next_gate']} |",
-            "",
-            f"> **Next step:** Complete the active task: {active_link}.",
-            "",
-            "Details: [Project Dashboard](project/index.md).",
+            f"| Recommended next action | {recommended_next_action(state, tasks)} |",
         ]
     )
 
 
-def project_index_block(state: dict[str, Any], active: Task | None) -> str:
+def project_index_block(state: dict[str, Any], tasks: list[Task]) -> str:
     project = state["project"]
     lifecycle = state["lifecycle"]
-    work = state["work"]
-    active_link = (
-        f"[{active.id}]({active.path.relative_to(ROOT / 'project').as_posix()})"
-        if active
-        else str(work.get("active_task", "none"))
-    )
+    active = find_active(tasks, state)
+    blocker = active.blocked_reason if active and active.blocked_reason else "None"
+    active_value = task_link(active, ROOT / "project") if active else "None"
     return "\n".join(
         [
-            "| Item | Current State |",
+            "| Item | Value |",
             "|---|---|",
-            f"| Project | {project['name']} |",
-            f"| Type | {project['type']} |",
-            f"| Runtime level | {project['runtime_level']} |",
+            f"| Project | {project.get('name', project.get('type', 'project'))} |",
             f"| Phase | {lifecycle['phase']} |",
             f"| Milestone | {lifecycle['milestone']} |",
-            f"| Active task | {work['active_task']} |",
             f"| Next gate | {lifecycle['next_gate']} |",
+            f"| Active task | {active_value} |",
+            f"| Approval | {approval_text(active)} |",
+            f"| Blocker | {blocker} |",
+            f"| Recommended next action | {recommended_next_action(state, tasks)} |",
             "",
-            f"Next step: {active_link}.",
+            "Links: [Board](board.md) | [Roadmap](roadmap.md)",
         ]
     )
 
 
 def kanban_block(tasks: list[Task]) -> str:
-    sections = [
-        ("In Progress", "in-progress"),
-        ("Ready", "ready"),
-        ("Backlog", "backlog"),
-        ("Review", "review"),
-        ("Blocked", "blocked"),
-        ("Done", "done"),
-    ]
     lines: list[str] = []
-    for title, status in sections:
+    for title, status in COLUMNS:
         lines.extend([f"## {title}", ""])
-        matching = [task for task in tasks if task.status == status]
+        matching = sorted((task for task in tasks if task.status == status), key=task_sort_key)
         if matching:
             for task in matching:
-                rel = task.path.relative_to(ROOT / "project").as_posix()
-                lines.append(f"- [{task.id}]({rel}) - {task.title}")
+                rel = relative(task.path, ROOT / "project")
+                suffix = (
+                    f" - blocked: {task.blocked_reason}"
+                    if status == "blocked" and task.blocked_reason
+                    else ""
+                )
+                lines.append(f"- [{task.id}]({rel}) - P{task.priority} - {task.title}{suffix}")
         else:
             lines.append("_None_")
         lines.append("")
     return "\n".join(lines).rstrip()
 
 
-def replace_block(path: Path, start: str, end: str, content: str) -> None:
-    text = path.read_text()
-    pattern = re.compile(
-        rf"({re.escape(start)}\n)(.*?)(\n{re.escape(end)})",
-        re.DOTALL,
-    )
+def replace_block_text(text: str, start: str, end: str, content: str, path: Path) -> str:
+    pattern = re.compile(rf"({re.escape(start)}\n)(.*?)(\n{re.escape(end)})", re.DOTALL)
     updated, count = pattern.subn(rf"\1{content}\3", text)
     if count != 1:
-        raise ValueError(f"{path} does not contain exactly one {start} block")
-    path.write_text(updated)
+        raise ProjectError(f"{relative(path)} does not contain exactly one {start} block.")
+    return updated
+
+
+def write_if_changed(path: Path, content: str) -> None:
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return
+    path.write_text(content, encoding="utf-8")
 
 
 def sync() -> None:
-    state = load_state()
+    state = read_state()
     tasks = load_tasks()
-    active = find_task(tasks, state["work"]["active_task"])
-    replace_block(
-        ROOT / "README.md",
-        "<!-- project-dashboard:start -->",
-        "<!-- project-dashboard:end -->",
-        dashboard_block(state, active),
-    )
-    replace_block(
-        ROOT / "project" / "index.md",
-        "<!-- project-index:start -->",
-        "<!-- project-index:end -->",
-        project_index_block(state, active),
-    )
-    replace_block(
-        ROOT / "project" / "board.md",
-        "<!-- kanban:start -->",
-        "<!-- kanban:end -->",
-        kanban_block(tasks),
-    )
+    errors = validate_all(check_drift=False)
+    if errors:
+        print_errors(errors)
+        raise SystemExit(1)
+    replacements = {
+        ROOT / "README.md": (STATE_START, STATE_END, dashboard_block(state, tasks)),
+        ROOT / "project" / "index.md": (
+            INDEX_START,
+            INDEX_END,
+            project_index_block(state, tasks),
+        ),
+        ROOT / "project" / "board.md": (KANBAN_START, KANBAN_END, kanban_block(tasks)),
+    }
+    for path, (start, end, content) in replacements.items():
+        updated = replace_block_text(path.read_text(encoding="utf-8"), start, end, content, path)
+        write_if_changed(path, updated)
+    print("Project docs synchronized.")
+
+
+def print_errors(errors: list[str]) -> None:
+    for error in errors:
+        print(f"ERROR: {error}")
+    print("Recommended fix: apply the specific correction above, then run: make validate-project")
 
 
 def validate() -> None:
-    state = load_state()
-    tasks = load_tasks()
-    errors: list[str] = []
-
-    if state.get("schema_version") != 1:
-        errors.append("project/state.yaml schema_version must be 1")
-    if state["project"]["type"] not in {"script", "library", "backend", "frontend", "fullstack"}:
-        errors.append("project.type is invalid")
-    if state["project"]["runtime_level"] not in {"local", "shared", "production"}:
-        errors.append("project.runtime_level is invalid")
-
-    active_task_id = state["work"]["active_task"]
-    active = find_task(tasks, active_task_id)
-    if active is None:
-        errors.append(f"active task {active_task_id} does not exist")
-
-    active_main = [task for task in tasks if task.status == "in-progress"]
-    if len(active_main) > 1:
-        errors.append("more than one task is in-progress")
-    if active and active.status not in {"ready", "in-progress", "review", "blocked"}:
-        errors.append("active task must be ready, in-progress, review, or blocked")
-
-    allowed_statuses = {"backlog", "ready", "in-progress", "review", "blocked", "done", "cancelled"}
-    for task in tasks:
-        if task.status not in allowed_statuses:
-            errors.append(f"{task.id} has invalid status {task.status}")
-        if task.approval not in {"A0", "A1", "A2"}:
-            errors.append(f"{task.id} has invalid approval {task.approval}")
-
-    if state["lifecycle"]["next_gate"] == "ready-for-development":
-        required_docs = [
-            ROOT / "project" / "brief.md",
-            ROOT / "project" / "requirements.md",
-            ROOT / "docs" / "architecture.md",
-            ROOT / "docs" / "decisions" / "index.md",
-        ]
-        for path in required_docs:
-            if not path.exists():
-                errors.append(f"missing ready-for-development input: {path}")
-
+    errors = validate_all(check_drift=True)
     if errors:
-        for error in errors:
-            print(f"ERROR: {error}")
-        recommended = next((task for task in tasks if task.status == "ready"), None)
-        if recommended:
-            print(f"Recommended next task: {recommended.id} - {recommended.title}")
-        else:
-            print("Recommended next task: refine T-001 until the ready gate inputs are complete.")
+        print_errors(errors)
         raise SystemExit(1)
-
     print("Project state is valid.")
 
 
 def status() -> None:
-    state = load_state()
-    active = find_task(load_tasks(), state["work"]["active_task"])
-    print(dashboard_block(state, active))
+    state = read_state()
+    tasks = load_tasks()
+    errors = validate_all(check_drift=False)
+    print(dashboard_block(state, tasks))
+    print()
+    print(f"Next action: {recommended_next_action(state, tasks, invalid=bool(errors))}")
+    if errors:
+        print()
+        print_errors(errors)
+
+
+def task_path(task_id: str) -> Path:
+    matches = sorted(TASKS_DIR.glob(f"{task_id}-*.md"))
+    if not matches:
+        raise ProjectError(
+            f"Task {task_id} does not exist. Create project/tasks/{task_id}-...md first."
+        )
+    if len(matches) > 1:
+        raise ProjectError(f"Task {task_id} has multiple files. Keep one task file per id.")
+    return matches[0]
+
+
+def update_task_frontmatter(task_id: str, updates: dict[str, Any]) -> None:
+    path = task_path(task_id)
+    data, body = split_frontmatter(path)
+    if "approval" in data:
+        data.pop("approval")
+    data.update(updates)
+    text = "---\n" + dump_simple_yaml(data).strip() + "\n---\n" + body
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
+
+
+def write_state(state: dict[str, Any]) -> None:
+    tmp = STATE_PATH.with_suffix(".yaml.tmp")
+    tmp.write_text(dump_simple_yaml(state), encoding="utf-8")
+    tmp.replace(STATE_PATH)
+
+
+def controlled_transition(
+    task_id: str,
+    new_status: str,
+    *,
+    reason: str | None = None,
+    unblock: str | None = None,
+) -> None:
+    state = read_state()
+    tasks = load_tasks()
+    tasks_by = task_by_id(tasks)
+    task = tasks_by.get(task_id)
+    if task is None:
+        raise ProjectError(f"Task {task_id} does not exist. Create it before transitioning.")
+    if new_status not in TASK_STATUSES:
+        raise ProjectError(f"Invalid target status {new_status}. Use a supported task status.")
+    if new_status not in TRANSITIONS.get(task.status, set()) and not (
+        task.approval_level == "A0" and task.status == "in-progress" and new_status == "done"
+    ):
+        raise ProjectError(
+            f"Invalid transition: {task.status} -> {new_status}. Task must pass through the allowed lifecycle."
+        )
+    candidate = dict(status=new_status)
+    if new_status == "blocked":
+        if not reason or not unblock:
+            raise ProjectError(
+                'Blocking requires REASON and UNBLOCK. Run: make task-block TASK=... REASON="..." UNBLOCK="..."'
+            )
+        candidate.update(blocked_reason=reason, unblock_action=unblock)
+    else:
+        candidate.update(blocked_reason=None, unblock_action=None)
+    if new_status == "in-progress":
+        if task.approval_level == "A2" and task.approval_status != "approved":
+            raise ProjectError(f"Human A2 approval is required for {task.id} before work starts.")
+        if any(other.status == "in-progress" and other.id != task.id for other in tasks):
+            raise ProjectError(
+                "Another task is already in-progress. Move it to review, blocked, done, or cancelled first."
+            )
+        missing = definition_of_ready(task)
+        if missing:
+            raise ProjectError(f"{task.id} is not ready: {', '.join(missing)}.")
+        if not dependencies_done(task, tasks_by):
+            raise ProjectError(f"{task.id} cannot start until all dependencies are done.")
+        state["work"]["active_task"] = task.id
+    if new_status == "ready":
+        missing = definition_of_ready(task)
+        if missing:
+            raise ProjectError(f"{task.id} is not ready: {', '.join(missing)}.")
+        if not dependencies_done(task, tasks_by):
+            raise ProjectError(f"{task.id} cannot become ready until dependencies are done.")
+    if new_status == "done":
+        if task.approval_level in {"A1", "A2"} and task.approval_status != "approved":
+            raise ProjectError(
+                f"Human {task.approval_level} approval is required for {task.id} before done."
+            )
+        missing = definition_of_done(task)
+        if missing:
+            raise ProjectError(f"{task.id} cannot be done: {', '.join(missing)}.")
+    if task.status == "in-progress" and new_status != "in-progress":
+        state["work"]["active_task"] = None
+    if new_status == "blocked":
+        state["work"]["active_task"] = None
+    update_task_frontmatter(task_id, candidate)
+    refreshed = load_tasks()
+    state["work"]["blocked"] = any(item.status == "blocked" for item in refreshed)
+    if not any(item.status == "in-progress" for item in refreshed):
+        state["work"]["active_task"] = None
+    write_state(state)
+    sync()
+    print(f"Task {task_id} moved to {new_status}.")
+
+
+def approve(task_id: str, approved_by: str) -> None:
+    if not approved_by.strip():
+        raise ProjectError("APPROVED_BY is required and must be a human identity.")
+    task = task_by_id(load_tasks()).get(task_id)
+    if task is None:
+        raise ProjectError(f"Task {task_id} does not exist.")
+    if task.approval_level == "A0":
+        raise ProjectError(f"{task_id} is A0 and does not require approval.")
+    update_task_frontmatter(
+        task_id,
+        {
+            "approval_status": "approved",
+            "approved_by": approved_by.strip(),
+            "approved_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        },
+    )
+    sync()
+    print(f"Task {task_id} approved by {approved_by.strip()}.")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["status", "sync", "validate"])
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("status")
+    sub.add_parser("sync")
+    sub.add_parser("validate")
+    for name in ["ready", "start", "review", "complete"]:
+        command = sub.add_parser(name)
+        command.add_argument("task")
+    block = sub.add_parser("block")
+    block.add_argument("task")
+    block.add_argument("--reason", required=True)
+    block.add_argument("--unblock", required=True)
+    approve_cmd = sub.add_parser("approve")
+    approve_cmd.add_argument("task")
+    approve_cmd.add_argument("--approved-by", required=True)
     args = parser.parse_args()
-
-    if args.command == "status":
-        status()
-    elif args.command == "sync":
-        sync()
-    elif args.command == "validate":
-        validate()
+    try:
+        if args.command == "status":
+            status()
+        elif args.command == "sync":
+            sync()
+        elif args.command == "validate":
+            validate()
+        elif args.command == "ready":
+            controlled_transition(args.task, "ready")
+        elif args.command == "start":
+            controlled_transition(args.task, "in-progress")
+        elif args.command == "review":
+            controlled_transition(args.task, "review")
+        elif args.command == "complete":
+            controlled_transition(args.task, "done")
+        elif args.command == "block":
+            controlled_transition(args.task, "blocked", reason=args.reason, unblock=args.unblock)
+        elif args.command == "approve":
+            approve(args.task, args.approved_by)
+    except ProjectError as exc:
+        print(f"ERROR: {exc}")
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

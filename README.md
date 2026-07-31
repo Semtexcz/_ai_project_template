@@ -4,12 +4,18 @@ Opinionated Copier template for Python, FastAPI, Vue, Nuxt, TypeScript, Docker, 
 
 ## Status
 
-| Item | Current State |
+<!-- project-status:start -->
+| Item | Value |
 |---|---|
-| Template version | 0.1.0 |
-| Supported project types | script, library, backend, frontend, fullstack |
-| Supported runtime levels | local, shared, production |
-| Current focus | copier-update golden path |
+| Project type | template |
+| Runtime level | local |
+| Phase | delivery |
+| Milestone | M-07 |
+| Active task | None |
+| Approval | None |
+| Next gate | production-runtime-golden-path |
+| Recommended next action | Human A1 approval is required for T-007 before completion. |
+<!-- project-status:end -->
 
 ## Use
 
@@ -65,6 +71,9 @@ uv run pytest
 Targeted maintainer checks:
 
 ```bash
+make project-status
+make sync-project-docs
+make validate-project
 make test-template
 make test-copier-update
 ```

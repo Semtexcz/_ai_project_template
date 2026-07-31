@@ -133,6 +133,23 @@ jobs:
       - name: Run fullstack-local golden path
         run: uv run pytest tests/test_fullstack_local_golden_path.py
 
+  project-state-validation-golden-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Run project state validation workflow
+        run: uv run pytest tests/test_project_state_validation_golden_path.py
+      - name: Verify maintainer project state
+        run: |
+          make sync-project-docs
+          make validate-project
+          git diff --exit-code -- README.md project/index.md project/board.md
+
   copier-update-golden-path:
     runs-on: ubuntu-latest
     steps:

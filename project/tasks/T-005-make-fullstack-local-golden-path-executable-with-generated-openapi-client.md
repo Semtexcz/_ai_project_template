@@ -2,9 +2,15 @@
 id: T-005
 title: Make fullstack-local golden path executable with generated OpenAPI client
 status: done
-priority: high
-approval: A1
+priority: 1
+milestone: M-01
 depends_on: [T-001, T-002, T-003, T-004]
+approval_level: A1
+approval_status: approved
+approved_by: Project owner
+approved_at: 2026-07-31T10:00:00+02:00
+blocked_reason:
+unblock_action:
 ---
 
 # T-005: Make Fullstack-Local Golden Path Executable With Generated OpenAPI Client

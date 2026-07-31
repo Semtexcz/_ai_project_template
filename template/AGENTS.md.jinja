@@ -6,7 +6,13 @@ This repository follows an opinionated Python/Nuxt golden path. Keep changes sma
 
 ## Required Start
 
-Always load:
+Run or read project status first:
+
+```bash
+make project-status
+```
+
+Then load:
 
 - `AGENTS.md`
 - `project/state.yaml`
@@ -37,6 +43,11 @@ make check
 make project-status
 make sync-project-docs
 make validate-project
+make task-ready TASK=T-001
+make task-start TASK=T-001
+make task-review TASK=T-001
+make task-complete TASK=T-001
+make task-block TASK=T-001 REASON="..." UNBLOCK="..."
 ```
 
 ## Approval Boundaries
@@ -44,7 +55,8 @@ make validate-project
 - A0: small fixes, tests, documentation, local refactors, next-task proposals.
 - A1: public behavior changes, new endpoints, new modules, non-destructive schema changes.
 - A2: scope changes, production deployment, destructive data changes, auth changes, new infrastructure services, paid external services, project retirement.
+- `make task-approve` is for humans only. AI agents must not autonomously record A1 or A2 approval.
 
 ## Workflow
 
-Use `docs/workflow.md` for the daily change loop and `.agents/skills/` for task-specific procedures.
+Use `docs/workflow.md` for the daily change loop and `.agents/skills/` for task-specific procedures. Do not bypass controlled task transitions by silently editing task status. After task or project state changes, run `make sync-project-docs` when dashboards need refresh and then `make validate-project`.

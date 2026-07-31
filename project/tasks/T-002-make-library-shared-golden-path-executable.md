@@ -5,7 +5,12 @@ status: done
 priority: 1
 milestone: M-01
 depends_on: [T-001]
-approval: A0
+approval_level: A0
+approval_status: not-required
+approved_by:
+approved_at:
+blocked_reason:
+unblock_action:
 ---
 
 # T-002: Make Library-Shared Golden Path Executable

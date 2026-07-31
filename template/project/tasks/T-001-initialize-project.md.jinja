@@ -5,26 +5,60 @@ status: in-progress
 priority: 1
 milestone: M-01
 depends_on: []
-approval: A0
+approval_level: A0
+approval_status: not-required
+approved_by:
+approved_at:
+blocked_reason:
+unblock_action:
 ---
 
 # T-001: Initialize Project Knowledge
 
 ## Goal
 
-Replace template placeholders with the first concrete project brief, scope, non-goals, success criteria, and next ready task.
+Replace template placeholders with the first concrete project brief, scope,
+non-goals, success criteria, and next ready task.
+
+## Context
+
+The generated project starts in definition. The owner must replace placeholders
+with concrete project knowledge before product implementation starts.
+
+## Scope
+
+- Update project brief, requirements, roadmap, and generated status dashboards.
+- Keep the first task small and focused on project knowledge.
+
+## Out of Scope
+
+- Product implementation.
+- Production runtime.
+- External services or infrastructure.
 
 ## Acceptance Criteria
 
-- `project/brief.md` names the problem, target user, desired outcome, scope, non-goals, assumptions, risks, and success criteria.
-- `project/roadmap.md` has at least the active milestone updated for this project.
-- `project/requirements.md` contains only concrete and verifiable requirements for the current scope.
-- `make sync-project-docs` and `make validate-project` pass.
+- [ ] `project/brief.md` names the problem, target user, desired outcome, scope, non-goals, assumptions, risks, and success criteria.
+- [ ] `project/roadmap.md` has at least the active milestone updated for this project.
+- [ ] `project/requirements.md` contains only concrete and verifiable requirements for the current scope.
+- [ ] `make sync-project-docs` and `make validate-project` pass.
 
-## Definition of Ready
+## Verification
 
-- This task is active in `project/state.yaml`.
-- Approval level is A0.
+Run:
+
+```bash
+make sync-project-docs
+make validate-project
+```
+
+## Documentation Impact
+
+Project knowledge documents and generated dashboards will be updated.
+
+## Completion Notes
+
+Pending.
 
 ## Notes
 

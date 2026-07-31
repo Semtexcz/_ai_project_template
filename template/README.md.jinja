@@ -2,22 +2,18 @@
 
 One or two sentences about the problem, user, and value. Replace this after the project brief is approved.
 
-<!-- project-dashboard:start -->
-## Project Status
-
-| Item | Current State |
+<!-- project-status:start -->
+| Item | Value |
 |---|---|
-| Type | {{ project_type }} |
+| Project type | {{ project_type }} |
 | Runtime level | {{ runtime_level }} |
-| Phase | Definition |
+| Phase | definition |
 | Milestone | M-01 |
-| Active task | T-001 |
+| Active task | [T-001](project/tasks/T-001-initialize-project.md) |
+| Approval | A0 / not-required |
 | Next gate | ready-for-development |
-
-> **Next step:** [Complete the active task](project/tasks/T-001-initialize-project.md).
-
-Details: [Project Dashboard](project/index.md).
-<!-- project-dashboard:end -->
+| Recommended next action | Complete T-001. |
+<!-- project-status:end -->
 
 ## Quick Start
 
@@ -31,6 +27,9 @@ make dev
 ```bash
 make check
 make build
+make project-status
+make sync-project-docs
+make validate-project
 ```
 
 {% if project_type == "frontend" %}

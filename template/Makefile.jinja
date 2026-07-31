@@ -1,4 +1,4 @@
-.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e check build docs project-status sync-project-docs validate-project down
+.PHONY: setup dev run test format-check lint typecheck api-schema api-generate api-check e2e check build docs project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-approve down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -151,6 +151,24 @@ sync-project-docs:
 
 validate-project:
 	python tools/project.py validate
+
+task-ready:
+	python tools/project.py ready $(TASK)
+
+task-start:
+	python tools/project.py start $(TASK)
+
+task-review:
+	python tools/project.py review $(TASK)
+
+task-complete:
+	python tools/project.py complete $(TASK)
+
+task-block:
+	python tools/project.py block $(TASK) --reason "$(REASON)" --unblock "$(UNBLOCK)"
+
+task-approve:
+	python tools/project.py approve $(TASK) --approved-by "$(APPROVED_BY)"
 
 down:
 {% if project_type == "fullstack" %}
