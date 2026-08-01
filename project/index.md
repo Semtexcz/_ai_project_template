@@ -10,7 +10,7 @@
 | Active task | None |
 | Approval | None |
 | Blocker | None |
-| Recommended next action | Human A1 approval is required for T-017 before completion. |
+| Recommended next action | Start T-019. |
 
 Links: [Board](board.md) | [Roadmap](roadmap.md)
 <!-- project-index:end -->

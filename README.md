@@ -26,11 +26,11 @@ Use this repository when you want a project scaffold that already knows how to:
 | Last completed task | [T-015](project/tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | A1 approval pending: T-017 |
+| Waiting | None |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Human A1 approval is required for T-017 before completion. |
-| Next action command | `make task-approve TASK=T-017 APPROVED_BY="<human>"` |
+| Recommended next action | Start T-019. |
+| Next action command | `make task-start TASK=T-019` |
 <!-- project-status:end -->
 
 ## Quick Start
