@@ -26,11 +26,11 @@ Use this repository when you want a project scaffold that already knows how to:
 | Last completed task | [T-014](project/tasks/T-014-run-targeted-remediation-audit.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | A1 approval pending: T-015 |
+| Waiting | None |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Human A1 approval is required for T-015 before completion. |
-| Next action command | `make task-approve TASK=T-015 APPROVED_BY="<human>"` |
+| Recommended next action | No ready task exists. Create one task addressing gate release-candidate-remediation. |
+| Next action command | `make task-ready TASK=<new-task-id>` |
 <!-- project-status:end -->
 
 ## Quick Start

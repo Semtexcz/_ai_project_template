@@ -13,15 +13,15 @@ depends_on: [T-014]
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
 blocked_reason: null
 
 unblock_action: null
 
-approved_by: null
+approved_by: <human>
 
-approved_at: null
+approved_at: 2026-08-01T10:17:58+02:00
 ---
 
 # T-015: Make Template and Generated-Project Documentation Self-Explanatory
