@@ -76,6 +76,8 @@ BUILD_ARTIFACT_PATTERNS = [
     "*.pyc",
     "**/*.pyc",
 ]
+ALLOWED_REASONING_EFFORTS = {"low", "medium", "high"}
+CHEAP_MODELS = {"gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"}
 
 
 class AgentError(Exception):
@@ -290,6 +292,7 @@ def validate_agent_skills() -> list[str]:
             errors.append(f"{rel(path)} must not instruct agents to write approval metadata.")
         if "project/board.md" in lowered and "direct" in lowered and "edit" in lowered:
             errors.append(f"{rel(path)} must not recommend direct generated dashboard edits.")
+        errors.extend(validate_skill_bundle(path.parent, name))
     duplicates = sorted({name for name in names if names.count(name) > 1})
     for name in duplicates:
         errors.append(f"Duplicate skill name {name}. Keep skill names unique.")
@@ -323,6 +326,113 @@ def validate_context_map() -> list[str]:
         errors.append(".agents/context-map.yaml task must be a mapping.")
     if not isinstance(data.get("exclude"), list):
         errors.append(".agents/context-map.yaml exclude must be a list.")
+    return errors
+
+
+def validate_openai_metadata(path: Path, skill_name: str) -> list[str]:
+    errors: list[str] = []
+    try:
+        data = read_yaml(path)
+    except AgentError as exc:
+        return [str(exc)]
+    interface = data.get("interface")
+    if not isinstance(interface, dict):
+        return [f"{rel(path)} interface must be a mapping."]
+    for key in ["display_name", "short_description", "default_prompt"]:
+        value = interface.get(key)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{rel(path)} interface.{key} must be a non-empty string.")
+    short_description = interface.get("short_description")
+    if isinstance(short_description, str) and not 25 <= len(short_description) <= 64:
+        errors.append(f"{rel(path)} interface.short_description must be 25-64 characters.")
+    default_prompt = interface.get("default_prompt")
+    if isinstance(default_prompt, str) and f"${skill_name}" not in default_prompt:
+        errors.append(f"{rel(path)} interface.default_prompt must mention ${skill_name}.")
+    policy = data.get("policy")
+    if policy is not None:
+        if not isinstance(policy, dict):
+            errors.append(f"{rel(path)} policy must be a mapping when present.")
+        elif "allow_implicit_invocation" in policy and not isinstance(
+            policy["allow_implicit_invocation"], bool
+        ):
+            errors.append(f"{rel(path)} policy.allow_implicit_invocation must be boolean.")
+    return errors
+
+
+def validate_model_metadata(path: Path, skill_name: str) -> list[str]:
+    errors: list[str] = []
+    try:
+        data = read_yaml(path)
+    except AgentError as exc:
+        return [str(exc)]
+    model = data.get("model")
+    if not isinstance(model, str) or not model.strip():
+        errors.append(f"{rel(path)} model must be a non-empty string.")
+    elif skill_name == "conventional-commit" and model not in CHEAP_MODELS:
+        cheap_models = ", ".join(sorted(CHEAP_MODELS))
+        errors.append(f"{rel(path)} must use a cheap model: {cheap_models}.")
+    reasoning_effort = data.get("reasoning_effort")
+    if reasoning_effort is not None and reasoning_effort not in ALLOWED_REASONING_EFFORTS:
+        efforts = ", ".join(sorted(ALLOWED_REASONING_EFFORTS))
+        errors.append(f"{rel(path)} reasoning_effort must be one of: {efforts}.")
+    validator = data.get("deterministic_validator")
+    if validator is None:
+        errors.append(f"{rel(path)} deterministic_validator must be declared.")
+    elif not isinstance(validator, str) or not validator.strip():
+        errors.append(f"{rel(path)} deterministic_validator must be a non-empty string.")
+    else:
+        validator_path = path.parent.parent / validator
+        if not validator_path.exists():
+            errors.append(f"{rel(path)} references missing deterministic validator {validator}.")
+    return errors
+
+
+def validate_conventional_commit_validator(script_path: Path) -> list[str]:
+    errors: list[str] = []
+    valid = subprocess.run(
+        [sys.executable, str(script_path), "--message", "feat(agent): add validator"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if valid.returncode != 0:
+        output = f"{valid.stdout}{valid.stderr}".strip()
+        errors.append(
+            f"{rel(script_path)} must accept a valid conventional commit message. {output}"
+        )
+    invalid = subprocess.run(
+        [sys.executable, str(script_path), "--message", "bad message"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if invalid.returncode == 0:
+        errors.append(f"{rel(script_path)} must reject an invalid conventional commit message.")
+    return errors
+
+
+def validate_skill_bundle(skill_dir: Path, skill_name: str) -> list[str]:
+    errors: list[str] = []
+    agents_dir = skill_dir / "agents"
+    scripts_dir = skill_dir / "scripts"
+    openai_path = agents_dir / "openai.yaml"
+    model_path = agents_dir / "model.yaml"
+    if openai_path.exists():
+        errors.extend(validate_openai_metadata(openai_path, skill_name))
+    if model_path.exists():
+        errors.extend(validate_model_metadata(model_path, skill_name))
+    if skill_name == "conventional-commit":
+        if not openai_path.exists():
+            errors.append(f"Missing required skill metadata {rel(openai_path)}.")
+        if not model_path.exists():
+            errors.append(f"Missing required skill metadata {rel(model_path)}.")
+        script_path = scripts_dir / "validate_commit_message.py"
+        if not script_path.exists():
+            errors.append(f"Missing required deterministic validator {rel(script_path)}.")
+        else:
+            errors.extend(validate_conventional_commit_validator(script_path))
     return errors
 
 
