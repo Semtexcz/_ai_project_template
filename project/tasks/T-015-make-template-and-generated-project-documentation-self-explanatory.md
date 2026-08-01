@@ -3,7 +3,7 @@ id: T-015
 
 title: Make template and generated-project documentation self-explanatory
 
-status: review
+status: done
 
 priority: 1
 

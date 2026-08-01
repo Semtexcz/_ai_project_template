@@ -15,7 +15,7 @@ _None_
 
 ## Review
 
-- [T-015](tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) - P1 - Make template and generated-project documentation self-explanatory
+_None_
 
 ## Blocked
 
@@ -37,6 +37,7 @@ _None_
 - [T-012](tasks/T-012-remediate-rc-002-and-rc-005-production-runtime-readiness.md) - P1 - Remediate RC-002 and RC-005 production runtime readiness
 - [T-013](tasks/T-013-remediate-rc-003-rc-004-and-rc-006-release-hygiene-and-gate.md) - P1 - Remediate RC-003 RC-004 and RC-006 release hygiene and gate
 - [T-014](tasks/T-014-run-targeted-remediation-audit.md) - P1 - Run targeted remediation audit
+- [T-015](tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) - P1 - Make template and generated-project documentation self-explanatory
 
 ## Cancelled
 

@@ -23,7 +23,7 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Last completed task | [T-014](project/tasks/T-014-run-targeted-remediation-audit.md) |
+| Last completed task | [T-015](project/tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) |
 | Active task | None |
 | Approval | None |
 | Waiting | None |
