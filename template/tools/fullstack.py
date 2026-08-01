@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import os
 import json
+import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 
@@ -22,15 +24,26 @@ EXPECTED_CSP_TOKENS = [
     "object-src 'none'",
     "base-uri 'self'",
 ]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def env_value(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
-def start_process(command: Sequence[str], env: dict[str, str]) -> subprocess.Popen[str]:
+def pnpm_command() -> list[str]:
+    return shlex.split(os.environ.get("PNPM", "corepack pnpm"))
+
+
+def start_process(
+    command: Sequence[str],
+    env: dict[str, str],
+    *,
+    cwd: Path | None = None,
+) -> subprocess.Popen[str]:
     return subprocess.Popen(
         list(command),
+        cwd=cwd,
         env=env,
         text=True,
         stdout=sys.stdout,
@@ -285,7 +298,9 @@ def run_fullstack(mode: str) -> None:
     frontend_port = env_value("FRONTEND_PORT", "3000")
     api_base_url = env_value("NUXT_PUBLIC_API_BASE_URL", f"http://{backend_host}:{backend_port}")
 
-    base_env = os.environ.copy()
+    corepack_home = Path(os.environ.get("COREPACK_HOME", ROOT / ".corepack"))
+    corepack_home.mkdir(parents=True, exist_ok=True)
+    base_env = {**os.environ, "COREPACK_HOME": str(corepack_home)}
     backend_env = {
         **base_env,
         "HOST": backend_host,
@@ -315,7 +330,15 @@ def run_fullstack(mode: str) -> None:
             backend_port,
             "--reload",
         ]
-        frontend_command = ["pnpm", "--dir", "frontend", "dev", "--host", frontend_host, "--port", frontend_port]
+        frontend_command = [
+            *pnpm_command(),
+            "dev",
+            "--host",
+            frontend_host,
+            "--port",
+            frontend_port,
+        ]
+        frontend_cwd = ROOT / "frontend"
     elif mode == "run":
         backend_command = [
             "uv",
@@ -332,10 +355,14 @@ def run_fullstack(mode: str) -> None:
             backend_port,
         ]
         frontend_command = ["node", "frontend/.output/server/index.mjs"]
+        frontend_cwd = None
     else:
         raise ValueError(f"Unsupported mode: {mode}")
 
-    processes = [start_process(backend_command, backend_env), start_process(frontend_command, frontend_env)]
+    processes = [
+        start_process(backend_command, backend_env),
+        start_process(frontend_command, frontend_env, cwd=frontend_cwd),
+    ]
 
     def handle_shutdown(_signum: int, _frame: object) -> None:
         raise KeyboardInterrupt

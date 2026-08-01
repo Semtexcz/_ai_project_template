@@ -210,7 +210,7 @@ def assert_built_runtime(generated: Path, env: Mapping[str, str]) -> None:
         openapi = get_json(backend_url, "/openapi.json")
         assert openapi["paths"]["/api/system/info"]["get"]["operationId"] == "getSystemInfo"
 
-        run_command(["pnpm", "--dir", "frontend", "e2e"], generated, e2e_env, timeout=180)
+        run_command(["make", "e2e"], generated, e2e_env, timeout=180)
     except Exception:
         stdout, stderr = stop_process(process)
         raise AssertionError(
@@ -240,13 +240,7 @@ def assert_runtime_integration_failure(generated: Path, env: Mapping[str, str]) 
 
     try:
         wait_for_frontend(frontend_url, process)
-        run_command(
-            ["pnpm", "--dir", "frontend", "e2e"],
-            generated,
-            e2e_env,
-            timeout=180,
-            expect_success=False,
-        )
+        run_command(["make", "e2e"], generated, e2e_env, timeout=180, expect_success=False)
     finally:
         stop_process(process)
 

@@ -15,7 +15,7 @@ _None_
 
 ## Review
 
-_None_
+- [T-016](tasks/T-016-remediate-static-ci-pnpm-bootstrap.md) - P1 - Remediate static CI pnpm bootstrap
 
 ## Blocked
 

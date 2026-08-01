@@ -314,12 +314,7 @@ def assert_fullstack_runtime(project: Path, env: Mapping[str, str]) -> None:
                 status, _, body = get_text(backend_url, "/api/system/info")
                 front_status, front_type, _ = get_text(frontend_url, "/")
                 if status == 200 and "Update Golden Path" in body and front_status == 200 and "text/html" in front_type:
-                    run_command(
-                        ["pnpm", "--dir", "frontend", "e2e"],
-                        project,
-                        {**env, "E2E_BASE_URL": frontend_url},
-                        timeout=180,
-                    )
+                    run_command(["make", "e2e"], project, {**env, "E2E_BASE_URL": frontend_url}, timeout=180)
                     return
             except (ConnectionError, TimeoutError, urllib.error.URLError):
                 time.sleep(0.25)

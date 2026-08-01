@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import filecmp
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -14,14 +15,22 @@ GENERATED = FRONTEND / "shared" / "api" / "generated"
 HEADER = "/* DO NOT EDIT — generated from backend OpenAPI */\n"
 
 
+def pnpm_command() -> list[str]:
+    return shlex.split(os.environ.get("PNPM", "corepack pnpm"))
+
+
 def run_codegen(output_dir: Path) -> None:
     output_dir.parent.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "OPENAPI_CLIENT_OUTPUT": str(output_dir)}
+    corepack_home = Path(os.environ.get("COREPACK_HOME", ROOT / ".corepack"))
+    corepack_home.mkdir(parents=True, exist_ok=True)
+    env = {
+        **os.environ,
+        "COREPACK_HOME": str(corepack_home),
+        "OPENAPI_CLIENT_OUTPUT": str(output_dir),
+    }
     subprocess.run(
         [
-            "pnpm",
-            "--dir",
-            str(FRONTEND),
+            *pnpm_command(),
             "exec",
             "openapi-ts",
             "-i",
@@ -29,7 +38,7 @@ def run_codegen(output_dir: Path) -> None:
             "-o",
             str(output_dir),
         ],
-        cwd=ROOT,
+        cwd=FRONTEND,
         env=env,
         check=True,
     )

@@ -156,6 +156,23 @@ def test_documentation_validation_targets_are_declared() -> None:
     assert "validate_docs" in project_tool
 
 
+def test_generated_frontend_commands_bootstrap_pnpm_with_corepack() -> None:
+    generated_makefile = (ROOT / "template" / "Makefile.jinja").read_text()
+    api_client = (ROOT / "template" / "tools" / "api_client.py").read_text()
+    fullstack = (ROOT / "template" / "tools" / "fullstack.py").read_text()
+    template_gitignore = (ROOT / "template" / ".gitignore.jinja").read_text()
+
+    assert "COREPACK_HOME ?= $(abspath .corepack)" in generated_makefile
+    assert "PNPM ?= corepack pnpm" in generated_makefile
+    assert "FRONTEND_PNPM =" in generated_makefile
+    assert ".corepack/" in template_gitignore
+
+    generated_entrypoints = "\n".join([generated_makefile, api_client, fullstack])
+    assert "pnpm --dir" not in generated_entrypoints
+    assert '"pnpm"' not in generated_entrypoints
+    assert '"corepack pnpm"' in generated_entrypoints
+
+
 def test_rendered_projects_do_not_include_cache_artifacts(tmp_path: Path) -> None:
     profiles = [
         ("script", "local"),
