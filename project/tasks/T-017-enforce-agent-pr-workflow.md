@@ -67,8 +67,8 @@ changes to `main` reduce reviewability and weaken the project workflow.
 - `UV_CACHE_DIR=/tmp/t017-uv-cache uv run pytest tests/test_template_static.py::test_agent_changes_require_ready_pull_request_workflow`
   passed.
 - `UV_CACHE_DIR=/tmp/t017-uv-cache make check` passed: 15 tests.
-- `UV_CACHE_DIR=/tmp/t017-uv-cache UV_LINK_MODE=copy uv run pytest tests/test_fullstack_local_golden_path.py tests/test_fullstack_production_golden_path.py`
-  passed: 3 tests.
+- `UV_CACHE_DIR=/tmp/t017-uv-cache UV_LINK_MODE=copy uv run pytest tests/test_frontend_shared_golden_path.py tests/test_fullstack_local_golden_path.py tests/test_fullstack_production_golden_path.py`
+  passed: 4 tests.
 - `make validate-project` passed.
 
 ## Documentation Impact
@@ -81,5 +81,6 @@ unless GitHub branch protection or rulesets mark it as a required check.
 Agent instructions now require non-`main` branches, commits, pushes to `origin`,
 and ready GitHub PRs. Root and generated CI now include a `require-pr-for-main`
 job that checks GitHub's commit-associated PR API for pushes to `main` and fails
-when no PR is associated with the pushed commit. The frontend lockfile is also
-refreshed for the fullstack dependencies exercised by release-check.
+when no PR is associated with the pushed commit. Frontend and fullstack profiles
+now render profile-specific pnpm lockfiles so frozen installs match each
+profile's package manifest.
