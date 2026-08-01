@@ -59,4 +59,12 @@ make task-cancel TASK=T-001
 
 ## Workflow
 
-General rules are in `.agents/`. Codex adapter notes are in `.codex/`. Project-specific context is in `project/` and `docs/`. Run `make agent-pre-review TASK=<id>` before review, do not bypass controlled task transitions, and keep dashboards synchronized and valid.
+Before editing files, agents must be on a non-`main` branch. If the current
+branch is `main`, create a dedicated branch for the task first.
+
+General rules are in `.agents/`. Codex adapter notes are in `.codex/`.
+Project-specific context is in `project/` and `docs/`. Run
+`make agent-pre-review TASK=<id>` before review, do not bypass controlled task
+transitions, and keep dashboards synchronized and valid. For every agent-made
+change, commit the agent's own changes, push the branch to `origin`, and open a
+ready GitHub pull request. Do not push directly to `main`.

@@ -173,6 +173,34 @@ def test_generated_frontend_commands_bootstrap_pnpm_with_corepack() -> None:
     assert '"corepack pnpm"' in generated_entrypoints
 
 
+def test_agent_changes_require_ready_pull_request_workflow() -> None:
+    root_agents = (ROOT / "AGENTS.md").read_text()
+    generated_agents = (ROOT / "template" / "AGENTS.md.jinja").read_text()
+    required_instruction_parts = [
+        "non-`main` branch",
+        "commit the agent's own changes",
+        "push the branch",
+        "`origin`",
+        "ready GitHub pull request",
+        "Do not push directly to",
+    ]
+    for content in [root_agents, generated_agents]:
+        for part in required_instruction_parts:
+            assert part in content
+
+    root_ci = (ROOT / ".github" / "workflows" / "template-ci.yml").read_text()
+    generated_ci = (ROOT / "template" / ".github" / "workflows" / "ci.yml.jinja").read_text()
+    for content in [root_ci, generated_ci]:
+        assert "require-pr-for-main:" in content
+        assert "pull-requests: read" in content
+        assert "/commits/${SHA}/pulls" in content
+        assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in content
+        assert "Pushes to main must come from a GitHub pull request" in content
+
+    assert "${{ github.token }}" in root_ci
+    assert "${{ '{{' }} github.token {{ '}}' }}" in generated_ci
+
+
 def test_rendered_projects_do_not_include_cache_artifacts(tmp_path: Path) -> None:
     profiles = [
         ("script", "local"),

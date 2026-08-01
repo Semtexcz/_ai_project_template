@@ -11,6 +11,8 @@ _exclude:
   - "{% if project_type != 'fullstack' %}/frontend/e2e/**{% endif %}"
   - "{% if project_type != 'fullstack' %}/frontend/openapi-ts.config.ts{% endif %}"
   - "{% if project_type != 'fullstack' %}/frontend/playwright.config.ts{% endif %}"
+  - /frontend/pnpm-lock.frontend.yaml
+  - /frontend/pnpm-lock.fullstack.yaml
   - "{% if project_type != 'fullstack' %}/frontend/shared{% endif %}"
   - "{% if project_type != 'fullstack' %}/frontend/shared/**{% endif %}"
   - "{% if project_type != 'fullstack' %}/frontend/features/system-info{% endif %}"

@@ -16,6 +16,10 @@ make task-start TASK=<id>
 
 Only one task may be `in-progress`. A1 and A2 approvals must be granted by a
 human; agents can move implemented A1 work to review but must not approve it.
+Agents must work on a non-`main` branch, commit their own changes, push that
+branch to `origin`, and open a ready GitHub pull request. The CI guard for
+pushes to `main` is a signal; actual push blocking requires GitHub branch
+protection or a ruleset that marks the guard as a required check.
 
 ## Choose The Ownership Boundary
 

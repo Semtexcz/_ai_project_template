@@ -16,6 +16,7 @@ _None_
 ## Review
 
 - [T-016](tasks/T-016-remediate-static-ci-pnpm-bootstrap.md) - P1 - Remediate static CI pnpm bootstrap
+- [T-017](tasks/T-017-enforce-agent-pr-workflow.md) - P1 - Enforce agent PR workflow
 
 ## Blocked
 

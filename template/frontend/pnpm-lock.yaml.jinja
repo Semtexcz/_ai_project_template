@@ -1,0 +1,5 @@
+{% if project_type == "fullstack" %}
+{% include "template/frontend/pnpm-lock.fullstack.yaml" %}
+{% else %}
+{% include "template/frontend/pnpm-lock.frontend.yaml" %}
+{% endif %}
