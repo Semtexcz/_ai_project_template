@@ -37,6 +37,11 @@ def test_generated_project_has_single_state_source_and_dashboard_tools() -> None
         "template/project/board.md.jinja",
         "template/AGENTS.md.jinja",
         "template/.agents/context-map.yaml",
+        "template/.agents/skills/conventional-commit/SKILL.md",
+        "template/.agents/skills/conventional-commit/agents/openai.yaml",
+        "template/.agents/skills/conventional-commit/agents/model.yaml",
+        "template/.agents/skills/conventional-commit/scripts/validate_commit_message.py",
+        "template/.codex/skills/conventional-commit/SKILL.md",
         "template/.codex/config.toml",
         "docs/template-architecture.md",
         "docs/profile-matrix.md",
@@ -199,6 +204,39 @@ def test_agent_changes_require_ready_pull_request_workflow() -> None:
 
     assert "${{ github.token }}" in root_ci
     assert "${{ '{{' }} github.token {{ '}}' }}" in generated_ci
+
+
+def test_conventional_commit_skill_uses_cheap_model_and_validator() -> None:
+    root_skill = ROOT / ".agents" / "skills" / "conventional-commit" / "SKILL.md"
+    root_openai = ROOT / ".agents" / "skills" / "conventional-commit" / "agents" / "openai.yaml"
+    root_model = ROOT / ".agents" / "skills" / "conventional-commit" / "agents" / "model.yaml"
+    root_validator = (
+        ROOT / ".agents" / "skills" / "conventional-commit" / "scripts" / "validate_commit_message.py"
+    )
+
+    assert "$conventional-commit" in root_openai.read_text(encoding="utf-8")
+    assert 'model: "gpt-5-mini"' in root_model.read_text(encoding="utf-8")
+    assert "validate_commit_message.py" in root_skill.read_text(encoding="utf-8")
+
+    valid = subprocess.run(
+        [sys.executable, str(root_validator), "--message", "feat(agent): add deterministic validator"],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    assert valid.returncode == 0
+
+    invalid = subprocess.run(
+        [sys.executable, str(root_validator), "--message", "Bad message"],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    assert invalid.returncode != 0
 
 
 def test_rendered_projects_do_not_include_cache_artifacts(tmp_path: Path) -> None:

@@ -1,0 +1,4 @@
+model: "gpt-5-mini"
+reasoning_effort: "low"
+max_output_tokens: 120
+deterministic_validator: "./scripts/validate_commit_message.py"

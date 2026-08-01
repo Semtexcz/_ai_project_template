@@ -254,3 +254,8 @@ def test_agent_negative_scenarios(tmp_path: Path) -> None:
     )
     result = run(["make", "agent-context", "TASK=T-001"], root, expect_success=False)
     assert "Sensitive or excluded file .env" in result.stdout
+
+    model = root / ".agents" / "skills" / "conventional-commit" / "agents" / "model.yaml"
+    model.write_text(model.read_text(encoding="utf-8").replace("gpt-5-mini", "gpt-5"), encoding="utf-8")
+    result = run(["make", "validate-agent-skills"], root, expect_success=False)
+    assert "must use a cheap model" in result.stdout

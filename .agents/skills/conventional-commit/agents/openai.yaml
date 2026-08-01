@@ -1,0 +1,7 @@
+interface:
+  display_name: "Conventional Commit"
+  short_description: "Draft and validate conventional commit messages"
+  default_prompt: "Use $conventional-commit to draft one commit message for the current staged diff."
+
+policy:
+  allow_implicit_invocation: false

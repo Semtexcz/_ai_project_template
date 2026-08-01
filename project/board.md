@@ -17,6 +17,7 @@ _None_
 
 - [T-016](tasks/T-016-remediate-static-ci-pnpm-bootstrap.md) - P1 - Remediate static CI pnpm bootstrap
 - [T-017](tasks/T-017-enforce-agent-pr-workflow.md) - P1 - Enforce agent PR workflow
+- [T-018](tasks/T-018-add-conventional-commit-agent-skill.md) - P1 - Add conventional commit agent skill
 
 ## Blocked
 

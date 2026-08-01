@@ -7,6 +7,7 @@ remain in `tools/project.py` and `tools/agent.py`.
 ## Responsibilities
 
 - Canonical skills live in `.agents/skills/*/SKILL.md`.
+- Skill-local `agents/` metadata may pin model profiles and validator scripts.
 - Skills describe judgment and stop conditions. They do not rewrite task state.
 - Project state, task transitions, approvals, and dashboard sync are controlled
   by `tools/project.py`.
