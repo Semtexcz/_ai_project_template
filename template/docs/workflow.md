@@ -59,6 +59,7 @@ from any active state. A0 tasks may also move from `in-progress` directly to
 ## AI Agent Work
 
 - Start with `make agent-status`.
+- Work on a non-`main` branch before editing files.
 - Use `make agent-context TASK=<id>` for the minimal context bundle.
 - Use `.agents/context-map.yaml` for context routing.
 - Use `.agents/skills/*/SKILL.md` for judgment and stop conditions.
@@ -66,6 +67,11 @@ from any active state. A0 tasks may also move from `in-progress` directly to
 - Do not bypass task transitions by silently editing status.
 - Prefer the smallest reversible change.
 - Run `make agent-pre-review TASK=<id>` before moving to review.
+- Commit the agent's own changes, push the branch to `origin`, and open a ready
+  GitHub pull request. Do not push directly to `main`.
+- The CI guard for pushes to `main` is a signal; actual push blocking requires
+  GitHub branch protection or a ruleset that marks the guard as a required
+  check.
 
 ## Definition of Done
 
