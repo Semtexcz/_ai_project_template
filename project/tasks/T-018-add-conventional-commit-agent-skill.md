@@ -13,11 +13,11 @@ depends_on: []
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
-approved_by:
+approved_by: <human>
 
-approved_at:
+approved_at: 2026-08-01T14:03:06+02:00
 
 blocked_reason: null
 

@@ -7,7 +7,7 @@ _None_
 
 ## Ready
 
-_None_
+- [T-019](tasks/T-019-replace-internal-tools-with-pydantic-and-typer.md) - P1 - Replace internal tools with Pydantic and Typer
 
 ## In Progress
 
