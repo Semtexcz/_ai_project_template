@@ -20,8 +20,8 @@ update_when:
 - Type checking runs through `make typecheck`.
 - Tests run through `make test`.
 - `make check` is the fast local/pre-review gate for the generated project.
-- In the template repository, `make release-check` is the full
-  release-candidate gate across every generated profile and workflow.
+- The template repository has a separate full release-candidate gate across
+  every generated profile and workflow.
 
 ## Test Expectations
 

@@ -33,6 +33,19 @@ KANBAN_END = "<!-- kanban:end -->"
 TASK_ID_RE = re.compile(r"^T-\d{3}$")
 TASK_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 CHECKBOX_RE = re.compile(r"^\s*-\s+\[( |x|X)\]\s+(.+)$")
+MAKE_COMMAND_RE = re.compile(r"\bmake\s+([A-Za-z0-9_-]+)")
+MAKE_TARGET_RE = re.compile(r"^([A-Za-z0-9_-]+):(?:\s|$)", re.MULTILINE)
+UNRENDERED_JINJA_RE = re.compile(r"({[{%#].*?[}%]})")
+PERSONAL_PATH_RE = re.compile(
+    "|".join(
+        re.escape(marker)
+        for marker in [
+            "/" + "mnt" + "/" + "Data" + "/",
+            "/" + "home" + "/" + "semtex" + "/",
+            "C:\\Users\\",
+        ]
+    )
+)
 
 PROJECT_TYPES = {"script", "library", "backend", "frontend", "fullstack", "template"}
 RUNTIME_LEVELS = {"local", "shared", "production"}
@@ -389,6 +402,7 @@ def validate_all(*, check_drift: bool = True) -> list[str]:
     if check_drift:
         errors.extend(validate_drift(state, tasks))
     errors.extend(validate_markdown_links())
+    errors.extend(validate_docs(state, tasks, check_drift=check_drift))
     return errors
 
 
@@ -400,6 +414,221 @@ def validate_candidate(state: dict[str, Any], tasks: list[Task]) -> list[str]:
     errors.extend(validate_task_graph(tasks, tasks_by))
     errors.extend(validate_active_task(state, tasks, tasks_by))
     errors.extend(validate_markdown_links())
+    errors.extend(validate_docs(state, tasks, check_drift=False))
+    return errors
+
+
+def markdown_files() -> list[Path]:
+    roots = [ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "project", ROOT / "docs"]
+    files: list[Path] = []
+    for root in roots:
+        if root.is_file():
+            files.append(root)
+        elif root.exists():
+            files.extend(sorted(root.rglob("*.md")))
+    return files
+
+
+def make_targets() -> set[str]:
+    makefile = ROOT / "Makefile"
+    if not makefile.exists():
+        return set()
+    return set(MAKE_TARGET_RE.findall(makefile.read_text(encoding="utf-8")))
+
+
+def documented_make_commands() -> list[tuple[Path, int, str]]:
+    commands: list[tuple[Path, int, str]] = []
+    for path in markdown_files():
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            for match in MAKE_COMMAND_RE.finditer(line):
+                commands.append((path, lineno, match.group(1)))
+    return commands
+
+
+def validate_docs(
+    state: dict[str, Any],
+    tasks: list[Task],
+    *,
+    check_drift: bool = True,
+) -> list[str]:
+    errors: list[str] = []
+    if state.get("project", {}).get("type") == "template":
+        errors.extend(validate_required_docs())
+        if check_drift:
+            errors.extend(validate_readme_dashboard(state, tasks))
+            errors.extend(validate_doc_drift(state, tasks))
+        return errors
+    errors.extend(validate_required_docs())
+    errors.extend(validate_documented_make_commands())
+    errors.extend(validate_doc_text_hygiene())
+    errors.extend(validate_profile_documentation(state))
+    if check_drift:
+        errors.extend(validate_readme_dashboard(state, tasks))
+        errors.extend(validate_doc_drift(state, tasks))
+    return errors
+
+
+def validate_required_docs() -> list[str]:
+    state = read_state()
+    is_template = state.get("project", {}).get("type") == "template"
+    required = [
+        ROOT / "README.md",
+        ROOT / "project" / "index.md",
+        ROOT / "project" / "roadmap.md",
+        ROOT / "project" / "board.md",
+    ]
+    if is_template:
+        required.extend(
+            [
+                ROOT / "docs" / "template-architecture.md",
+                ROOT / "docs" / "profile-matrix.md",
+                ROOT / "docs" / "template-development.md",
+            ]
+        )
+    else:
+        required.extend(
+            [
+                ROOT / "docs" / "architecture.md",
+                ROOT / "docs" / "product.md",
+                ROOT / "docs" / "workflow.md",
+                ROOT / "docs" / "quality.md",
+            ]
+        )
+    errors = [
+        f"{relative(path)} is required documentation. Add it."
+        for path in required
+        if not path.exists()
+    ]
+    if errors:
+        return errors
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    required_links = ["project/roadmap.md", "project/board.md"]
+    if is_template:
+        required_links.extend(
+            [
+                "docs/template-architecture.md",
+                "docs/profile-matrix.md",
+                "docs/template-development.md",
+            ]
+        )
+    else:
+        required_links.extend(
+            [
+                "docs/product.md",
+                "docs/architecture.md",
+                "docs/workflow.md",
+            ]
+        )
+    for link in required_links:
+        if f"]({link})" not in readme and f"]({link}#" not in readme:
+            errors.append(f"README.md must link to {link}. Add it to the navigation table.")
+    return errors
+
+
+def validate_documented_make_commands() -> list[str]:
+    targets = make_targets()
+    errors: list[str] = []
+    for path, lineno, target in documented_make_commands():
+        if target not in targets:
+            errors.append(
+                f"{relative(path)}:{lineno}: documented command 'make {target}' has no Makefile target."
+            )
+    return errors
+
+
+def validate_doc_text_hygiene() -> list[str]:
+    errors: list[str] = []
+    for path in markdown_files():
+        text = path.read_text(encoding="utf-8")
+        if UNRENDERED_JINJA_RE.search(text):
+            errors.append(f"{relative(path)} contains an unrendered Jinja placeholder.")
+        if PERSONAL_PATH_RE.search(text):
+            errors.append(f"{relative(path)} contains a personal absolute path.")
+        if "../my-project" in text or "../my-fullstack" in text:
+            errors.append(f"{relative(path)} contains stale template example output paths.")
+    return errors
+
+
+def validate_readme_dashboard(state: dict[str, Any], tasks: list[Task]) -> list[str]:
+    errors: list[str] = []
+    expected_rows = {
+        "Project type",
+        "Runtime level",
+        "Phase",
+        "Milestone",
+        "Last completed task",
+        "Active task",
+        "Waiting",
+        "Blocker",
+        "Next gate",
+        "Recommended next action",
+        "Next action command",
+    }
+    try:
+        dashboard = extract_block(ROOT / "README.md", STATE_START, STATE_END)
+    except ProjectError as exc:
+        return [str(exc)]
+    for row in expected_rows:
+        if f"| {row} |" not in dashboard:
+            errors.append(f"README.md dashboard is missing '{row}'. Run: make sync-project-docs")
+    command_line = next(
+        (line for line in dashboard.splitlines() if line.startswith("| Next action command |")),
+        "",
+    )
+    commands = MAKE_COMMAND_RE.findall(command_line)
+    if len(commands) != 1:
+        errors.append("README.md dashboard must contain exactly one next action make command.")
+    return errors
+
+
+def validate_profile_documentation(state: dict[str, Any]) -> list[str]:
+    project_type = str(state.get("project", {}).get("type", ""))
+    runtime_level = str(state.get("project", {}).get("runtime_level", ""))
+    docs = {ROOT / "README.md": (ROOT / "README.md").read_text(encoding="utf-8")}
+    architecture_path = ROOT / "docs" / "architecture.md"
+    if architecture_path.exists():
+        docs[architecture_path] = architecture_path.read_text(encoding="utf-8")
+    joined = "\n".join(docs.values())
+    errors: list[str] = []
+    if project_type not in {"backend", "fullstack"} and "FastAPI" in joined:
+        errors.append("Project documentation mentions FastAPI for a profile without a backend.")
+    if project_type not in {"frontend", "fullstack"} and "Nuxt" in joined:
+        errors.append("Project documentation mentions Nuxt for a profile without a frontend.")
+    if project_type != "fullstack" and "generated OpenAPI client" in joined:
+        errors.append("Project documentation mentions generated OpenAPI client outside fullstack.")
+    if runtime_level != "production" and "OCI image" in joined:
+        errors.append(
+            "Project documentation mentions production OCI images for a non-production runtime."
+        )
+    required_by_type = {
+        "script": "Python CLI package",
+        "library": "Python library package",
+        "backend": "FastAPI service",
+        "frontend": "Nuxt application",
+        "fullstack": "FastAPI backend and Nuxt frontend",
+        "template": "Copier template",
+    }
+    marker = required_by_type.get(project_type)
+    if marker and marker not in joined:
+        errors.append(f"Project documentation must describe the selected profile as: {marker}.")
+    return errors
+
+
+def validate_doc_drift(state: dict[str, Any], tasks: list[Task]) -> list[str]:
+    expected = {
+        ROOT / "README.md": (STATE_START, STATE_END, dashboard_block(state, tasks)),
+    }
+    errors: list[str] = []
+    for path, (start, end, content) in expected.items():
+        try:
+            current = extract_block(path, start, end)
+        except ProjectError as exc:
+            errors.append(str(exc))
+            continue
+        if normalize_block(current) != normalize_block(content):
+            errors.append(
+                f"{relative(path)} documentation dashboard is stale. Run: make sync-project-docs"
+            )
     return errors
 
 
@@ -649,15 +878,8 @@ def validate_drift(state: dict[str, Any], tasks: list[Task]) -> list[str]:
 
 
 def validate_markdown_links() -> list[str]:
-    roots = [ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "project", ROOT / "docs"]
-    files: list[Path] = []
-    for root in roots:
-        if root.is_file():
-            files.append(root)
-        elif root.exists():
-            files.extend(sorted(root.rglob("*.md")))
     errors: list[str] = []
-    for path in files:
+    for path in markdown_files():
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             for match in TASK_LINK_RE.finditer(line):
                 target = match.group(2).strip()
@@ -704,6 +926,53 @@ def approval_text(task: Task | None) -> str:
     if not task:
         return "None"
     return f"{task.approval_level} / {task.approval_status}"
+
+
+def last_completed_task(tasks: list[Task], base: Path) -> str:
+    done = sorted((task for task in tasks if task.status == "done"), key=task_sort_key)
+    if not done:
+        return "None"
+    return task_link(done[-1], base)
+
+
+def waiting_text(tasks: list[Task]) -> str:
+    blocked = sorted((task for task in tasks if task.status == "blocked"), key=task_sort_key)
+    if blocked:
+        return f"Blocked: {blocked[0].id}"
+    review_waiting = sorted(
+        (
+            task
+            for task in tasks
+            if task.status == "review"
+            and task.approval_level in {"A1", "A2"}
+            and task.approval_status != "approved"
+        ),
+        key=task_sort_key,
+    )
+    if review_waiting:
+        task = review_waiting[0]
+        return f"{task.approval_level} approval pending: {task.id}"
+    pending_a2 = sorted(
+        (
+            task
+            for task in tasks
+            if task.status == "ready"
+            and task.approval_level == "A2"
+            and task.approval_status != "approved"
+        ),
+        key=task_sort_key,
+    )
+    if pending_a2:
+        return f"A2 approval required before start: {pending_a2[0].id}"
+    return "None"
+
+
+def blocker_text(tasks: list[Task]) -> str:
+    blocked = sorted((task for task in tasks if task.status == "blocked"), key=task_sort_key)
+    if not blocked:
+        return "None"
+    task = blocked[0]
+    return f"{task.id}: {task.blocked_reason or 'blocked'}"
 
 
 def recommended_next_action(
@@ -754,6 +1023,51 @@ def recommended_next_action(
     return f"No ready task exists. Create one task addressing gate {gate}."
 
 
+def recommended_next_command(
+    state: dict[str, Any], tasks: list[Task], *, invalid: bool = False
+) -> str:
+    if invalid:
+        return "`make validate-project`"
+    tasks_by = task_by_id(tasks)
+    blocked = sorted((task for task in tasks if task.status == "blocked"), key=task_sort_key)
+    if blocked:
+        return f"`make task-unblock TASK={blocked[0].id}`"
+    pending_a2 = sorted(
+        (
+            task
+            for task in tasks
+            if task.approval_level == "A2"
+            and task.approval_status != "approved"
+            and task.status == "ready"
+        ),
+        key=task_sort_key,
+    )
+    if pending_a2:
+        return f'`make task-approve TASK={pending_a2[0].id} APPROVED_BY="<human>"`'
+    in_progress = [task for task in tasks if task.status == "in-progress"]
+    if in_progress:
+        return f"`make task-review TASK={in_progress[0].id}`"
+    review_waiting = sorted(
+        (
+            task
+            for task in tasks
+            if task.status == "review"
+            and task.approval_level in {"A1", "A2"}
+            and task.approval_status != "approved"
+        ),
+        key=task_sort_key,
+    )
+    if review_waiting:
+        return f'`make task-approve TASK={review_waiting[0].id} APPROVED_BY="<human>"`'
+    ready = sorted(
+        (task for task in tasks if task.status == "ready" and dependencies_done(task, tasks_by)),
+        key=task_sort_key,
+    )
+    if ready:
+        return f"`make task-start TASK={ready[0].id}`"
+    return "`make task-ready TASK=<new-task-id>`"
+
+
 def dashboard_block(state: dict[str, Any], tasks: list[Task]) -> str:
     project = state["project"]
     lifecycle = state["lifecycle"]
@@ -767,10 +1081,14 @@ def dashboard_block(state: dict[str, Any], tasks: list[Task]) -> str:
             f"| Runtime level | {project['runtime_level']} |",
             f"| Phase | {lifecycle['phase']} |",
             f"| Milestone | {lifecycle['milestone']} |",
+            f"| Last completed task | {last_completed_task(tasks, ROOT)} |",
             f"| Active task | {active_value} |",
             f"| Approval | {approval_text(active)} |",
+            f"| Waiting | {waiting_text(tasks)} |",
+            f"| Blocker | {blocker_text(tasks)} |",
             f"| Next gate | {lifecycle['next_gate']} |",
             f"| Recommended next action | {recommended_next_action(state, tasks)} |",
+            f"| Next action command | {recommended_next_command(state, tasks)} |",
         ]
     )
 
@@ -976,6 +1294,18 @@ def validate() -> None:
     print("Project state is valid.")
 
 
+def validate_docs_command() -> None:
+    state = read_state()
+    tasks = load_tasks()
+    errors: list[str] = []
+    errors.extend(validate_markdown_links())
+    errors.extend(validate_docs(state, tasks, check_drift=True))
+    if errors:
+        print_errors(errors)
+        raise SystemExit(1)
+    print("Project documentation is valid.")
+
+
 def status() -> None:
     state = read_state()
     tasks = load_tasks()
@@ -1115,6 +1445,7 @@ def main() -> None:
     sub.add_parser("status")
     sub.add_parser("sync")
     sub.add_parser("validate")
+    sub.add_parser("validate-docs")
     for name in ["ready", "start", "review", "complete", "unblock", "cancel"]:
         command = sub.add_parser(name)
         command.add_argument("task")
@@ -1133,6 +1464,8 @@ def main() -> None:
             sync()
         elif args.command == "validate":
             validate()
+        elif args.command == "validate-docs":
+            validate_docs_command()
         elif args.command == "ready":
             controlled_transition(args.task, "ready")
         elif args.command == "start":

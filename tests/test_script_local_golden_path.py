@@ -68,6 +68,7 @@ def test_script_local_golden_path(tmp_path: Path) -> None:
     )
 
     run_command(["make", "setup"], cwd=generated, env=env)
+    run_command(["make", "validate-docs"], cwd=generated, env=env)
     run_command(["make", "check"], cwd=generated, env=env)
     run_command(["make", "build"], cwd=generated, env=env)
 

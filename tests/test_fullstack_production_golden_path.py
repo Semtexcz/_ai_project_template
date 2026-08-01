@@ -216,6 +216,7 @@ def test_fullstack_production_golden_path(tmp_path: Path) -> None:
 
     try:
         run_command(["make", "setup"], generated, env, timeout=600)
+        run_command(["make", "validate-docs"], generated, env)
         run_command(["make", "api-check"], generated, env)
         run_command(["make", "check"], generated, env, timeout=600)
         run_command(["make", "build"], generated, env, timeout=600)

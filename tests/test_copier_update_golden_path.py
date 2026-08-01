@@ -212,8 +212,8 @@ def create_template_v2(template_repo: Path, env: Mapping[str, str]) -> str:
     readme_template = template_repo / "template" / "README.md.jinja"
     readme_template.write_text(
         readme_template.read_text().replace(
-            "## Quick Start\n\n```bash\nmake setup\nmake dev\n```",
-            "## Quick Start\n\nTemplate update marker: v1.1.0.\n\n```bash\nmake setup\nmake dev\n```",
+            "## Quick Start\n\n```bash\nmake setup\nmake check\nmake build\n```",
+            "## Quick Start\n\nTemplate update marker: v1.1.0.\n\n```bash\nmake setup\nmake check\nmake build\n```",
         )
     )
     commit = commit_all(template_repo, env, "template v1.1.0")
@@ -400,7 +400,9 @@ def test_copier_update_reports_merge_conflict_without_silent_loss(tmp_path: Path
     readme = project / "README.md"
     readme.write_text(
         readme.read_text().replace(
-            "One or two sentences about the problem, user, and value. Replace this after the project brief is approved.",
+            "Update Golden Path is a newly generated project. Replace this paragraph after\n"
+            "the project brief is approved so it states the product, user, and value in one\n"
+            "or two sentences.",
             "CONFLICT-PROJECT-VERSION: keep this project-specific README opening.",
         )
     )
@@ -409,7 +411,9 @@ def test_copier_update_reports_merge_conflict_without_silent_loss(tmp_path: Path
     readme_template = template_repo / "template" / "README.md.jinja"
     readme_template.write_text(
         readme_template.read_text().replace(
-            "One or two sentences about the problem, user, and value. Replace this after the project brief is approved.",
+            "{{ project_name }} is a newly generated project. Replace this paragraph after\n"
+            "the project brief is approved so it states the product, user, and value in one\n"
+            "or two sentences.",
             "CONFLICT-TEMPLATE-VERSION: template changed this README opening.",
         )
     )

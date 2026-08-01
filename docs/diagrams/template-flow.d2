@@ -1,0 +1,17 @@
+copier: Copier answers
+profiles: Profile axes
+template: template/
+generated: Generated project
+
+copier -> profiles: project_type + runtime_level
+profiles -> template: select files and Jinja branches
+template -> generated: render scaffold
+
+generated.state: project/state.yaml
+generated.tasks: project/tasks/*.md
+generated.docs: README + project docs
+generated.tools: tools/project.py + Makefile
+
+generated.state -> generated.docs: sync dashboard blocks
+generated.tasks -> generated.docs: task status and next action
+generated.tools -> generated.docs: validate links, commands, profile drift

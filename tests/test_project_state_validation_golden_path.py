@@ -128,6 +128,14 @@ Handled.
 
 def make_project(tmp_path: Path, *, profile: str = "script") -> Path:
     root = tmp_path / profile
+    profile_markers = {
+        "script": "Python CLI package",
+        "library": "Python library package",
+        "backend": "FastAPI service",
+        "frontend": "Nuxt application",
+        "fullstack": "FastAPI backend and Nuxt frontend",
+    }
+    marker = profile_markers[profile]
     (root / "tools").mkdir(parents=True)
     (root / "project" / "tasks").mkdir(parents=True)
     (root / "docs").mkdir()
@@ -141,6 +149,8 @@ def make_project(tmp_path: Path, *, profile: str = "script") -> Path:
                 "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py sync",
                 "validate-project:",
                 "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py validate",
+                "validate-docs:",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py validate-docs",
                 "task-ready:",
                 "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py ready $(TASK)",
                 "task-start:",
@@ -188,7 +198,29 @@ template:
     write_task(root, "T-002", status="backlog", depends_on="[T-001]", approval_level="A1", approval_status="pending")
     write_task(root, "T-003", status="backlog", depends_on="[T-002]", approval_level="A2", approval_status="pending")
     (root / "README.md").write_text(
-        "# Test Project\n\n<!-- project-status:start -->\nstale\n<!-- project-status:end -->\n\n[Project](project/index.md)\n"
+        "\n".join(
+            [
+                "# Test Project",
+                "",
+                f"Test Project is a fixture. Current architecture: {marker}.",
+                "",
+                "<!-- project-status:start -->",
+                "stale",
+                "<!-- project-status:end -->",
+                "",
+                "[Product](docs/product.md)",
+                "[Architecture](docs/architecture.md)",
+                "[Workflow](docs/workflow.md)",
+                "[Roadmap](project/roadmap.md)",
+                "[Board](project/board.md)",
+                "",
+                "```bash",
+                "make validate-project",
+                "make validate-docs",
+                "```",
+                "",
+            ]
+        )
     )
     (root / "project" / "index.md").write_text(
         "# Project Dashboard\n\n<!-- project-index:start -->\nstale\n<!-- project-index:end -->\n\n[Board](board.md)\n[Roadmap](roadmap.md)\n"
@@ -198,7 +230,12 @@ template:
     )
     (root / "project" / "roadmap.md").write_text("# Roadmap\n")
     (root / "AGENTS.md").write_text("# Agents\n\n[Workflow](docs/workflow.md)\n")
+    (root / "docs" / "product.md").write_text("# Product\n\nTest fixture product.\n")
+    (root / "docs" / "architecture.md").write_text(
+        f"# Architecture\n\nCurrent architecture: {marker}.\n"
+    )
     (root / "docs" / "workflow.md").write_text("# Workflow\n")
+    (root / "docs" / "quality.md").write_text("# Quality\n")
     run(["make", "sync-project-docs"], root)
     return root
 
@@ -334,6 +371,64 @@ def test_project_state_validation_fullstack_profile(tmp_path: Path) -> None:
     assert "Project state is valid" in run(["make", "validate-project"], root).stdout
 
 
+def readme_dashboard(root: Path) -> str:
+    text = (root / "README.md").read_text()
+    return text.split("<!-- project-status:start -->", 1)[1].split(
+        "<!-- project-status:end -->",
+        1,
+    )[0]
+
+
+def test_readme_dashboard_next_actions_for_task_states(tmp_path: Path) -> None:
+    active = make_project(tmp_path / "active")
+    dashboard = readme_dashboard(active)
+    assert "| Active task | [T-001]" in dashboard
+    assert "| Next action command | `make task-review TASK=T-001` |" in dashboard
+
+    a1_review = make_project(tmp_path / "a1-review")
+    run(["make", "task-complete", "TASK=T-001"], a1_review)
+    run(["make", "task-ready", "TASK=T-002"], a1_review)
+    run(["make", "task-start", "TASK=T-002"], a1_review)
+    run(["make", "task-review", "TASK=T-002"], a1_review)
+    dashboard = readme_dashboard(a1_review)
+    assert "| Waiting | A1 approval pending: T-002 |" in dashboard
+    assert '| Next action command | `make task-approve TASK=T-002 APPROVED_BY="<human>"` |' in dashboard
+
+    a2_ready = make_project(tmp_path / "a2-ready")
+    run(["make", "task-complete", "TASK=T-001"], a2_ready)
+    run(["make", "task-ready", "TASK=T-002"], a2_ready)
+    run(["make", "task-start", "TASK=T-002"], a2_ready)
+    run(["make", "task-review", "TASK=T-002"], a2_ready)
+    run(["make", "task-approve", "TASK=T-002", "APPROVED_BY=Test Human"], a2_ready)
+    run(["make", "task-complete", "TASK=T-002"], a2_ready)
+    run(["make", "task-ready", "TASK=T-003"], a2_ready)
+    dashboard = readme_dashboard(a2_ready)
+    assert "| Waiting | A2 approval required before start: T-003 |" in dashboard
+    assert '| Next action command | `make task-approve TASK=T-003 APPROVED_BY="<human>"` |' in dashboard
+
+    blocked = make_project(tmp_path / "blocked")
+    run(
+        [
+            "make",
+            "task-block",
+            "TASK=T-001",
+            "REASON=Waiting on input",
+            "UNBLOCK=Record the decision",
+        ],
+        blocked,
+    )
+    dashboard = readme_dashboard(blocked)
+    assert "| Waiting | Blocked: T-001 |" in dashboard
+    assert "| Blocker | T-001: Waiting on input |" in dashboard
+    assert "| Next action command | `make task-unblock TASK=T-001` |" in dashboard
+
+    no_ready = make_project(tmp_path / "no-ready")
+    run(["make", "task-complete", "TASK=T-001"], no_ready)
+    dashboard = readme_dashboard(no_ready)
+    assert "No ready task exists" in dashboard
+    assert "| Next action command | `make task-ready TASK=<new-task-id>` |" in dashboard
+
+
 def corrupt_state_active_missing(root: Path) -> None:
     text = (root / "project" / "state.yaml").read_text()
     (root / "project" / "state.yaml").write_text(text.replace("active_task: T-001", "active_task: T-999"))
@@ -377,6 +472,16 @@ NEGATIVE_CASES: list[tuple[str, Callable[[Path], None], str]] = [
     ("stale project index", lambda root: (root / "project" / "index.md").write_text((root / "project" / "index.md").read_text().replace("Recommended next action", "Next")), "project/index.md generated block is stale"),
     ("stale board", lambda root: (root / "project" / "board.md").write_text((root / "project" / "board.md").read_text().replace("In Progress", "Doing")), "project/board.md generated block is stale"),
     ("broken internal link", lambda root: (root / "README.md").write_text((root / "README.md").read_text() + "\n[Broken](missing.md)\n"), "broken internal Markdown link"),
+    ("documented missing command", lambda root: (root / "README.md").write_text((root / "README.md").read_text() + "\n`make missing-target`\n"), "has no Makefile target"),
+    ("profile irrelevant FastAPI docs", lambda root: (root / "docs" / "architecture.md").write_text("# Architecture\n\nCurrent architecture: Python CLI package with FastAPI.\n"), "mentions FastAPI"),
+    ("unrendered Jinja", lambda root: (root / "docs" / "product.md").write_text("# Product\n\n{{ project_name }}\n"), "unrendered Jinja"),
+    (
+        "personal path",
+        lambda root: (root / "docs" / "product.md").write_text(
+            "# Product\n\nSee " + "/" + "home" + "/" + "semtex" + "/project.\n"
+        ),
+        "personal absolute path",
+    ),
     ("invalid transition", lambda root: None, "Invalid transition"),
     ("invalid approval date", lambda root: write_task(root, "T-001", status="done", approval_level="A1", approval_status="approved", approved_by="Human", approved_at="not-a-date"), "approved_at is invalid"),
 ]

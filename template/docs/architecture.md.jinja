@@ -14,66 +14,118 @@ update_when:
 
 # Architecture
 
-## Style
-
 Project type: `{{ project_type }}`. Runtime level: `{{ runtime_level }}`.
 
-Use the smallest coherent architecture that supports the active task.
+This document describes the architecture generated now. Future extensions are
+listed separately so they do not read as already implemented.
 
-{% if project_type in ["backend", "fullstack"] %}
-## Backend
+## Current Architecture
 
-The backend is a feature-oriented modular monolith:
+{% if project_type == "script" %}
+The generated system is a Python CLI package.
 
 ```text
-domain <- application <- infrastructure <- api/framework wiring
+tests -> src/{{ python_package }}/__main__.py -> package code
 ```
 
-Rules:
+`make run` executes the package module. `make test`, `make lint`,
+`make typecheck`, and `make build` verify the local package lifecycle. There is
+no service runtime, browser runtime, generated client, container runtime, or
+external infrastructure in this profile.
+{% elif project_type == "library" %}
+The generated system is a Python library package.
 
-- `domain` does not import FastAPI, SQLAlchemy, HTTP clients, or infrastructure.
-- `application` owns use cases.
-- `infrastructure` implements persistence and external integration adapters.
-- `api` maps HTTP requests to application use cases.
+```text
+consumer code -> src/{{ python_package }}/__init__.py -> package internals
+```
+
+The package exports its public API from `__init__.py` and includes `py.typed` for
+typed consumers. `make build` writes distribution artifacts to `dist/`. There is
+no CLI entry point, service runtime, browser runtime, generated client, or
+external infrastructure in this profile.
+{% elif project_type == "backend" %}
+The generated system is a FastAPI service.
+
+```text
+HTTP routes -> application use cases -> domain model
+```
+
+The app entry point is `backend/src/app/main.py`. Feature code is organized
+under `backend/src/app/modules/`, and shared configuration/observability code is
+under `backend/src/app/shared/`. The generated service exposes `/health`,
+`/ready`, and `/openapi.json`. There is no frontend runtime or generated
+frontend client in this profile.
+{% elif project_type == "frontend" %}
+The generated system is a Nuxt application.
+
+```text
+pages -> feature components -> feature composables
+```
+
+The application lives in `frontend/`. Pages compose feature components, feature
+logic belongs under `frontend/features/`, and build output is written to
+`frontend/.output/`. There is no backend runtime or generated client in this
+profile.
+{% elif project_type == "fullstack" %}
+The generated system is a FastAPI backend and Nuxt frontend.
+
+```text
+Nuxt page -> generated TypeScript client -> FastAPI route -> application use case -> domain model
+```
+
+The backend app entry point is `backend/src/app/main.py`. Backend feature code is
+organized under `backend/src/app/modules/`, with shared configuration and
+observability under `backend/src/app/shared/`. The frontend lives in
+`frontend/`, with pages, feature components, and shared API runtime code.
+
+`make api-schema` exports the backend OpenAPI contract. `make api-generate`
+writes the generated TypeScript client. `make api-check` fails when that client
+drifts from the backend schema.
+{% if runtime_level == "production" %}
+
+The production runtime currently consists of two local OCI image artifacts:
+
+- backend image running Uvicorn from an installed Python environment
+- frontend image running the Nuxt server output with Node
+
+Compose is used only as local artifact verification. It wires ports, health
+checks, service ordering, and shutdown for `make prod-up`, `make prod-status`,
+`make prod-smoke`, and `make prod-down`.
+{% endif %}
 {% endif %}
 
-{% if project_type in ["frontend", "fullstack"] %}
-## Frontend
+## Current Quality Gates
 
-Nuxt pages compose feature components and shared UI. Feature-specific logic belongs in `features/*/composables` or `features/*/api`.
+```bash
+make sync-project-docs
+make validate-docs
+make validate-project
+make check
+```
+
+{% if project_type == "fullstack" %}
+Full-stack projects also gate API contract drift:
+
+```bash
+make api-check
+```
 {% endif %}
 
-{% if project_type == "fullstack" and runtime_level == "production" %}
-## Production Runtime
+## Possible Future Extensions
 
-The production profile has two deployable OCI artifacts:
+Do not treat this list as implemented architecture. Add any item only when a
+task, ADR, and approval level justify it:
 
-- Backend image: FastAPI served by Uvicorn from an installed Python
-  environment, without reload or development server commands.
-- Frontend image: Nuxt server output served by Node from `.output/`, without HMR
-  or host-mounted source code.
-
-Compose is the local production-like orchestrator. It wires environment
-configuration, port mappings, service health checks, backend-to-frontend startup
-ordering, and graceful shutdown. It is an artifact verification environment, not
-a cloud runtime architecture.
-
-The frontend runtime owns the local HTTP security header baseline for content
-type hardening, referrer policy, CSP defaults, and frame blocking. TLS and HSTS
-remain an external ingress or reverse proxy responsibility.
-{% endif %}
-
-## Progressive Infrastructure
-
-Do not add a database, cache, queue, object storage, CDN, API gateway, Kubernetes, or service mesh without:
-
-- a concrete requirement
-- an ADR
-- an operating plan
-- the required approval level
+- database or durable persistence
+- cache, queue, broker, or background worker
+- external identity provider
+- object storage or CDN
+- public deployment, registry publishing, Kubernetes, or service mesh
+- production secrets, backups, observability service, TLS, or HSTS
 
 ## Related
 
+- [product.md](product.md)
 - [workflow.md](workflow.md)
 - [quality.md](quality.md)
 - [decisions/index.md](decisions/index.md)

@@ -303,6 +303,7 @@ def test_fullstack_local_golden_path(tmp_path: Path) -> None:
     )
 
     run_command(["make", "setup"], generated, env, timeout=300)
+    run_command(["make", "validate-docs"], generated, env)
     run_command(["make", "api-check"], generated, env)
     assert_contract_drift_is_detected(generated, env)
     run_command(["make", "check"], generated, env, timeout=300)

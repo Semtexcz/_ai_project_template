@@ -1,6 +1,27 @@
 # {{ project_name }}
 
-One or two sentences about the problem, user, and value. Replace this after the project brief is approved.
+{{ project_name }} is a newly generated project. Replace this paragraph after
+the project brief is approved so it states the product, user, and value in one
+or two sentences.
+
+{% if project_type == "script" -%}
+Selected profile: `script-{{ runtime_level }}`. This is a Python CLI package
+with local run, test, typecheck, lint, and build targets.
+{%- elif project_type == "library" -%}
+Selected profile: `library-{{ runtime_level }}`. This is a Python library
+package with typed public API checks and buildable distribution artifacts.
+{%- elif project_type == "backend" -%}
+Selected profile: `backend-{{ runtime_level }}`. This is a FastAPI service with
+health, readiness, OpenAPI, backend quality checks, and buildable artifacts.
+{%- elif project_type == "frontend" -%}
+Selected profile: `frontend-{{ runtime_level }}`. This is a Nuxt application
+with frontend quality checks, local development, build, and server run targets.
+{%- elif project_type == "fullstack" -%}
+Selected profile: `fullstack-{{ runtime_level }}`. This is a FastAPI backend
+and Nuxt frontend with an OpenAPI-generated TypeScript client.
+{%- endif %}
+
+## Project Status
 
 <!-- project-status:start -->
 | Item | Value |
@@ -9,272 +30,112 @@ One or two sentences about the problem, user, and value. Replace this after the 
 | Runtime level | {{ runtime_level }} |
 | Phase | definition |
 | Milestone | M-01 |
+| Last completed task | None |
 | Active task | [T-001](project/tasks/T-001-initialize-project.md) |
 | Approval | A0 / not-required |
+| Waiting | None |
+| Blocker | None |
 | Next gate | ready-for-development |
 | Recommended next action | Complete T-001. |
+| Next action command | `make task-review TASK=T-001` |
 <!-- project-status:end -->
+
+The dashboard is generated from `project/state.yaml` and `project/tasks/*.md`.
+After changing task state, run:
+
+```bash
+make sync-project-docs
+```
+
+## Runtime Architecture
+
+{% if project_type == "script" %}
+Current architecture: Python CLI package. The executable module lives under
+`src/{{ python_package }}/`, tests live under `tests/`, and `make run` executes
+the package module.
+{% elif project_type == "library" %}
+Current architecture: Python library package. Public imports are exported from
+`src/{{ python_package }}/__init__.py`, `py.typed` marks the package as typed,
+and build artifacts are written to `dist/`.
+{% elif project_type == "backend" %}
+Current architecture: FastAPI service. The app entry point is
+`backend/src/app/main.py`; feature code is organized under `backend/src/app/modules/`.
+The generated service exposes `/health`, `/ready`, and `/openapi.json`.
+{% elif project_type == "frontend" %}
+Current architecture: Nuxt application. Pages live under `frontend/pages/`,
+feature code lives under `frontend/features/`, and shared frontend utilities
+belong under `frontend/shared/` when introduced by a task.
+{% elif project_type == "fullstack" %}
+Current architecture: FastAPI backend and Nuxt frontend. The backend exports
+OpenAPI with `make api-schema`; the frontend client is generated with
+`make api-generate` and checked with `make api-check`.
+{% if runtime_level == "production" %}
+The production profile also generates local OCI image and Compose verification
+targets for the backend and frontend runtime artifacts.
+{% endif %}
+{% endif %}
 
 ## Quick Start
 
 ```bash
 make setup
-make dev
-```
-
-## Verify
-
-```bash
 make check
 make build
-make agent-status
-make agent-context TASK=<id>
-make agent-pre-task TASK=<id>
-make agent-pre-review TASK=<id>
-make agent-post-task TASK=<id>
-make project-status
-make sync-project-docs
-make validate-project
 ```
 
-{% if project_type == "frontend" %}
-## Frontend Runtime
-
-The Nuxt application lives in `frontend/` and is a standalone frontend. This
-profile does not include a backend, external API integration, or generated
-OpenAPI client; the generated TypeScript OpenAPI client belongs to a later
-full-stack profile.
-
-Install dependencies:
-
-```bash
-make setup
-```
-
-Run the Nuxt development server with HMR:
-
-```bash
-make dev
-```
-
-Build the production Nuxt output:
-
-```bash
-make build
-```
-
-`make build` writes the Nuxt server output to `frontend/.output/`. The server
-entry point is `frontend/.output/server/index.mjs`.
-
-Run the already built application without HMR:
+Run the generated project:
 
 ```bash
 make run
 ```
-
-By default the built server listens on `http://127.0.0.1:8000`; override with
-`HOST` and `PORT`. This is a shared-environment runtime smoke path, not a
-production deployment.
-
-Quality checks:
-
-```bash
-make check
-```
-
-`make check` validates the project dashboard, runs ESLint, Nuxt typecheck, and
-Vitest. The main page composes a small `welcome` feature from `frontend/features/`.
-{% endif %}
 
 {% if project_type == "fullstack" %}
-## Full-Stack Local Runtime
-
-The FastAPI backend lives in `backend/`. The Nuxt frontend lives in `frontend/`.
-The frontend API client is generated from the backend OpenAPI contract; do not
-edit files under `frontend/shared/api/generated/` by hand.
-
-Install dependencies and generate the initial client:
+Keep the API contract synchronized:
 
 ```bash
-make setup
-```
-
-OpenAPI and generated client commands:
-
-```bash
-make api-schema
-make api-generate
 make api-check
 ```
+{% endif %}
 
-`make api-schema` loads the real FastAPI app and writes
-`artifacts/openapi.json`. The schema is not committed; it is regenerated before
-client generation and drift checks. `make api-generate` writes the TypeScript
-SDK and types to `frontend/shared/api/generated/`. The generator is
-`@hey-api/openapi-ts` because it produces typed SDK functions from OpenAPI
-operation IDs without adding a Nuxt-specific runtime lock-in. `make api-check`
-generates into a temporary directory and compares it with the current generated
-client.
-
-Run development servers with reload/HMR:
+{% if project_type == "fullstack" and runtime_level == "production" %}
+Verify production-like local artifacts:
 
 ```bash
-make dev
-```
-
-Build both artifacts:
-
-```bash
-make build
-```
-
-`make build` writes the backend wheel and sdist to `backend/dist/` and the Nuxt
-server output to `frontend/.output/`.
-
-Run the already built backend and Nuxt server together:
-
-```bash
-make run
-```
-
-Override ports with `BACKEND_HOST`, `BACKEND_PORT`, `FRONTEND_HOST`, and
-`FRONTEND_PORT`. The frontend API base URL defaults to the backend URL and can
-be overridden with `NUXT_PUBLIC_API_BASE_URL`; see `frontend/.env.example`.
-
-Quality and browser checks:
-
-```bash
-make check
-make e2e
-```
-
-`make check` validates the project dashboard, runs backend Ruff, Pyright and
-pytest, verifies OpenAPI/client drift, and runs frontend ESLint, Nuxt typecheck
-and Vitest. `make e2e` expects the built app to already be running and uses
-Playwright against `E2E_BASE_URL`.
-
-Current project direction is tracked in `project/index.md`.
-
-{% if runtime_level == "production" %}
-## Production-Like Runtime
-
-This production profile creates local, deployable OCI artifacts and verifies the
-runtime contract without deploying to cloud infrastructure.
-
-End-to-end production artifact path:
-
-```bash
-make setup
-make api-check
-make check
-make build
 make image-build
 make image-inspect
 make prod-up
 make prod-status
 make prod-smoke
-make e2e-production
 make prod-down
 ```
-
-`make image-build` builds separate backend and frontend images. The backend
-runtime image runs Uvicorn without reload as a non-root user. The frontend
-runtime image runs the Nuxt server output with Node, without HMR or source
-mounts. `make image-inspect` checks image existence, non-root users,
-entrypoint/command, exposed ports, and absence of development runtime commands.
-`make prod-up` starts both images through Compose, `make prod-status` reports
-service state, health, images, and ports, `make prod-smoke` checks backend
-health, readiness, OpenAPI, API data, frontend HTML, and frontend security
-headers, and `make e2e-production` runs Playwright against the production-like
-frontend.
-
-The frontend production runtime sets a minimal local security header baseline:
-`X-Content-Type-Options: nosniff`,
-`Referrer-Policy: strict-origin-when-cross-origin`, and a CSP with
-`default-src 'self'`, `object-src 'none'`, `base-uri 'self'`, and
-`frame-ancestors 'none'`. The CSP permits Nuxt hydration with inline scripts
-and styles. TLS and HSTS are intentionally left to the required external
-ingress or reverse proxy contract.
-
-Runtime configuration is environment-driven:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PROD_BACKEND_PORT` | `8000` | Host port mapped to backend container port `8000`. |
-| `PROD_FRONTEND_PORT` | `3000` | Host port mapped to frontend container port `3000`. |
-| `NUXT_PUBLIC_API_BASE_URL` | `http://127.0.0.1:${PROD_BACKEND_PORT}` | Browser-visible API base URL. |
-| `BACKEND_IMAGE` | `{{ project_slug }}-backend:production` | Backend image tag. |
-| `FRONTEND_IMAGE` | `{{ project_slug }}-frontend:production` | Frontend image tag. |
-| `COMPOSE` | `docker compose` | Compose command used by production targets. |
-
-The production profile means reproducible local OCI images, production process
-commands, health/readiness checks, graceful Compose shutdown, minimal runtime
-dependencies, and CI-verifiable smoke and browser checks.
-
-It does not mean automatic deployment, high availability, Kubernetes readiness,
-database backups, unlimited scale, public registry publishing, real production
-secrets, or complete future security/compliance coverage.
-{% endif %}
 {% endif %}
 
-{% if project_type == "backend" %}
-## Backend Runtime
+## Workflow
 
-Run the backend without auto-reload:
-
-```bash
-make run
-```
-
-Run the local development server with auto-reload:
+Use one active task at a time:
 
 ```bash
-make dev
+make agent-status
+make agent-context TASK=<id>
+make task-start TASK=<id>
+make task-review TASK=<id>
+make validate-project
+make validate-docs
 ```
 
-The FastAPI entry point is `backend/src/app/main.py` (`app.main:app`). By default the
-service listens on `http://127.0.0.1:8000`; override with `HOST` and `PORT`.
+A1 and A2 approvals are human gates. Agents may prepare work and move it to
+review, but must not approve it.
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /health` | Process health check. |
-| `GET /ready` | Readiness check. Without external services, readiness means the app loaded successfully. |
-| `GET /openapi.json` | OpenAPI document. |
-
-`make build` writes a wheel and source distribution to `backend/dist/`. The wheel is
-installable in a clean Python environment and can run with:
-
-```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-This is a shared-environment baseline, not a production deployment.
-{% endif %}
-
-{% if project_type == "library" %}
-## Package
-
-Build artifacts are written to `dist/`. Verify the wheel from a clean environment:
-
-```bash
-uv venv /tmp/{{ project_slug }}-consumer
-uv pip install --python /tmp/{{ project_slug }}-consumer/bin/python dist/*.whl
-/tmp/{{ project_slug }}-consumer/bin/python -c "from {{ python_package }} import package_name; print(package_name())"
-```
-
-The public API is exported from `src/{{ python_package }}/__init__.py`. Publishing is not automated.
-{% endif %}
-
-## Where to Go
+## Navigation
 
 | Need | Open |
 |---|---|
-| Next step | `project/index.md` |
-| Brief | `project/brief.md` |
-| Roadmap | `project/roadmap.md` |
-| Requirements | `project/requirements.md` |
-| Architecture | `docs/architecture.md` |
-| Workflow | `docs/workflow.md` |
-| Quality | `docs/quality.md` |
-| Decisions | `docs/decisions/index.md` |
-| AI instructions | `AGENTS.md` |
+| Product brief | [docs/product.md](docs/product.md) |
+| Current architecture | [docs/architecture.md](docs/architecture.md) |
+| Roadmap | [project/roadmap.md](project/roadmap.md) |
+| Board | [project/board.md](project/board.md) |
+| Project dashboard | [project/index.md](project/index.md) |
+| Workflow | [docs/workflow.md](docs/workflow.md) |
+| Quality gates | [docs/quality.md](docs/quality.md) |
+| Decisions | [docs/decisions/index.md](docs/decisions/index.md) |
+| Agent instructions | [AGENTS.md](AGENTS.md) |

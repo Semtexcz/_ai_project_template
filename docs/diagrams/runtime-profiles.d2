@@ -1,0 +1,27 @@
+project_type: project_type
+runtime_level: runtime_level
+checks: Make checks
+
+script: Python CLI package
+library: Python library package
+backend: FastAPI service
+frontend: Nuxt application
+fullstack: FastAPI backend + Nuxt frontend
+
+local: local run/build/check
+shared: packaged shared baseline
+production: local OCI verification
+
+project_type -> script
+project_type -> library
+project_type -> backend
+project_type -> frontend
+project_type -> fullstack
+
+runtime_level -> local
+runtime_level -> shared
+runtime_level -> production
+
+local -> checks: setup, check, build, run
+shared -> checks: installable artifacts
+production -> checks: image-build, image-inspect, prod-smoke

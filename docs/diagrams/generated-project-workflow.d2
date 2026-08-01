@@ -1,0 +1,17 @@
+state: project/state.yaml
+tasks: project/tasks/*.md
+project_tool: tools/project.py
+readme: README.md dashboard
+index: project/index.md
+board: project/board.md
+agent: agent hooks and context
+
+state -> project_tool: lifecycle, gate, active task
+tasks -> project_tool: status, approval, blockers
+project_tool -> readme: sync
+project_tool -> index: sync
+project_tool -> board: sync
+
+agent -> project_tool: status and context commands
+project_tool -> tasks: controlled transitions
+project_tool -> state: controlled transitions

@@ -38,6 +38,12 @@ def test_generated_project_has_single_state_source_and_dashboard_tools() -> None
         "template/AGENTS.md.jinja",
         "template/.agents/context-map.yaml",
         "template/.codex/config.toml",
+        "docs/template-architecture.md",
+        "docs/profile-matrix.md",
+        "docs/template-development.md",
+        "docs/diagrams/template-flow.d2",
+        "docs/diagrams/generated-project-workflow.d2",
+        "docs/diagrams/runtime-profiles.d2",
     ]
 
     for relative in required:
@@ -135,8 +141,19 @@ def test_release_hygiene_gitignore_and_gate_are_declared() -> None:
     assert "|| true" not in release_target
 
     readme = (ROOT / "README.md").read_text()
-    assert "make check` intentionally runs a narrow maintainer subset" in readme
-    assert "`make release-check` runs the complete release-candidate pytest suite" in readme
+    assert "`make check` is the fast maintainer subset" in readme
+    assert "`make release-check` runs the full" in readme
+
+
+def test_documentation_validation_targets_are_declared() -> None:
+    makefile = (ROOT / "Makefile").read_text()
+    generated_makefile = (ROOT / "template" / "Makefile.jinja").read_text()
+    project_tool = (ROOT / "template" / "tools" / "project.py").read_text()
+
+    assert "validate-template-docs:" in makefile
+    assert "validate-docs:" in generated_makefile
+    assert "validate-docs" in project_tool
+    assert "validate_docs" in project_tool
 
 
 def test_rendered_projects_do_not_include_cache_artifacts(tmp_path: Path) -> None:

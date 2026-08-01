@@ -15,7 +15,7 @@ _None_
 
 ## Review
 
-_None_
+- [T-015](tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) - P1 - Make template and generated-project documentation self-explanatory
 
 ## Blocked
 
