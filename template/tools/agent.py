@@ -369,12 +369,12 @@ def validate_model_metadata(path: Path, skill_name: str) -> list[str]:
     if not isinstance(model, str) or not model.strip():
         errors.append(f"{rel(path)} model must be a non-empty string.")
     elif skill_name == "conventional-commit" and model not in CHEAP_MODELS:
-        errors.append(f"{rel(path)} must use a cheap model: {', '.join(sorted(CHEAP_MODELS))}.")
+        cheap_models = ", ".join(sorted(CHEAP_MODELS))
+        errors.append(f"{rel(path)} must use a cheap model: {cheap_models}.")
     reasoning_effort = data.get("reasoning_effort")
     if reasoning_effort is not None and reasoning_effort not in ALLOWED_REASONING_EFFORTS:
-        errors.append(
-            f"{rel(path)} reasoning_effort must be one of: {', '.join(sorted(ALLOWED_REASONING_EFFORTS))}."
-        )
+        efforts = ", ".join(sorted(ALLOWED_REASONING_EFFORTS))
+        errors.append(f"{rel(path)} reasoning_effort must be one of: {efforts}.")
     validator = data.get("deterministic_validator")
     if validator is None:
         errors.append(f"{rel(path)} deterministic_validator must be declared.")
@@ -393,20 +393,19 @@ def validate_conventional_commit_validator(script_path: Path) -> list[str]:
         [sys.executable, str(script_path), "--message", "feat(agent): add validator"],
         cwd=ROOT,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if valid.returncode != 0:
+        output = f"{valid.stdout}{valid.stderr}".strip()
         errors.append(
-            f"{rel(script_path)} must accept a valid conventional commit message. {valid.stdout}{valid.stderr}".strip()
+            f"{rel(script_path)} must accept a valid conventional commit message. {output}"
         )
     invalid = subprocess.run(
         [sys.executable, str(script_path), "--message", "bad message"],
         cwd=ROOT,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if invalid.returncode == 0:
