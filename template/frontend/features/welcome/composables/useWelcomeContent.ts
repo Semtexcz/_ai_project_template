@@ -17,8 +17,8 @@ export function normalizeWelcomeContent(content: WelcomeContent): NormalizedWelc
 
   return {
     projectName,
-    description: description || 'Start by reviewing the generated project dashboard.',
-    nextStepHref: content.nextStepHref?.trim() || '/project/index.md',
-    nextStepLabel: content.nextStepLabel?.trim() || 'Open project/index.md'
+    description: description || 'Start by reviewing the generated project brief.',
+    nextStepHref: content.nextStepHref?.trim() || '/project/brief.md',
+    nextStepLabel: content.nextStepLabel?.trim() || 'Open project/brief.md'
   }
 }

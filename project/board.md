@@ -40,6 +40,7 @@ _None_
 - [T-013](tasks/T-013-remediate-rc-003-rc-004-and-rc-006-release-hygiene-and-gate.md) - P1 - Remediate RC-003 RC-004 and RC-006 release hygiene and gate
 - [T-014](tasks/T-014-run-targeted-remediation-audit.md) - P1 - Run targeted remediation audit
 - [T-015](tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) - P1 - Make template and generated-project documentation self-explanatory
+- [T-020](tasks/T-020-introduce-lightweight-progressive-governance.md) - P1 - Introduce lightweight progressive governance
 
 ## Cancelled
 

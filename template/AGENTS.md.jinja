@@ -2,27 +2,48 @@
 
 ## Required Start
 
-Run or read agent-oriented project status first:
+Start by reading the durable project context:
+
+```bash
+sed -n '1,220p' project/brief.md
+sed -n '1,220p' docs/architecture.md
+sed -n '1,220p' docs/workflow.md
+```
+
+{% if governance == "managed" %}
+This project uses managed governance. Run or read agent-oriented project status
+before implementation work:
 
 ```bash
 make agent-status
-```
-
-Respect exactly one active task. Then load only context recommended by:
-
-```bash
 make agent-context TASK=<id>
 ```
+
+Respect exactly one active managed task and use the generated context bundle.
+{% else %}
+This project uses lightweight governance. There is no mandatory task state
+machine for ordinary implementation work. Use the brief, architecture, workflow,
+quality gates, and any relevant ADRs as the durable context.
+{% endif %}
 
 ## Architecture Rules
 
 - Start from the current project type: `{{ project_type }}`.
 - Start from the current runtime level: `{{ runtime_level }}`.
-- Do not add databases, queues, caches, external services, authentication, Kubernetes, or production deployment unless a requirement, ADR, and approval level justify it.
-- Backend business logic belongs outside FastAPI routes.
-- Backend domain code must not import FastAPI, SQLAlchemy, or infrastructure clients.
-- Frontend pages compose features; feature logic belongs in feature composables or services.
+- Start from the current governance mode: `{{ governance }}`.
+- Use the simplest architecture that satisfies the current requirement.
+- Keep business rules independently testable from transport concerns.
+- Introduce abstractions only when repetition, coupling, complexity, or an explicit requirement justifies them.
+- Do not add databases, queues, caches, external services, authentication, Kubernetes, or production deployment unless a concrete requirement and ADR justify it.
+{% if project_type in ["backend", "fullstack"] %}
+- Backend business rules belong outside FastAPI route handlers.
+{% endif %}
+{% if project_type in ["frontend", "fullstack"] %}
+- Frontend pages compose features; feature logic belongs in feature composables or services when the feature has meaningful behavior.
+{% endif %}
+{% if project_type == "fullstack" %}
 - API types must be generated from OpenAPI once a backend API contract exists.
+{% endif %}
 
 ## Standard Commands
 
@@ -33,6 +54,9 @@ make test
 make lint
 make typecheck
 make check
+make format
+make validate-docs
+{% if governance == "managed" %}
 make agent-status
 make agent-context TASK=T-001
 make agent-pre-task TASK=T-001
@@ -48,23 +72,45 @@ make task-complete TASK=T-001
 make task-block TASK=T-001 REASON="..." UNBLOCK="..."
 make task-unblock TASK=T-001
 make task-cancel TASK=T-001
+make sync-project-docs
+{% endif %}
 ```
 
 ## Approval Boundaries
 
-- A0: small fixes, tests, documentation, local refactors, next-task proposals.
-- A1: public behavior changes, new endpoints, new modules, non-destructive schema changes.
-- A2: scope changes, production deployment, destructive data changes, auth changes, new infrastructure services, paid external services, project retirement.
+- Ordinary reversible implementation work can proceed autonomously when it is already scoped and automated checks pass.
+- Human approval is required for destructive or irreversible data operations, authentication or authorization boundaries, security-sensitive changes, secret handling, paid external services, production deployment, destructive schema migrations, major scope expansion, and infrastructure with significant operational or financial consequences.
+{% if governance == "managed" %}
+- Managed A2 work needs human approval before start. Managed A1 work can proceed, but cannot be completed without human approval.
 - `make task-approve` is for humans only. AI agents must not autonomously record A1 or A2 approval.
+{% endif %}
 
 ## Workflow
 
+{% if workflow_mode == "local" %}
+Workflow mode is `local`: agents may work in the current local repository.
+Commits, pushes, and pull requests are optional unless requested.
+{% elif workflow_mode == "branch" %}
+Workflow mode is `branch`: agents should work on a dedicated branch. Commits
+may be created, but pushing and pull requests are optional unless requested.
+{% else %}
+Workflow mode is `pr`: agents must work on a non-`main` branch, commit their own
+changes, push to `origin`, and open a ready pull request. Do not push directly
+to `main`.
+{% endif %}
+
+{% if governance == "managed" %}
+{% if workflow_mode != "local" %}
 Before editing files, agents must be on a non-`main` branch. If the current
 branch is `main`, create a dedicated branch for the task first.
+{% endif %}
 
 General rules are in `.agents/`. Codex adapter notes are in `.codex/`.
 Project-specific context is in `project/` and `docs/`. Run
 `make agent-pre-review TASK=<id>` before review, do not bypass controlled task
-transitions, and keep dashboards synchronized and valid. For every agent-made
-change, commit the agent's own changes, push the branch to `origin`, and open a
-ready GitHub pull request. Do not push directly to `main`.
+transitions, and keep dashboards synchronized and valid.
+{% else %}
+Project-specific context is in `project/brief.md`, `docs/`, and ADRs under
+`docs/decisions/`. Keep changes small, run `make check`, and update the brief or
+ADRs when implementation teaches something durable.
+{% endif %}

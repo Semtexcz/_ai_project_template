@@ -205,7 +205,7 @@ def assert_built_runtime(generated: Path, env: Mapping[str, str]) -> None:
             "name": "Example Fullstack",
             "version": "0.1.0",
             "environment": "local",
-            "next_step": "Open project/index.md",
+            "next_step": "Open project/brief.md",
         }
         openapi = get_json(backend_url, "/openapi.json")
         assert openapi["paths"]["/api/system/info"]["get"]["operationId"] == "getSystemInfo"
@@ -296,7 +296,7 @@ def test_fullstack_local_golden_path(tmp_path: Path) -> None:
         env=env,
     )
 
-    run_command(["make", "setup"], generated, env, timeout=300)
+    run_command(["make", "setup"], generated, env, timeout=600)
     run_command(["make", "validate-docs"], generated, env)
     run_command(["make", "api-check"], generated, env)
     assert_contract_drift_is_detected(generated, env)

@@ -9,9 +9,10 @@ Template-owned files are maintained by the template and may be updated during a
 Copier upgrade:
 
 - `.github/workflows/`
-- `.codex/` thin adapter files
-- `.agents/` canonical skills, schemas, context map, and hooks
-- `tools/`
+- `.codex/` thin adapter files when `governance=managed`
+- `.agents/` canonical skills, schemas, context map, and hooks when
+  `governance=managed`
+- `tools/` files selected by project type and governance
 - `.gitignore`
 - `.template-version`
 - generated API client runtime scaffolding under `frontend/shared/api/`
@@ -50,9 +51,9 @@ the same hunk changes on both sides:
 - `docs/workflow.md`
 - `docs/quality.md`
 - `docs/architecture.md`
-- `project/state.yaml`
-- `project/board.md`
-- `project/index.md`
+- `project/state.yaml` when `governance=managed`
+- `project/board.md` when `governance=managed`
+- `project/index.md` when `governance=managed`
 
 Do not commit unresolved conflict markers or `.rej` files. Review every
 merge-sensitive change before accepting an upgrade.

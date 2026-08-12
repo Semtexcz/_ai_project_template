@@ -1,0 +1,159 @@
+---
+type: workflow
+status: active
+source_of_truth_for:
+  - daily-change-loop
+read_when:
+  - implement-change
+  - review-change
+  - complete-task
+update_when:
+  - workflow-policy-change
+---
+
+# Workflow
+
+Project type: `{{ project_type }}`. Runtime level: `{{ runtime_level }}`.
+Governance: `{{ governance }}`. Workflow mode: `{{ workflow_mode }}`.
+
+## Change Loop
+
+Understand enough -> build the smallest useful vertical slice -> run checks ->
+learn -> refine durable project knowledge.
+
+Use executable guardrails before process gates:
+
+```bash
+make setup
+make check
+make build
+```
+
+`make check` is validation-only. It must not rewrite project files. Use
+`make format` for formatting changes.
+{% if governance == "managed" %}
+Use `make sync-project-docs` when generated project dashboards need refresh.
+{% endif %}
+
+## Governance
+
+{% if governance == "lightweight" %}
+Lightweight governance has no mandatory task state machine, approval state,
+generated board, milestone gate, or ready-for-development gate. Keep durable
+context small:
+
+- `project/brief.md` for problem, users, outcome, constraints, and first slice
+- `docs/architecture.md` for current technical shape
+- `docs/decisions/` for ADRs when decisions become durable
+
+Ordinary reversible implementation work can proceed when it fits that context
+and `make check` passes.
+{% else %}
+Managed governance uses deterministic project state, task lifecycle commands,
+dependencies, dashboards, and approval metadata.
+
+Use the deterministic commands instead of editing task status by hand:
+
+```bash
+make agent-status
+make agent-context TASK=T-001
+make agent-pre-task TASK=T-001
+make project-status
+make task-ready TASK=T-001
+make task-start TASK=T-001
+make agent-pre-review TASK=T-001
+make task-review TASK=T-001
+make task-complete TASK=T-001
+make agent-post-task TASK=T-001
+make task-block TASK=T-001 REASON="..." UNBLOCK="..."
+make task-unblock TASK=T-001
+make task-cancel TASK=T-001
+make sync-project-docs
+make validate-project
+```
+
+Allowed transitions are `backlog -> ready`, `ready -> in-progress`,
+`in-progress -> review`, `in-progress -> blocked`, `review -> in-progress`,
+`review -> done`, `blocked -> ready`, `blocked -> in-progress`, and cancellation
+from any active state. A0 tasks may also move from `in-progress` directly to
+`done` when Definition of Done is satisfied.
+{% endif %}
+
+## Human Approval
+
+Human approval is based on blast radius, irreversibility, security, cost, and
+production risk.
+
+Human approval is required for:
+
+- destructive or irreversible data operations
+- authentication or authorization boundary changes
+- security-sensitive changes or secret handling
+- paid external services
+- production deployment
+- destructive schema migrations
+- major scope expansion
+- infrastructure with significant operational or financial consequences
+
+Normal reversible implementation work does not need human approval merely
+because it adds a module, endpoint, internal refactor, tests, UI behavior, or
+ordinary public behavior required by already-scoped work.
+
+{% if governance == "managed" %}
+Managed approval levels:
+
+- A0: no human approval required; use `approval_status: not-required`
+- A1: implementation can proceed, but `review -> done` requires human approval
+- A2: work cannot start until a human has explicitly approved it
+
+AI agents must not autonomously create human approvals. A human may record one
+with:
+
+```bash
+make task-approve TASK=T-001 APPROVED_BY="Human Name"
+```
+{% endif %}
+
+## Git Workflow
+
+{% if workflow_mode == "local" %}
+`local` mode is suitable for experiments and personal projects. Agents may work
+in the current local repository. Commits, pushes, and pull requests are optional
+unless requested.
+{% elif workflow_mode == "branch" %}
+`branch` mode asks agents to work on a dedicated branch. Commits may be created,
+but pushing and pull requests are optional unless requested.
+{% else %}
+`pr` mode preserves the strict branch -> commit -> push -> pull request
+workflow. Agents work on a non-`main` branch, commit their own changes, push to
+`origin`, and open a ready pull request. Direct pushes to `main` are not part of
+this workflow.
+{% endif %}
+
+## Release and Post-Release
+
+Local projects may stop at verified checks. Shared and production projects need
+release notes, rollback notes, and post-release verification appropriate to
+their runtime level.
+
+{% if project_type == "fullstack" and runtime_level == "production" %}
+For production full-stack projects, the minimum local release candidate check is:
+
+```bash
+make setup
+make api-check
+make check
+make build
+make image-build
+make image-inspect
+make prod-up
+make prod-status
+make prod-smoke
+make e2e-production
+make prod-down
+```
+
+Treat that as artifact readiness only. Actual deployment still needs a target
+environment, secret handling, rollout and rollback ownership, and any required
+human approval.
+{% endif %}

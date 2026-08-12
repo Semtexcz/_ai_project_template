@@ -38,6 +38,30 @@ Use `--defaults` only when you intentionally want to reuse the previous project
 answers. Do not repair update metadata by manually editing
 `.copier-answers.yml`.
 
+## Governance Migration
+
+Templates before the progressive-governance refactor did not have a
+`governance` answer and effectively generated managed governance. Existing
+generated projects should choose explicitly during upgrade:
+
+```bash
+copier update --vcs-ref <new-version> --data governance=managed
+```
+
+Use `governance=managed` to preserve `project/state.yaml`, task lifecycle,
+boards, dashboards, managed agent context, and approval metadata.
+
+Use `governance=lightweight` only when you intentionally want to stop using the
+managed project-control layer. Before doing that, archive or remove managed
+files such as `project/state.yaml`, `project/tasks/`, `project/board.md`,
+`project/index.md`, `.agents/`, `.codex/`, and managed lifecycle references in
+project-owned docs. Copier cannot safely infer that choice from local
+customizations.
+
+`workflow_mode` is also explicit on upgrade. If omitted, the new default is
+`local`. Select `workflow_mode=pr` to preserve the previous strict
+branch/commit/push/ready-PR instructions.
+
 ## After Updating
 
 Run the profile checks:
@@ -48,6 +72,10 @@ make api-check
 make check
 make build
 ```
+
+For managed projects, run `make sync-project-docs` explicitly before `make check`
+if the update changes generated dashboard content. `make check` reports drift
+but does not repair it.
 
 For `fullstack-local`, also run the built runtime and browser E2E:
 
@@ -62,11 +90,13 @@ The concrete ownership map lives in `docs/template-ownership.md`.
 
 Project-owned files such as `project/brief.md`, `project/roadmap.md`,
 `project/requirements.md`, `project/tasks/*.md`, `docs/product.md`, and ADRs are
-created on first copy and protected with Copier `skip_if_exists`.
+created on first copy and protected with Copier `skip_if_exists` when they are
+rendered by the selected governance mode.
 
 Template-owned files such as `tools/`, `.github/workflows/`, `.codex/`,
 `.agents/`, `.gitignore`, `.template-version`, and baseline system scaffolding
-may update during a template upgrade.
+may update during a template upgrade when selected by the generated project's
+governance, workflow, project type, and runtime answers.
 
 Merge-sensitive files such as `README.md`, `AGENTS.md`, `Makefile`,
 `pyproject.toml`, `docs/workflow.md`, and `docs/quality.md` require review.
@@ -79,9 +109,10 @@ commit the upgrade.
 
 ## Migrations
 
-The current `v1.0.0` to `v1.1.0` golden-path scenario does not need Copier
-migrations because it only adds files and updates mergeable template content.
-Use migrations only when a future release must rename paths, move directories,
-transform configuration, or change the answers schema. Migration tests must use
-the same temporary two-tag Git repository pattern as the Copier update golden
-path.
+The governance refactor adds answers rather than silently moving product-owned
+files. Full automatic migration from managed to lightweight would be unsafe
+because it could discard project state and tasks, so the mode choice is
+documented and explicit. Use Copier migrations only when a future release must
+rename paths, move directories, transform configuration, or change the answers
+schema. Migration tests must use the same temporary two-tag Git repository
+pattern as the Copier update golden path.

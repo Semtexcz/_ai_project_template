@@ -1,11 +1,14 @@
 # Profile Matrix
 
-Profiles are the product of two Copier answers:
+Profiles are selected with independent Copier answers:
 
 - `project_type`: `script`, `library`, `backend`, `frontend`, `fullstack`
 - `runtime_level`: `local`, `shared`, `production`
+- `governance`: `lightweight`, `managed`
+- `workflow_mode`: `local`, `branch`, `pr`
 
-Presets may set these values, but they are not a third source of truth.
+Presets may set runtime profile values, but they are not a third source of
+truth.
 
 ## Project Types
 
@@ -25,6 +28,21 @@ Presets may set these values, but they are not a third source of truth.
 | `shared` | Buildable shared-environment baseline | Packaged backend/library artifacts or built frontend server output | Cloud deployment, registry push, HA, secrets management |
 | `production` | Locally verifiable production-like artifacts where supported | OCI image targets, inspection, Compose smoke/status targets for supported runtimes | External release, TLS/HSTS termination, database backups, Kubernetes |
 
+## Governance Modes
+
+| `governance` | Default | Includes | Does not require |
+|---|---|---|---|
+| `lightweight` | Yes | AI engineering kernel, `project/brief.md`, docs, ADRs, technical checks | Task state machine, approval metadata, board/dashboard generation, milestones, ready-for-development gate |
+| `managed` | No | Everything in lightweight plus `project/state.yaml`, tasks, lifecycle commands, dashboards, dependencies, managed agent context, A0/A1/A2 approval metadata | Production deployment, paid services, or infrastructure beyond the selected runtime profile |
+
+## Workflow Modes
+
+| `workflow_mode` | Default | Agent Git behavior |
+|---|---|---|
+| `local` | Yes | Work may happen in the current local repository; commits, pushes, and PRs are optional unless requested. |
+| `branch` | No | Work should happen on a dedicated branch; commits may be created, but push/PR is optional unless requested. |
+| `pr` | No | Preserve strict branch -> commit -> push -> ready PR workflow and generated main-push CI guard where CI is rendered. |
+
 ## Golden Path Profiles
 
 | Profile | What must be true |
@@ -36,16 +54,25 @@ Presets may set these values, but they are not a third source of truth.
 | `fullstack-local` | Backend and frontend can check together, keep the generated client synchronized, build, and run locally. |
 | `fullstack-production` | Full-stack artifacts can build, inspect, run through Compose, smoke test, and shut down locally. |
 
-## Common Generated Project Layer
+## Common AI Engineering Kernel
 
 Every profile includes:
 
-- `README.md` with current dashboard and one next action command
+- `README.md`
+- `project/brief.md`
+- `docs/product.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/quality.md`
+- `docs/decisions/`
+- `AGENTS.md`
+- `Makefile` targets for setup, run/dev, test, lint, typecheck, check, build,
+  and selected profile guardrails
+
+Managed governance additionally includes:
+
+- `README.md` dashboard with one next action command
 - `project/state.yaml`, `project/index.md`, `project/board.md`, `project/roadmap.md`
 - `project/tasks/T-001-initialize-project.md`
-- `docs/product.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/quality.md`
 - `tools/project.py` plus Make targets for status, sync, validation, and task transitions
-- `AGENTS.md`, `.agents/`, and `.codex/` instructions for AI-assisted work
+- `.agents/` and `.codex/` instructions for managed AI-assisted work
 
 ## Profile-Specific Documentation
 

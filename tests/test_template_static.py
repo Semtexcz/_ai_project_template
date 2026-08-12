@@ -26,6 +26,10 @@ def test_copier_configuration_has_required_axes() -> None:
         "shared",
         "production",
     }
+    assert set(config["governance"]["choices"].values()) == {"lightweight", "managed"}
+    assert config["governance"]["default"] == "lightweight"
+    assert set(config["workflow_mode"]["choices"].values()) == {"local", "branch", "pr"}
+    assert config["workflow_mode"]["default"] == "local"
 
 
 def test_generated_project_has_single_state_source_and_dashboard_tools() -> None:
@@ -178,10 +182,10 @@ def test_generated_frontend_commands_bootstrap_pnpm_with_corepack() -> None:
     assert '"corepack pnpm"' in generated_entrypoints
 
 
-def test_agent_changes_require_ready_pull_request_workflow() -> None:
+def test_agent_workflow_strictness_is_configurable() -> None:
     root_agents = (ROOT / "AGENTS.md").read_text()
     generated_agents = (ROOT / "template" / "AGENTS.md.jinja").read_text()
-    required_instruction_parts = [
+    root_required_instruction_parts = [
         "non-`main` branch",
         "commit the agent's own changes",
         "push the branch",
@@ -189,9 +193,15 @@ def test_agent_changes_require_ready_pull_request_workflow() -> None:
         "ready GitHub pull request",
         "Do not push directly to",
     ]
-    for content in [root_agents, generated_agents]:
-        for part in required_instruction_parts:
-            assert part in content
+    for part in root_required_instruction_parts:
+        assert part in root_agents
+    for part in [
+        "Workflow mode is `local`",
+        "Workflow mode is `branch`",
+        "Workflow mode is `pr`",
+        "workflow_mode",
+    ]:
+        assert part in generated_agents
 
     root_ci = (ROOT / ".github" / "workflows" / "template-ci.yml").read_text()
     generated_ci = (ROOT / "template" / ".github" / "workflows" / "ci.yml.jinja").read_text()
@@ -204,6 +214,148 @@ def test_agent_changes_require_ready_pull_request_workflow() -> None:
 
     assert "${{ github.token }}" in root_ci
     assert "${{ '{{' }} github.token {{ '}}' }}" in generated_ci
+    assert "{% if workflow_mode == \"pr\" %}" in generated_ci
+
+
+def copy_project(
+    tmp_path: Path,
+    *,
+    project_type: str = "script",
+    runtime_level: str = "local",
+    governance: str = "lightweight",
+    workflow_mode: str = "local",
+) -> Path:
+    generated = tmp_path / f"{project_type}-{runtime_level}-{governance}-{workflow_mode}"
+    env = {
+        **os.environ,
+        "UV_LINK_MODE": "copy",
+        "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
+    }
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "copier",
+            "copy",
+            "--defaults",
+            "--skip-tasks",
+            "--data",
+            f"project_name={generated.name}",
+            "--data",
+            f"project_type={project_type}",
+            "--data",
+            f"runtime_level={runtime_level}",
+            "--data",
+            f"governance={governance}",
+            "--data",
+            f"workflow_mode={workflow_mode}",
+            "--data",
+            "include_reference_feature=false",
+            "--trust",
+            "--vcs-ref=HEAD",
+            str(ROOT),
+            str(generated),
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return generated
+
+
+def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Path) -> None:
+    generated = copy_project(tmp_path)
+
+    assert (generated / "project" / "brief.md").exists()
+    assert (generated / "docs" / "decisions" / "index.md").exists()
+    managed_only = [
+        ".agents",
+        ".codex",
+        "tools/agent.py",
+        "tools/project.py",
+        "project/state.yaml",
+        "project/tasks",
+        "project/board.md",
+        "project/index.md",
+        "project/roadmap.md",
+        "docs/lifecycle.md",
+    ]
+    for relative in managed_only:
+        assert not (generated / relative).exists(), relative
+
+    makefile = (generated / "Makefile").read_text()
+    assert "sync-project-docs:" not in makefile
+    assert "task-start:" not in makefile
+    assert "validate-project:" not in makefile
+    assert "check: validate-docs format-check lint typecheck test" in makefile
+
+
+def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
+    generated = copy_project(tmp_path, governance="managed", workflow_mode="pr")
+
+    assert (generated / "project" / "state.yaml").exists()
+    assert (generated / "project" / "tasks" / "T-001-initialize-project.md").exists()
+    assert (generated / ".agents" / "context-map.yaml").exists()
+    makefile = (generated / "Makefile").read_text()
+    for target in [
+        "sync-project-docs:",
+        "validate-project:",
+        "agent-context:",
+        "task-start:",
+        "task-approve:",
+    ]:
+        assert target in makefile
+    assert "check: validate-docs validate-project validate-agent-skills format-check lint typecheck test" in makefile
+
+
+def test_workflow_modes_render_expected_agent_policy(tmp_path: Path) -> None:
+    local = copy_project(tmp_path, workflow_mode="local")
+    branch = copy_project(tmp_path, workflow_mode="branch")
+    pr = copy_project(tmp_path, governance="managed", workflow_mode="pr")
+
+    assert "Workflow mode is `local`" in (local / "AGENTS.md").read_text()
+    assert "Workflow mode is `branch`" in (branch / "AGENTS.md").read_text()
+    assert "Workflow mode is `pr`" in (pr / "AGENTS.md").read_text()
+    assert "ready pull request" in (pr / "AGENTS.md").read_text()
+
+
+def test_generated_make_check_is_non_mutating_for_clean_lightweight_project(tmp_path: Path) -> None:
+    generated = copy_project(tmp_path)
+    env = {
+        **os.environ,
+        "UV_LINK_MODE": "copy",
+        "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
+    }
+    subprocess.run(["make", "setup"], cwd=generated, env=env, check=True)
+    subprocess.run(["git", "init", "-q"], cwd=generated, env=env, check=True)
+    subprocess.run(["git", "config", "user.email", "check@example.invalid"], cwd=generated, env=env, check=True)
+    subprocess.run(["git", "config", "user.name", "Check Purity"], cwd=generated, env=env, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=generated, env=env, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "baseline"], cwd=generated, env=env, check=True)
+    before = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=generated,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        check=True,
+    ).stdout
+
+    subprocess.run(["make", "check"], cwd=generated, env=env, check=True)
+    after = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=generated,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        check=True,
+    ).stdout
+
+    assert before == ""
+    assert after == ""
 
 
 def test_conventional_commit_skill_uses_cheap_model_and_validator() -> None:

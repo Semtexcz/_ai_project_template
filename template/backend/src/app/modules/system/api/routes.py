@@ -42,5 +42,5 @@ def get_system_info() -> SystemInfoResponse:
         name=settings.app_name,
         version=settings.version,
         environment=settings.environment,
-        next_step="Open project/index.md",
+        next_step="Open project/brief.md",
     )

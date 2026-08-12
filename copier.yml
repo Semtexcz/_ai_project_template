@@ -36,6 +36,22 @@ _exclude:
   - "{% if runtime_level == 'local' %}/.github/workflows{% endif %}"
   - "{% if runtime_level == 'local' %}/.github/workflows/**{% endif %}"
   - "{% if not include_reference_feature %}/examples/**{% endif %}"
+  - "{% if governance != 'managed' %}/.agents{% endif %}"
+  - "{% if governance != 'managed' %}/.agents/**{% endif %}"
+  - "{% if governance != 'managed' %}/.codex{% endif %}"
+  - "{% if governance != 'managed' %}/.codex/**{% endif %}"
+  - "{% if governance != 'managed' %}/tools/agent.py{% endif %}"
+  - "{% if governance != 'managed' %}/tools/project.py{% endif %}"
+  - "{% if governance != 'managed' %}/project/board.md{% endif %}"
+  - "{% if governance != 'managed' %}/project/index.md{% endif %}"
+  - "{% if governance != 'managed' %}/project/milestones{% endif %}"
+  - "{% if governance != 'managed' %}/project/milestones/**{% endif %}"
+  - "{% if governance != 'managed' %}/project/requirements.md{% endif %}"
+  - "{% if governance != 'managed' %}/project/roadmap.md{% endif %}"
+  - "{% if governance != 'managed' %}/project/state.yaml{% endif %}"
+  - "{% if governance != 'managed' %}/project/tasks{% endif %}"
+  - "{% if governance != 'managed' %}/project/tasks/**{% endif %}"
+  - "{% if governance != 'managed' %}/docs/lifecycle.md{% endif %}"
 _skip_if_exists:
   - docs/product.md
   - project/brief.md
@@ -77,6 +93,23 @@ runtime_level:
     Local: local
     Shared: shared
     Production: production
+  default: local
+
+governance:
+  type: str
+  help: Select the project governance level.
+  choices:
+    Lightweight: lightweight
+    Managed: managed
+  default: lightweight
+
+workflow_mode:
+  type: str
+  help: Select the default Git workflow strictness for AI agents.
+  choices:
+    Local: local
+    Branch: branch
+    Pull request: pr
   default: local
 
 preset:
