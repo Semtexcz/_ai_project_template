@@ -25,7 +25,7 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Last completed task | [T-020](project/tasks/T-020-introduce-lightweight-progressive-governance.md) |
+| Last completed task | [T-021](project/tasks/T-021-fix-lightweight-render-matrix-ci.md) |
 | Active task | None |
 | Approval | None |
 | Waiting | None |

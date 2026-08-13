@@ -232,6 +232,8 @@ sync-project-docs:
 validate-project:
 	PYTHONDONTWRITEBYTECODE=1 python tools/project.py validate
 
+{% endif %}
+
 validate-docs:
 {% if governance == "managed" %}
 	PYTHONDONTWRITEBYTECODE=1 python tools/project.py validate-docs
@@ -245,6 +247,7 @@ validate-docs:
 	@test -f project/brief.md
 {% endif %}
 
+{% if governance == "managed" %}
 agent-status:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py status
 

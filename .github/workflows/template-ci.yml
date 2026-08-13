@@ -81,16 +81,25 @@ jobs:
         include:
           - project_type: script
             runtime_level: local
+            governance: lightweight
           - project_type: library
             runtime_level: shared
+            governance: lightweight
           - project_type: backend
             runtime_level: shared
+            governance: lightweight
           - project_type: frontend
             runtime_level: shared
+            governance: lightweight
           - project_type: fullstack
             runtime_level: local
+            governance: lightweight
           - project_type: fullstack
             runtime_level: production
+            governance: lightweight
+          - project_type: fullstack
+            runtime_level: production
+            governance: managed
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -100,19 +109,25 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Render profile
         run: |
-          uvx copier copy . "/tmp/${{ matrix.project_type }}-${{ matrix.runtime_level }}" \
+          uvx copier copy . "/tmp/${{ matrix.project_type }}-${{ matrix.runtime_level }}-${{ matrix.governance }}" \
             --defaults \
             --data project_name="Generated App" \
             --data project_type="${{ matrix.project_type }}" \
             --data runtime_level="${{ matrix.runtime_level }}" \
+            --data governance="${{ matrix.governance }}" \
             --data include_reference_feature=false \
             --trust --vcs-ref=HEAD
       - name: Validate generated project
-        working-directory: /tmp/${{ matrix.project_type }}-${{ matrix.runtime_level }}
+        working-directory: /tmp/${{ matrix.project_type }}-${{ matrix.runtime_level }}-${{ matrix.governance }}
         run: |
-          python -m pip install pyyaml
-          make sync-project-docs
-          make validate-project
+          if [ "${{ matrix.governance }}" = "managed" ]; then
+            python -m pip install pyyaml
+            make sync-project-docs
+            make validate-project
+            make validate-agent-skills
+          else
+            make validate-docs
+          fi
 
   script-local-golden-path:
     runs-on: ubuntu-latest

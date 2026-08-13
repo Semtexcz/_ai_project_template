@@ -41,6 +41,7 @@ _None_
 - [T-014](tasks/T-014-run-targeted-remediation-audit.md) - P1 - Run targeted remediation audit
 - [T-015](tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) - P1 - Make template and generated-project documentation self-explanatory
 - [T-020](tasks/T-020-introduce-lightweight-progressive-governance.md) - P1 - Introduce lightweight progressive governance
+- [T-021](tasks/T-021-fix-lightweight-render-matrix-ci.md) - P1 - Fix lightweight render matrix CI
 
 ## Cancelled
 

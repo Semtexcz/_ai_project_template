@@ -217,6 +217,20 @@ def test_agent_workflow_strictness_is_configurable() -> None:
     assert "{% if workflow_mode == \"pr\" %}" in generated_ci
 
 
+def test_template_ci_render_matrix_respects_governance_modes() -> None:
+    root_ci = (ROOT / ".github" / "workflows" / "template-ci.yml").read_text()
+
+    assert "governance: lightweight" in root_ci
+    assert "governance: managed" in root_ci
+    assert '--data governance="${{ matrix.governance }}"' in root_ci
+    assert '/tmp/${{ matrix.project_type }}-${{ matrix.runtime_level }}-${{ matrix.governance }}' in root_ci
+    assert 'if [ "${{ matrix.governance }}" = "managed" ]; then' in root_ci
+    assert "make sync-project-docs" in root_ci
+    assert "make validate-project" in root_ci
+    assert "make validate-agent-skills" in root_ci
+    assert "make validate-docs" in root_ci
+
+
 def copy_project(
     tmp_path: Path,
     *,
@@ -290,6 +304,7 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
     assert "sync-project-docs:" not in makefile
     assert "task-start:" not in makefile
     assert "validate-project:" not in makefile
+    assert "validate-docs:" in makefile
     assert "check: validate-docs format-check lint typecheck test" in makefile
 
 
