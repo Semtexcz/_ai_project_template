@@ -49,6 +49,8 @@ PERSONAL_PATH_RE = re.compile(
 
 PROJECT_TYPES = {"script", "library", "backend", "frontend", "fullstack", "template"}
 RUNTIME_LEVELS = {"local", "shared", "production"}
+GOVERNANCE_MODES = {"lightweight", "managed"}
+WORKFLOW_MODES = {"local", "branch", "pr"}
 RISKS = {"low", "medium", "high"}
 PROJECT_STATUSES = {"active", "paused", "done", "retired"}
 LIFECYCLE_PHASES = {
@@ -650,12 +652,20 @@ def validate_state_schema(state: dict[str, Any], tasks_by: dict[str, Task]) -> l
             errors.append(f"project/state.yaml is missing mapping '{key}'. Add the {key} section.")
     if errors:
         return errors
+    assert isinstance(project, dict)
+    assert isinstance(lifecycle, dict)
+    assert isinstance(work, dict)
+    assert isinstance(template, dict)
     if project.get("type") not in PROJECT_TYPES:
         errors.append(
             f"project.type '{project.get('type')}' is invalid. Use one of: {', '.join(sorted(PROJECT_TYPES))}."
         )
     if project.get("runtime_level") not in RUNTIME_LEVELS:
         errors.append("project.runtime_level is invalid. Use local, shared, or production.")
+    if "governance" in project and project.get("governance") not in GOVERNANCE_MODES:
+        errors.append("project.governance is invalid. Use lightweight or managed.")
+    if "workflow_mode" in project and project.get("workflow_mode") not in WORKFLOW_MODES:
+        errors.append("project.workflow_mode is invalid. Use local, branch, or pr.")
     if project.get("risk") not in RISKS:
         errors.append("project.risk is invalid. Use low, medium, or high.")
     if project.get("status") not in PROJECT_STATUSES:

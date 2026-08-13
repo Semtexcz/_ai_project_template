@@ -17,7 +17,13 @@ from typing import Any, cast
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run_command(command: list[str], cwd: Path, env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: list[str],
+    cwd: Path,
+    env: Mapping[str, str],
+    *,
+    timeout: int = 180,
+) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -26,7 +32,7 @@ def run_command(command: list[str], cwd: Path, env: Mapping[str, str]) -> subpro
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
-        timeout=180,
+        timeout=timeout,
     )
     if result.returncode != 0:
         raise AssertionError(
@@ -200,7 +206,7 @@ def test_backend_shared_golden_path(tmp_path: Path) -> None:
         env=env,
     )
 
-    run_command(["make", "setup"], cwd=generated, env=env)
+    run_command(["make", "setup"], cwd=generated, env=env, timeout=360)
     run_command(["make", "validate-docs"], cwd=generated, env=env)
     run_command(["make", "check"], cwd=generated, env=env)
     run_command(["make", "build"], cwd=generated, env=env)

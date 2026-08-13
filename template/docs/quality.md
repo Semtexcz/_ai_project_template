@@ -35,7 +35,7 @@ update_when:
 ## Security Baseline
 
 - No committed secrets.
-- No destructive data action without A2 approval.
+- No destructive data action without explicit human approval.
 - Dependencies are updated intentionally.
 - Sensitive data handling requires explicit requirements.
 

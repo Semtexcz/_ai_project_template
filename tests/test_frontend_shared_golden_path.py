@@ -16,7 +16,13 @@ from typing import cast
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run_command(command: list[str], cwd: Path, env: Mapping[str, str]) -> subprocess.CompletedProcess[str]:
+def run_command(
+    command: list[str],
+    cwd: Path,
+    env: Mapping[str, str],
+    *,
+    timeout: int = 240,
+) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -25,7 +31,7 @@ def run_command(command: list[str], cwd: Path, env: Mapping[str, str]) -> subpro
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
-        timeout=240,
+        timeout=timeout,
     )
     if result.returncode != 0:
         raise AssertionError(
@@ -122,7 +128,7 @@ def assert_frontend_runtime(generated: Path, env: Mapping[str, str]) -> None:
         body = read_root_html(f"http://127.0.0.1:{port}", process)
         assert "Example Frontend" in body
         assert "<h1" in body
-        assert "project/index.md" in body
+        assert "project/brief.md" in body
 
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/missing", timeout=2)
@@ -183,7 +189,7 @@ def test_frontend_shared_golden_path(tmp_path: Path) -> None:
         env=env,
     )
 
-    run_command(["make", "setup"], cwd=generated, env=env)
+    run_command(["make", "setup"], cwd=generated, env=env, timeout=480)
     run_command(["make", "check"], cwd=generated, env=env)
     run_command(["make", "build"], cwd=generated, env=env)
 

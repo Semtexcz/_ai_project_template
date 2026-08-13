@@ -10,8 +10,8 @@ describe('WelcomePanel', () => {
         content: {
           projectName: 'Example Frontend',
           description: 'Generated frontend project.',
-          nextStepHref: '/project/index.md',
-          nextStepLabel: 'Open project/index.md to continue.'
+          nextStepHref: '/project/brief.md',
+          nextStepLabel: 'Open project/brief.md to continue.'
         }
       }
     })
@@ -20,8 +20,8 @@ describe('WelcomePanel', () => {
     expect(heading.text()).toBe('Example Frontend')
     expect(wrapper.findAll('h1')).toHaveLength(1)
     expect(wrapper.get('section').attributes('aria-labelledby')).toBe('welcome-title')
-    expect(wrapper.get('a').attributes('href')).toBe('/project/index.md')
-    expect(wrapper.get('a').text()).toContain('project/index.md')
+    expect(wrapper.get('a').attributes('href')).toBe('/project/brief.md')
+    expect(wrapper.get('a').text()).toContain('project/brief.md')
   })
 
   it('renders empty-description fallback text', () => {
@@ -34,6 +34,6 @@ describe('WelcomePanel', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('Start by reviewing the generated project dashboard.')
+    expect(wrapper.text()).toContain('Start by reviewing the generated project brief.')
   })
 })

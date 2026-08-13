@@ -39,7 +39,7 @@ describe('SystemInfoPanel', () => {
         name: 'Example Fullstack',
         version: '0.1.0',
         environment: 'local',
-        next_step: 'Open project/index.md'
+        next_step: 'Open project/brief.md'
       },
       error: undefined
     })
@@ -49,7 +49,7 @@ describe('SystemInfoPanel', () => {
 
     expect(wrapper.text()).toContain('0.1.0')
     expect(wrapper.text()).toContain('local')
-    expect(wrapper.text()).toContain('Open project/index.md')
+    expect(wrapper.text()).toContain('Open project/brief.md')
     expect(wrapper.text()).not.toContain('Backend system information is unavailable.')
   })
 

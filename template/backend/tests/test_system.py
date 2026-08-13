@@ -57,7 +57,7 @@ def test_system_info_endpoint() -> None:
         name=Settings().app_name,
         version="0.1.0",
         environment="local",
-        next_step="Open project/index.md",
+        next_step="Open project/brief.md",
     )
 
 

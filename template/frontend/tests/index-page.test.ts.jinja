@@ -10,7 +10,7 @@ describe('index page', () => {
       global: {
         stubs: {
           SystemInfoPanel: {
-            template: '<section><h1>{{ project_name }}</h1><p>Open project/index.md</p></section>'
+            template: '<section><h1>{{ project_name }}</h1><p>Open project/brief.md</p></section>'
           }
         }
       }
@@ -21,6 +21,6 @@ describe('index page', () => {
 
     expect(wrapper.findAll('main')).toHaveLength(1)
     expect(wrapper.get('h1').text()).toBe('{{ project_name }}')
-    expect(wrapper.text()).toContain('project/index.md')
+    expect(wrapper.text()).toContain('project/brief.md')
   })
 })

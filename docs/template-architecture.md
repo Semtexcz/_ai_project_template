@@ -1,29 +1,45 @@
 # Template Architecture
 
-This repository is a Copier template plus a small project-control layer. It is
-not an application runtime by itself; it renders project runtimes from profile
-answers and keeps generated projects understandable and updateable.
+This repository is a Copier template plus optional project-control tooling. It
+is not an application runtime by itself; it renders project runtimes from
+profile answers and keeps generated projects understandable and updateable.
 
 ## Rendering Flow
 
 Copier reads `copier.yml`, renders files from `template/`, applies exclusions,
-and writes a generated project. The selected `project_type` decides whether the
-project contains Python package code, a FastAPI backend, a Nuxt frontend, or a
-full-stack combination. The selected `runtime_level` decides how far the runtime
-contract goes: local developer execution, shared build/run checks, or
-production-like local OCI artifact checks.
+and writes a generated project. The generated shape comes from five independent
+concerns:
+
+- AI engineering kernel: common executable guardrails, agent-facing invariants,
+  docs, ADRs, and update safety
+- `project_type`: Python package, FastAPI backend, Nuxt frontend, or full-stack
+  combination
+- `runtime_level`: local developer execution, shared build/run checks, or
+  production-like local OCI artifact checks
+- `governance`: lightweight durable context or managed project lifecycle
+- `workflow_mode`: local, branch, or pull-request Git workflow strictness
 
 Diagram: [template-flow.d2](diagrams/template-flow.d2)
 
 ## Profiles
 
-The two profile axes are deliberately separate. Presets are conveniences only;
-the authoritative values remain `project_type` and `runtime_level`. See
-[Profile Matrix](profile-matrix.md) for the current generated contents.
+The runtime profile axes are deliberately separate. Presets are conveniences
+only; the authoritative values remain `project_type` and `runtime_level`.
+Governance and workflow mode are independent from those axes. Valid conceptual
+combinations include `script + local + lightweight`,
+`backend + shared + lightweight`, `fullstack + local + lightweight`, and
+`fullstack + production + managed`. See [Profile Matrix](profile-matrix.md) for
+the current generated contents.
 
-## Generated Project Workflow
+## Governance Modes
 
-Every generated project has a single project state source:
+`governance=lightweight` is the default. It renders the AI engineering kernel,
+technical checks, `project/brief.md`, product/architecture/workflow/quality
+docs, and ADR scaffolding. It does not render a task state machine, approval
+state, generated board, mandatory milestone gate, or generated dashboard.
+
+`governance=managed` preserves the existing richer project-management system.
+It has a single project state source:
 
 - `project/state.yaml` stores phase, milestone, next gate, active task, and
   blocked flag.
@@ -39,9 +55,11 @@ Diagram: [generated-project-workflow.d2](diagrams/generated-project-workflow.d2)
 
 ## Agent Layer
 
-Generated projects include `AGENTS.md`, `.agents/`, and `.codex/`. `.agents`
+All generated projects include `AGENTS.md` with invariant-based engineering
+rules. Managed projects also include `.agents/` and `.codex/`. `.agents`
 contains canonical procedures, schemas, hooks, and context maps. `.codex` stays
-thin and adapts those instructions for Codex. The agent entry commands are:
+thin and adapts those instructions for Codex. The managed agent entry commands
+are:
 
 ```bash
 make agent-status
@@ -88,11 +106,37 @@ Diagram: [runtime-profiles.d2](diagrams/runtime-profiles.d2)
 ## Updates
 
 Copier update safety relies on `_skip_if_exists` for product-owned files such as
-product docs, roadmap, requirements, and existing task files. Template-owned
-workflow tools, Make targets, and scaffolding remain updateable. Update behavior
-is tested by the Copier update golden path.
+product docs, project brief, roadmap, requirements, existing task files, and
+ADRs. Template-owned workflow tools, Make targets, agent instructions, and
+scaffolding remain updateable.
+
+Existing generated projects created before the governance answer existed should
+choose a governance mode explicitly during upgrade. Use `governance=managed` to
+preserve project state, task lifecycle, boards, and approval metadata. Use
+`governance=lightweight` only after intentionally removing or archiving managed
+project-control files. Copier will not safely infer that choice from local
+customizations. Update behavior is tested by the Copier update golden path.
 
 ## Validation And Tests
+
+Generated project validation:
+
+```bash
+make validate-docs
+make check
+```
+
+Managed generated project validation also includes:
+
+```bash
+make sync-project-docs
+make validate-project
+make validate-agent-skills
+make check
+```
+
+`make check` is validation-only. Mutating operations are explicit commands such
+as `make format`, `make api-generate`, and managed `make sync-project-docs`.
 
 Template validation:
 
@@ -100,14 +144,6 @@ Template validation:
 make validate-template-docs
 make validate-project
 make validate-agent-skills
-```
-
-Generated project validation:
-
-```bash
-make sync-project-docs
-make validate-docs
-make validate-project
 make check
 ```
 

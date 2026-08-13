@@ -18,29 +18,32 @@ unblock_action:
 ## Goal
 
 Replace template placeholders with the first concrete project brief, scope,
-non-goals, success criteria, and next ready task.
+non-goals, success criteria, and first useful vertical slice.
 
 ## Context
 
-The generated project starts in definition. The owner must replace placeholders
-with concrete project knowledge before product implementation starts.
+The generated project starts with enough definition to work safely. Capture the
+problem, target user, desired outcome, critical constraints, and first
+hypothesis before or alongside the smallest useful implementation slice.
 
 ## Scope
 
-- Update project brief, requirements, roadmap, and generated status dashboards.
-- Keep the first task small and focused on project knowledge.
+- Update project brief, requirements, roadmap, and generated status dashboards
+  with only the knowledge needed for the first slice.
+- Identify the smallest useful vertical slice that can test the project
+  hypothesis.
 
 ## Out of Scope
 
-- Product implementation.
+- Exhaustive roadmap or full requirements definition.
 - Production runtime.
 - External services or infrastructure.
 
 ## Acceptance Criteria
 
-- [ ] `project/brief.md` names the problem, target user, desired outcome, scope, non-goals, assumptions, risks, and success criteria.
-- [ ] `project/roadmap.md` has at least the active milestone updated for this project.
-- [ ] `project/requirements.md` contains only concrete and verifiable requirements for the current scope.
+- [ ] `project/brief.md` names the problem, target user, desired outcome, critical constraints, and first useful vertical slice.
+- [ ] `project/roadmap.md` has only the current near-term direction needed for the first slice.
+- [ ] `project/requirements.md` contains concrete and verifiable requirements for the current slice.
 - [ ] `make sync-project-docs` and `make validate-project` pass.
 
 ## Verification
@@ -62,4 +65,5 @@ Pending.
 
 ## Notes
 
-Do not implement product code before the ready-for-development gate passes.
+Do not wait for exhaustive definition. Build the smallest useful slice once the
+critical context and constraints are clear enough to keep the work safe.

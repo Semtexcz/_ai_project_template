@@ -1,16 +1,18 @@
 # AI Project Golden Path Template
 
-Copier template for small-to-medium software projects that need executable
-defaults, lightweight project governance, and AI-agent instructions from the
-first commit. It generates Python scripts and libraries, FastAPI backends, Nuxt
-frontends, and full-stack projects with optional production-like local runtime
-checks.
+Copier template for AI-first software projects that should start small, ship a
+useful vertical slice quickly, and add stronger process constraints only when
+complexity or risk justifies them. It generates Python scripts and libraries,
+FastAPI backends, Nuxt frontends, and full-stack projects with optional
+production-like local runtime checks.
 
 Use this repository when you want a project scaffold that already knows how to:
 
 - choose a profile from `project_type` and `runtime_level`
-- keep project state in `project/state.yaml` plus task frontmatter
-- synchronize README, project index, and board dashboards
+- choose `governance=lightweight` or `governance=managed`
+- choose `workflow_mode=local`, `branch`, or `pr`
+- keep technical guardrails executable through Make targets and tests
+- preserve managed task state, dashboards, and approvals when explicitly enabled
 - validate internal documentation links, Make commands, and profile drift
 - support Copier updates without replacing product-owned files
 
@@ -23,7 +25,7 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Last completed task | [T-015](project/tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) |
+| Last completed task | [T-021](project/tasks/T-021-fix-lightweight-render-matrix-ci.md) |
 | Active task | None |
 | Approval | None |
 | Waiting | None |
@@ -35,7 +37,7 @@ Use this repository when you want a project scaffold that already knows how to:
 
 ## Quick Start
 
-Create a local script project:
+Create a local script project with the default lightweight governance:
 
 ```bash
 copier copy --defaults --data project_type=script --data runtime_level=local . /tmp/golden-script
@@ -45,10 +47,15 @@ make check
 make build
 ```
 
-Create a production-profile full-stack project:
+Create a managed production-profile full-stack project with strict PR workflow:
 
 ```bash
-copier copy --defaults --data project_type=fullstack --data runtime_level=production . /tmp/golden-fullstack
+copier copy --defaults \
+  --data project_type=fullstack \
+  --data runtime_level=production \
+  --data governance=managed \
+  --data workflow_mode=pr \
+  . /tmp/golden-fullstack
 cd /tmp/golden-fullstack
 make setup
 make check
@@ -57,14 +64,23 @@ make build
 
 ## Architecture
 
-Copier renders `template/` using two independent axes:
+Copier renders `template/` from independent axes:
 
 - `project_type`: `script`, `library`, `backend`, `frontend`, or `fullstack`
 - `runtime_level`: `local`, `shared`, or `production`
+- `governance`: `lightweight` or `managed`
+- `workflow_mode`: `local`, `branch`, or `pr`
 
-The generated project owns its product docs and project state. The template owns
-the scaffolding, Make targets, workflow tools, agent instructions, profile
-rules, and update behavior. See [Template Architecture](docs/template-architecture.md)
+The AI engineering kernel is common: build, test, lint, typecheck, docs
+validation, profile-specific API/client drift checks, and production artifact
+checks where selected. Lightweight governance renders only durable project
+context such as the brief and ADRs. Managed governance also renders project
+state, task lifecycle, boards, dashboard generation, dependencies, and approval
+metadata.
+
+The generated project owns product docs and durable project knowledge. The
+template owns scaffolding, Make targets, workflow tools, agent instructions,
+profile rules, and update behavior. See [Template Architecture](docs/template-architecture.md)
 for the full system view and [Profile Matrix](docs/profile-matrix.md) for what
 each profile includes.
 
@@ -81,11 +97,14 @@ make task-start TASK=<id>
 During implementation:
 
 ```bash
-make sync-project-docs
 make validate-project
 make validate-template-docs
 make check
 ```
+
+`make check` is pure validation and must not modify tracked files. Use
+`make sync-project-docs` explicitly when this managed template repository's
+generated dashboards need refresh.
 
 Before review:
 

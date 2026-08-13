@@ -15,6 +15,7 @@ update_when:
 # Architecture
 
 Project type: `{{ project_type }}`. Runtime level: `{{ runtime_level }}`.
+Governance: `{{ governance }}`.
 
 This document describes the architecture generated now. Future extensions are
 listed separately so they do not read as already implemented.
@@ -97,9 +98,11 @@ checks, service ordering, and shutdown for `make prod-up`, `make prod-status`,
 ## Current Quality Gates
 
 ```bash
-make sync-project-docs
 make validate-docs
+{% if governance == "managed" %}
 make validate-project
+make validate-agent-skills
+{% endif %}
 make check
 ```
 
@@ -114,7 +117,7 @@ make api-check
 ## Possible Future Extensions
 
 Do not treat this list as implemented architecture. Add any item only when a
-task, ADR, and approval level justify it:
+concrete requirement and ADR justify it:
 
 - database or durable persistence
 - cache, queue, broker, or background worker

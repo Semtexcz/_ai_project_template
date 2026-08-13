@@ -12,8 +12,8 @@ describe('normalizeWelcomeContent', () => {
     ).toEqual({
       projectName: 'Example Frontend',
       description: 'Ready to build.',
-      nextStepHref: '/project/index.md',
-      nextStepLabel: 'Open project/index.md'
+      nextStepHref: '/project/brief.md',
+      nextStepLabel: 'Open project/brief.md'
     })
   })
 

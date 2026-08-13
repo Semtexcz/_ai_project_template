@@ -1,8 +1,8 @@
 # {{ project_name }}
 
-{{ project_name }} is a newly generated project. Replace this paragraph after
-the project brief is approved so it states the product, user, and value in one
-or two sentences.
+{{ project_name }} is a newly generated project. Replace this paragraph once
+you understand the problem, target user, desired outcome, and first useful
+vertical slice.
 
 {% if project_type == "script" -%}
 Selected profile: `script-{{ runtime_level }}`. This is a Python CLI package
@@ -21,6 +21,9 @@ Selected profile: `fullstack-{{ runtime_level }}`. This is a FastAPI backend
 and Nuxt frontend with an OpenAPI-generated TypeScript client.
 {%- endif %}
 
+Governance: `{{ governance }}`. Workflow mode: `{{ workflow_mode }}`.
+
+{% if governance == "managed" %}
 ## Project Status
 
 <!-- project-status:start -->
@@ -46,6 +49,21 @@ After changing task state, run:
 ```bash
 make sync-project-docs
 ```
+{% else %}
+## Project Context
+
+Lightweight governance starts with the durable context needed to build safely:
+
+- [project/brief.md](project/brief.md) captures the problem, users, outcome,
+  constraints, and first vertical slice.
+- [docs/architecture.md](docs/architecture.md) describes the current technical
+  shape and the constraints that protect it.
+- [docs/decisions/index.md](docs/decisions/index.md) records ADRs when a
+  decision becomes durable enough to keep.
+
+There is no mandatory task state machine, approval state, generated board, or
+full definition gate in lightweight mode.
+{% endif %}
 
 ## Runtime Architecture
 
@@ -83,6 +101,13 @@ make check
 make build
 ```
 
+`make check` is validation-only. Use `make format` for formatting changes and
+{% if governance == "managed" -%}
+`make sync-project-docs` for generated dashboard updates.
+{%- else -%}
+edit durable project docs explicitly when project knowledge changes.
+{%- endif %}
+
 Run the generated project:
 
 ```bash
@@ -112,6 +137,7 @@ make prod-down
 
 ## Workflow
 
+{% if governance == "managed" %}
 Use one active task at a time:
 
 ```bash
@@ -125,6 +151,18 @@ make validate-docs
 
 A1 and A2 approvals are human gates. Agents may prepare work and move it to
 review, but must not approve it.
+{% else %}
+Start with enough context to work safely:
+
+```bash
+sed -n '1,220p' project/brief.md
+sed -n '1,220p' docs/architecture.md
+make check
+```
+
+Build the smallest useful vertical slice, learn from it, then refine the brief,
+architecture notes, or ADRs when the learning is durable.
+{% endif %}
 
 ## Navigation
 
@@ -132,9 +170,13 @@ review, but must not approve it.
 |---|---|
 | Product brief | [docs/product.md](docs/product.md) |
 | Current architecture | [docs/architecture.md](docs/architecture.md) |
+{% if governance == "managed" %}
 | Roadmap | [project/roadmap.md](project/roadmap.md) |
 | Board | [project/board.md](project/board.md) |
 | Project dashboard | [project/index.md](project/index.md) |
+{% else %}
+| Project brief | [project/brief.md](project/brief.md) |
+{% endif %}
 | Workflow | [docs/workflow.md](docs/workflow.md) |
 | Quality gates | [docs/quality.md](docs/quality.md) |
 | Decisions | [docs/decisions/index.md](docs/decisions/index.md) |

@@ -72,6 +72,14 @@ Generated projects additionally expose:
 make validate-docs
 ```
 
+Managed generated projects also expose:
+
+```bash
+make validate-project
+make validate-agent-skills
+make sync-project-docs
+```
+
 Documentation validation is deterministic. It checks required entry documents,
 navigation, internal links, documented Make commands, profile relevance,
 dashboard drift, unresolved Jinja placeholders, personal absolute paths, and
@@ -84,6 +92,10 @@ For a narrow template change:
 ```bash
 make check
 ```
+
+`make check` is validation-only. It must not rewrite tracked files. Use explicit
+mutating commands such as `make sync-project-docs`, generated `make format`, or
+generated `make api-generate` when files need to be rewritten.
 
 Before review or release-candidate signoff:
 

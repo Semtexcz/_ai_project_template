@@ -6,6 +6,7 @@ on:
     branches: [main]
 
 jobs:
+{% if workflow_mode == "pr" %}
   require-pr-for-main:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -33,6 +34,7 @@ jobs:
             exit 1
           fi
 
+{% endif %}
   check:
     runs-on: ubuntu-latest
     steps:
@@ -56,8 +58,10 @@ jobs:
           PNPM_INSTALL_FLAGS: --frozen-lockfile
 {% endif %}
         run: make setup
+{% if governance == "managed" %}
       - name: Validate agent skills
         run: make validate-agent-skills
+{% endif %}
       - name: Check
         run: make check
 {% if project_type == "library" %}

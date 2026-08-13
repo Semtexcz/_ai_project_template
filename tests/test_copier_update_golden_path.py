@@ -115,6 +115,10 @@ def copy_fullstack_project(template_repo: Path, project: Path, env: Mapping[str,
             "--data",
             "runtime_level=local",
             "--data",
+            "governance=managed",
+            "--data",
+            "workflow_mode=pr",
+            "--data",
             "include_reference_feature=false",
             "--trust",
             f"--vcs-ref={ref}",
@@ -372,7 +376,8 @@ def test_copier_update_golden_path(tmp_path: Path) -> None:
     update_project(project, env, "v1.1.0", expect_success=True)
     assert_updated_project(project, template_repo, kept)
 
-    run_command(["make", "setup"], project, env, timeout=360)
+    run_command(["make", "setup"], project, env, timeout=600)
+    run_command(["make", "sync-project-docs"], project, env, timeout=180)
     run_command(["make", "api-check"], project, env, timeout=180)
     run_command(["make", "check"], project, env, timeout=360)
     run_command(["make", "build"], project, env, timeout=360)
@@ -395,9 +400,9 @@ def test_copier_update_reports_merge_conflict_without_silent_loss(tmp_path: Path
     readme = project / "README.md"
     readme.write_text(
         readme.read_text().replace(
-            "Update Golden Path is a newly generated project. Replace this paragraph after\n"
-            "the project brief is approved so it states the product, user, and value in one\n"
-            "or two sentences.",
+            "Update Golden Path is a newly generated project. Replace this paragraph once\n"
+            "you understand the problem, target user, desired outcome, and first useful\n"
+            "vertical slice.",
             "CONFLICT-PROJECT-VERSION: keep this project-specific README opening.",
         )
     )
@@ -406,9 +411,9 @@ def test_copier_update_reports_merge_conflict_without_silent_loss(tmp_path: Path
     readme_template = template_repo / "template" / "README.md.jinja"
     readme_template.write_text(
         readme_template.read_text().replace(
-            "{{ project_name }} is a newly generated project. Replace this paragraph after\n"
-            "the project brief is approved so it states the product, user, and value in one\n"
-            "or two sentences.",
+            "{{ project_name }} is a newly generated project. Replace this paragraph once\n"
+            "you understand the problem, target user, desired outcome, and first useful\n"
+            "vertical slice.",
             "CONFLICT-TEMPLATE-VERSION: template changed this README opening.",
         )
     )
