@@ -3,7 +3,7 @@ id: T-022
 
 title: Refactor agent skill architecture
 
-status: in-progress
+status: review
 
 priority: 1
 

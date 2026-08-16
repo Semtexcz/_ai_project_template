@@ -27,13 +27,13 @@ Use this repository when you want a project scaffold that already knows how to:
 | Phase | delivery |
 | Milestone | M-08 |
 | Last completed task | [T-021](project/tasks/T-021-fix-lightweight-render-matrix-ci.md) |
-| Active task | [T-022](project/tasks/T-022-refactor-agent-skill-architecture.md) |
-| Approval | A0 / not-required |
+| Active task | None |
+| Approval | None |
 | Waiting | None |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Complete T-022. |
-| Next action command | `make task-review TASK=T-022` |
+| Recommended next action | Start T-019. |
+| Next action command | `make task-start TASK=T-019` |
 <!-- project-status:end -->
 
 ## Quick Start
