@@ -32,8 +32,8 @@ truth.
 
 | `governance` | Default | Includes | Does not require |
 |---|---|---|---|
-| `lightweight` | Yes | AI engineering kernel, `project/brief.md`, docs, ADRs, technical checks | Task state machine, approval metadata, board/dashboard generation, milestones, ready-for-development gate |
-| `managed` | No | Everything in lightweight plus `project/state.yaml`, tasks, lifecycle commands, dashboards, dependencies, managed agent context, A0/A1/A2 approval metadata | Production deployment, paid services, or infrastructure beyond the selected runtime profile |
+| `lightweight` | Yes | AI engineering kernel, core `.agents/` skills, thin `.codex/` adapters, `project/brief.md`, docs, ADRs, technical checks | Task state machine, approval metadata, board/dashboard generation, milestones, ready-for-development gate |
+| `managed` | No | Everything in lightweight plus `project/state.yaml`, tasks, lifecycle commands, managed skills, dashboards, dependencies, managed agent context, A0/A1/A2 approval metadata | Production deployment, paid services, or infrastructure beyond the selected runtime profile |
 
 ## Workflow Modes
 
@@ -63,8 +63,15 @@ Every profile includes:
 - `docs/product.md`, `docs/architecture.md`, `docs/workflow.md`, `docs/quality.md`
 - `docs/decisions/`
 - `AGENTS.md`
+- `.agents/skills/` core skills and `.codex/` thin adapters
+- `tools/agent.py` and `make validate-agent-skills`
 - `Makefile` targets for setup, run/dev, test, lint, typecheck, check, build,
   and selected profile guardrails
+
+Capability skills are generated only when relevant:
+
+- `change-api-contract` for `project_type=fullstack`
+- `verify-production-artifact` for `runtime_level=production`
 
 Managed governance additionally includes:
 
@@ -72,7 +79,7 @@ Managed governance additionally includes:
 - `project/state.yaml`, `project/index.md`, `project/board.md`, `project/roadmap.md`
 - `project/tasks/T-001-initialize-project.md`
 - `tools/project.py` plus Make targets for status, sync, validation, and task transitions
-- `.agents/` and `.codex/` instructions for managed AI-assisted work
+- `.agents/managed/skills/` lifecycle skills and managed hooks
 
 ## Profile-Specific Documentation
 

@@ -1,19 +1,22 @@
 ---
 name: implement-change
 version: 1
-purpose: Implement the active task with the smallest coherent change.
-triggers: [implement task, make change, code task]
+purpose: Implement a requested change with the smallest coherent repository diff.
+triggers: [implement change, make change, code task, implement task]
 inputs:
   required:
-    - task_id
+    - requested_change
 reads:
   - AGENTS.md
   - .agents/context-map.yaml
-  - project/state.yaml
-  - project/tasks/{{ task_id }}*.md
+  - project/brief.md
+  - docs/architecture.md
+  - docs/workflow.md
+  - docs/quality.md
+  - docs/decisions/
 commands:
-  - make agent-context
-  - make agent-pre-task
+  - make validate-docs
+  - make validate-agent-skills
   - make check
 outputs:
   - scoped code or documentation change
@@ -21,7 +24,7 @@ outputs:
 approval_boundary:
   may_approve: false
 stop_conditions:
-  - task is not active
+  - requested change is ambiguous
   - scope requires higher approval
   - context map is invalid
   - focused checks fail
@@ -29,6 +32,11 @@ stop_conditions:
 
 # Implement Change
 
-Agent judgment chooses the smallest implementation that satisfies the task.
-Deterministic commands provide context, status, and checks. Do not change task
-status except through the project CLI.
+Use durable project context first, then inspect only the files needed for the
+requested change. In managed projects, include active-task context when it is
+available, but do not make implementation depend on a task id.
+
+Choose the smallest coherent implementation that preserves architecture
+invariants. Prefer existing patterns and helpers over new abstractions. Run
+focused checks while working, then finish with the relevant repository checks.
+Do not mutate task state from this skill.

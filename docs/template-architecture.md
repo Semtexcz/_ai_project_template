@@ -55,11 +55,33 @@ Diagram: [generated-project-workflow.d2](diagrams/generated-project-workflow.d2)
 
 ## Agent Layer
 
-All generated projects include `AGENTS.md` with invariant-based engineering
-rules. Managed projects also include `.agents/` and `.codex/`. `.agents`
-contains canonical procedures, schemas, hooks, and context maps. `.codex` stays
-thin and adapts those instructions for Codex. The managed agent entry commands
-are:
+All generated projects include `AGENTS.md`, `.agents/`, `.codex/`, and
+`tools/agent.py`. `.agents/` is canonical and tool-neutral. `.codex/` stays
+thin and delegates to canonical skills.
+
+The skill architecture is deliberately separated:
+
+- core skills in `.agents/skills/` are reusable engineering capabilities and
+  render for lightweight and managed projects
+- managed lifecycle skills in `.agents/managed/skills/` render only for
+  `governance=managed`
+- capability skills in `.agents/capabilities/skills/` render only when the
+  selected profile has that specialized workflow
+
+Core skills use durable context such as `AGENTS.md`, `project/brief.md`,
+architecture, workflow, quality, and ADR docs. They must not require
+`project/state.yaml`, `project/index.md`, `project/board.md`, or active task
+files. Managed projects may enrich the same core skills with active-task
+context.
+
+Core skills currently include `orient-project`, `implement-change`,
+`verify-change`, `review-change`, `update-documentation`, `create-adr`,
+`conventional-commit`, and `capture-learning`. Managed skills cover state
+assessment, task choice, task preparation, task completion, and project
+reassessment. Capability skills cover full-stack API contract changes and
+production artifact verification where those workflows exist.
+
+The managed agent entry commands are:
 
 ```bash
 make agent-status
@@ -68,6 +90,9 @@ make agent-pre-task TASK=<id>
 make agent-pre-review TASK=<id>
 make agent-post-task TASK=<id>
 ```
+
+Lightweight projects do not render those lifecycle commands, but they do render
+`make validate-agent-skills`.
 
 ## OpenAPI
 
@@ -123,6 +148,7 @@ Generated project validation:
 
 ```bash
 make validate-docs
+make validate-agent-skills
 make check
 ```
 
@@ -131,7 +157,6 @@ Managed generated project validation also includes:
 ```bash
 make sync-project-docs
 make validate-project
-make validate-agent-skills
 make check
 ```
 

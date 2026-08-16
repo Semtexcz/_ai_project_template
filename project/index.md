@@ -7,10 +7,10 @@
 | Phase | delivery |
 | Milestone | M-08 |
 | Next gate | release-candidate-remediation |
-| Active task | None |
-| Approval | None |
+| Active task | [T-022](tasks/T-022-refactor-agent-skill-architecture.md) |
+| Approval | A0 / not-required |
 | Blocker | None |
-| Recommended next action | Start T-019. |
+| Recommended next action | Complete T-022. |
 
 Links: [Board](board.md) | [Roadmap](roadmap.md)
 <!-- project-index:end -->

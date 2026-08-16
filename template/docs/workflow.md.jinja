@@ -6,7 +6,7 @@ source_of_truth_for:
 read_when:
   - implement-change
   - review-change
-  - complete-task
+  - verify-change
 update_when:
   - workflow-policy-change
 ---
@@ -34,6 +34,55 @@ make build
 {% if governance == "managed" %}
 Use `make sync-project-docs` when generated project dashboards need refresh.
 {% endif %}
+
+## Agent Skills
+
+Skills are reusable agent capabilities, not a mandatory orchestration engine.
+Use the skill that fits the situation.
+
+Core skills are always generated:
+
+- `orient-project`
+- `implement-change`
+- `verify-change`
+- `review-change`
+- `update-documentation`
+- `create-adr`
+- `conventional-commit`
+- `capture-learning`
+
+Lightweight projects use these skills with durable context only. Managed
+projects use the same core skills and may add task context through managed
+lifecycle commands.
+
+{% if governance == "managed" %}
+Managed lifecycle skills are generated under `.agents/managed/skills/` for
+state assessment, task selection, task preparation, task completion, and project
+reassessment. They control project-management process around core engineering
+judgment.
+{% endif %}
+
+{% if project_type == "fullstack" or runtime_level == "production" %}
+Capability skills are generated only when the selected profile needs them:
+{% if project_type == "fullstack" %}
+
+- `change-api-contract` for OpenAPI and generated client synchronization
+{% endif %}
+{% if runtime_level == "production" %}
+
+- `verify-production-artifact` for build, inspect, readiness, smoke, and
+  shutdown checks
+{% endif %}
+{% endif %}
+
+`capture-learning` follows this escalation order:
+
+```text
+executable guardrail > durable documentation > agent instruction
+```
+
+Do not add textual rules when tests, validators, Make targets, or CI checks can
+enforce the behavior.
 
 ## Governance
 

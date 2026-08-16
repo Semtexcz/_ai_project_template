@@ -99,9 +99,9 @@ checks, service ordering, and shutdown for `make prod-up`, `make prod-status`,
 
 ```bash
 make validate-docs
+make validate-agent-skills
 {% if governance == "managed" %}
 make validate-project
-make validate-agent-skills
 {% endif %}
 make check
 ```

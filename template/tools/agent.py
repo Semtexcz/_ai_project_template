@@ -17,16 +17,26 @@ except ModuleNotFoundError:  # pragma: no cover - exercised in generated project
     yaml = None
 
 
-REQUIRED_SKILLS = {
-    "initialize-project",
+CORE_SKILLS = {
+    "capture-learning",
+    "conventional-commit",
+    "create-adr",
+    "implement-change",
+    "orient-project",
+    "review-change",
+    "update-documentation",
+    "verify-change",
+}
+MANAGED_SKILLS = {
     "assess-project-state",
     "choose-next-task",
-    "prepare-task",
-    "implement-change",
-    "review-change",
     "complete-task",
-    "create-adr",
+    "prepare-task",
     "reassess-project",
+}
+CAPABILITY_SKILLS = {
+    "fullstack": {"change-api-contract"},
+    "production": {"verify-production-artifact"},
 }
 REQUIRED_SKILL_KEYS = {
     "name",
@@ -120,7 +130,14 @@ def project_module() -> Any:
     raise AgentError("Cannot find tools/project.py. Restore project tooling first.")
 
 
-project = project_module()
+project: Any | None = None
+
+
+def require_project_module() -> Any:
+    global project
+    if project is None:
+        project = project_module()
+    return project
 
 
 def rel(path: Path) -> str:
@@ -210,8 +227,57 @@ def parse_yaml_subset(text: str) -> Any:
     return parsed
 
 
+def project_metadata() -> dict[str, str]:
+    answers_path = ROOT / ".copier-answers.yml"
+    if answers_path.exists():
+        data = yaml_load(answers_path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {
+                "project_type": str(data.get("project_type", "")),
+                "runtime_level": str(data.get("runtime_level", "")),
+                "governance": str(data.get("governance", "")),
+            }
+    state_path = ROOT / "project" / "state.yaml"
+    if state_path.exists():
+        data = yaml_load(state_path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            project_data = data.get("project")
+            template_data = data.get("template")
+            if isinstance(project_data, dict):
+                return {
+                    "project_type": str(project_data.get("type", "")),
+                    "runtime_level": str(project_data.get("runtime_level", "")),
+                    "governance": str(
+                        template_data.get("governance", "managed")
+                        if isinstance(template_data, dict)
+                        else "managed"
+                    ),
+                }
+    return {"project_type": "", "runtime_level": "", "governance": "lightweight"}
+
+
+def skill_roots() -> list[Path]:
+    roots = [
+        AGENTS_DIR / "skills",
+        AGENTS_DIR / "managed" / "skills",
+        AGENTS_DIR / "capabilities" / "skills",
+    ]
+    return [root for root in roots if root.exists()]
+
+
 def skill_paths() -> list[Path]:
-    return sorted((AGENTS_DIR / "skills").glob("*/SKILL.md"))
+    paths: list[Path] = []
+    for root in skill_roots():
+        paths.extend(root.glob("*/SKILL.md"))
+    return sorted(paths)
+
+
+def canonical_skill_path(skill_name: str) -> Path | None:
+    for root in skill_roots():
+        candidate = root / skill_name / "SKILL.md"
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def split_skill_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
@@ -242,17 +308,47 @@ def make_targets() -> set[str]:
     return targets
 
 
+def template_make_targets() -> set[str]:
+    path = ROOT / "template" / "Makefile.jinja"
+    if not path.exists():
+        return set()
+    targets: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("\t") or ":" not in line:
+            continue
+        name = line.split(":", 1)[0].strip()
+        if name and " " not in name and not name.startswith("."):
+            targets.add(name)
+    return targets
+
+
+def context_source_exists(path_text: str) -> bool:
+    path = ROOT / path_text
+    template_path = ROOT / "template" / path_text
+    return path.exists() or template_path.exists() or Path(f"{template_path}.jinja").exists()
+
+
 def validate_agent_skills() -> list[str]:
     errors: list[str] = []
     if not AGENTS_DIR.exists():
         return [".agents/ does not exist. Restore the canonical agent layer."]
-    targets = make_targets()
+    metadata = project_metadata()
+    governance = metadata["governance"]
+    project_type = metadata["project_type"]
+    runtime_level = metadata["runtime_level"]
+    targets = make_targets() | template_make_targets()
     paths = skill_paths()
     names: list[str] = []
-    for required in sorted(REQUIRED_SKILLS):
-        expected = AGENTS_DIR / "skills" / required / "SKILL.md"
-        if not expected.exists():
-            errors.append(f"Missing required skill {required}: create {rel(expected)}.")
+    required_skills = set(CORE_SKILLS)
+    if governance == "managed":
+        required_skills.update(MANAGED_SKILLS)
+    required_skills.update(CAPABILITY_SKILLS.get(project_type, set()))
+    required_skills.update(CAPABILITY_SKILLS.get(runtime_level, set()))
+    for required in sorted(required_skills):
+        expected = canonical_skill_path(required)
+        if expected is None:
+            expected_path = AGENTS_DIR / "skills" / required / "SKILL.md"
+            errors.append(f"Missing required skill {required}: create {rel(expected_path)}.")
     for path in paths:
         try:
             meta, body = split_skill_frontmatter(path)
@@ -293,6 +389,12 @@ def validate_agent_skills() -> list[str]:
         if "project/board.md" in lowered and "direct" in lowered and "edit" in lowered:
             errors.append(f"{rel(path)} must not recommend direct generated dashboard edits.")
         errors.extend(validate_skill_bundle(path.parent, name))
+    if governance != "managed":
+        for managed in sorted(MANAGED_SKILLS):
+            if canonical_skill_path(managed) is not None:
+                errors.append(
+                    f"Managed-only skill {managed} must not render in lightweight projects."
+                )
     duplicates = sorted({name for name in names if names.count(name) > 1})
     for name in duplicates:
         errors.append(f"Duplicate skill name {name}. Keep skill names unique.")
@@ -320,7 +422,7 @@ def validate_context_map() -> list[str]:
         if any(token in required for token in ["..", "~"]):
             errors.append(f"Context path {required} cannot traverse outside the project.")
             continue
-        if not (ROOT / required).exists():
+        if not context_source_exists(required):
             errors.append(f"Required context file {required} does not exist.")
     if not isinstance(data.get("task"), dict):
         errors.append(".agents/context-map.yaml task must be a mapping.")
@@ -450,8 +552,8 @@ def validate_codex_adapter() -> list[str]:
         if not canonical:
             errors.append(f"{rel(path)} must declare canonical_skill.")
             continue
-        target = AGENTS_DIR / "skills" / canonical / "SKILL.md"
-        if not target.exists():
+        target = canonical_skill_path(canonical)
+        if target is None:
             errors.append(f"{rel(path)} references missing canonical skill {canonical}.")
         if len(body.splitlines()) > 40:
             errors.append(f"{rel(path)} is too large for a thin adapter.")
@@ -466,9 +568,12 @@ def fail_if_errors(errors: list[str]) -> None:
 
 
 def get_task(task_id: str | None) -> Any:
-    tasks = project.load_tasks()
-    tasks_by = project.task_by_id(tasks)
-    selected = task_id or project.nonempty(project.read_state().get("work", {}).get("active_task"))
+    managed_project = require_project_module()
+    tasks = managed_project.load_tasks()
+    tasks_by = managed_project.task_by_id(tasks)
+    selected = task_id or managed_project.nonempty(
+        managed_project.read_state().get("work", {}).get("active_task")
+    )
     if not selected:
         raise AgentError("No task selected and no active task exists. Pass TASK=<id>.")
     task = tasks_by.get(selected)
@@ -570,7 +675,11 @@ def recommended_checks(config: dict[str, Any], changes: list[str]) -> list[str]:
                         seen.add(command)
     if not checks:
         checks.append("make check")
-    for command in ["make validate-agent-skills", "make validate-project"]:
+    metadata = project_metadata()
+    required_commands = ["make validate-agent-skills"]
+    if metadata.get("governance") == "managed":
+        required_commands.append("make validate-project")
+    for command in required_commands:
         if command not in seen:
             checks.append(command)
             seen.add(command)
@@ -578,6 +687,7 @@ def recommended_checks(config: dict[str, Any], changes: list[str]) -> list[str]:
 
 
 def resolve_context(task_id: str | None) -> dict[str, Any]:
+    managed_project = require_project_module()
     task = get_task(task_id)
     config = read_yaml(AGENTS_DIR / "context-map.yaml")
     errors = validate_context_map()
@@ -591,6 +701,11 @@ def resolve_context(task_id: str | None) -> dict[str, Any]:
             if item not in seen:
                 files.append(item)
                 seen.add(item)
+    for pattern in (config.get("managed", {}) or {}).get("include", []) or []:
+        for item in expand_context_pattern(pattern, required=False, excludes=excludes):
+            if item not in seen:
+                files.append(item)
+                seen.add(item)
     task_section = config.get("task", {}) or {}
     for pattern in task_section.get("include", []) or []:
         resolved_pattern = pattern.format(task_id=task.id)
@@ -598,7 +713,7 @@ def resolve_context(task_id: str | None) -> dict[str, Any]:
             if item not in seen:
                 files.append(item)
                 seen.add(item)
-    state = project.read_state()
+    state = managed_project.read_state()
     project_type = state.get("project", {}).get("type")
     runtime_level = state.get("project", {}).get("runtime_level")
     profile_keys = [str(project_type), f"{project_type}-{runtime_level}"]
@@ -636,20 +751,21 @@ def resolve_context(task_id: str | None) -> dict[str, Any]:
         ],
         "files": files,
         "recommended_checks": recommended_checks(config, changes),
-        "next_action": project.recommended_next_action(state, project.load_tasks()),
+        "next_action": managed_project.recommended_next_action(state, managed_project.load_tasks()),
     }
 
 
 def agent_status() -> str:
-    state = project.read_state()
-    tasks = project.load_tasks()
-    errors = project.validate_all(check_drift=False)
+    managed_project = require_project_module()
+    state = managed_project.read_state()
+    tasks = managed_project.load_tasks()
+    errors = managed_project.validate_all(check_drift=False)
     if errors:
         return "\n".join(
             ["ERROR: Project state is invalid.", *errors, "Next action: make validate-project"]
         )
-    active = project.find_active(tasks, state)
-    next_action = project.recommended_next_action(state, tasks)
+    active = managed_project.find_active(tasks, state)
+    next_action = managed_project.recommended_next_action(state, tasks)
     lines = [
         f"Project: {state['project'].get('name', state['project'].get('type'))}",
         f"Phase: {state['lifecycle']['phase']}",
@@ -679,21 +795,24 @@ def run_command(command: str) -> CommandResult:
 
 
 def pre_task(task_id: str) -> None:
-    fail_if_errors(project.validate_all(check_drift=True))
+    managed_project = require_project_module()
+    fail_if_errors(managed_project.validate_all(check_drift=True))
     task = get_task(task_id)
-    tasks_by = project.task_by_id(project.load_tasks())
+    tasks_by = managed_project.task_by_id(managed_project.load_tasks())
     if task.status not in {"ready", "in-progress"}:
         raise AgentError(f"{task.id} must be ready or in-progress before pre-task.")
     if task.status == "blocked":
         raise AgentError(f"{task.id} is blocked: {task.blocked_reason}.")
-    missing = project.definition_of_ready(task)
+    missing = managed_project.definition_of_ready(task)
     if missing:
         raise AgentError(f"{task.id} Definition of Ready is incomplete: {', '.join(missing)}.")
-    if not project.dependencies_done(task, tasks_by):
+    if not managed_project.dependencies_done(task, tasks_by):
         raise AgentError(f"{task.id} cannot start until all dependencies are done.")
     if task.approval_level == "A2" and task.approval_status != "approved":
         raise AgentError(f"Human A2 approval is required for {task.id} before work starts.")
-    active = project.nonempty(project.read_state().get("work", {}).get("active_task"))
+    active = managed_project.nonempty(
+        managed_project.read_state().get("work", {}).get("active_task")
+    )
     if active and active != task.id:
         raise AgentError(f"Another task is active: {active}.")
     resolve_context(task.id)
@@ -716,8 +835,11 @@ def diff_safety_errors() -> list[str]:
 
 
 def pre_review(task_id: str) -> None:
+    managed_project = require_project_module()
     task = get_task(task_id)
-    active = project.nonempty(project.read_state().get("work", {}).get("active_task"))
+    active = managed_project.nonempty(
+        managed_project.read_state().get("work", {}).get("active_task")
+    )
     if active != task.id:
         raise AgentError(
             f"Pre-review requires active task {task.id}; current active task is {active or 'None'}."
@@ -739,10 +861,11 @@ def pre_review(task_id: str) -> None:
 
 
 def post_task(task_id: str) -> None:
+    managed_project = require_project_module()
     task = get_task(task_id)
     if task.status != "done":
         raise AgentError(f"Post-task requires {task.id} to be done.")
-    missing = project.definition_of_done(task)
+    missing = managed_project.definition_of_done(task)
     if missing:
         raise AgentError(f"{task.id} Definition of Done is incomplete: {', '.join(missing)}.")
     if task.approval_level in {"A1", "A2"} and task.approval_status != "approved":
@@ -751,11 +874,13 @@ def post_task(task_id: str) -> None:
     if sync.status != "PASS":
         print(sync.output)
         raise SystemExit(1)
-    fail_if_errors(project.validate_all(check_drift=True))
-    if project.nonempty(project.read_state().get("work", {}).get("active_task")):
+    fail_if_errors(managed_project.validate_all(check_drift=True))
+    if managed_project.nonempty(managed_project.read_state().get("work", {}).get("active_task")):
         raise AgentError("No task may remain active after post-task.")
     print(f"Task {task.id} post-task checks passed.")
-    next_action = project.recommended_next_action(project.read_state(), project.load_tasks())
+    next_action = managed_project.recommended_next_action(
+        managed_project.read_state(), managed_project.load_tasks()
+    )
     print(f"Next action: {next_action}")
 
 

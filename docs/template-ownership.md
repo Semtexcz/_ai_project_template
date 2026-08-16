@@ -9,10 +9,11 @@ Template-owned files are maintained by the template and may be updated during a
 Copier upgrade:
 
 - `.github/workflows/`
-- `.codex/` thin adapter files when `governance=managed`
-- `.agents/` canonical skills, schemas, context map, and hooks when
-  `governance=managed`
-- `tools/` files selected by project type and governance
+- `.codex/` thin adapter files selected by governance and profile
+- `.agents/` canonical skills, schemas, context map, and selected managed or
+  capability skill groups
+- `tools/` files selected by project type and governance, including
+  `tools/agent.py` for skill validation
 - `.gitignore`
 - `.template-version`
 - generated API client runtime scaffolding under `frontend/shared/api/`

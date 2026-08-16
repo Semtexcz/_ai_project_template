@@ -11,7 +11,7 @@ _None_
 
 ## In Progress
 
-_None_
+- [T-022](tasks/T-022-refactor-agent-skill-architecture.md) - P1 - Refactor agent skill architecture
 
 ## Review
 
