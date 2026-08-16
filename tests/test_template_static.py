@@ -285,10 +285,22 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
 
     assert (generated / "project" / "brief.md").exists()
     assert (generated / "docs" / "decisions" / "index.md").exists()
+    for skill in [
+        "orient-project",
+        "implement-change",
+        "verify-change",
+        "review-change",
+        "update-documentation",
+        "create-adr",
+        "conventional-commit",
+        "capture-learning",
+    ]:
+        assert (generated / ".agents" / "skills" / skill / "SKILL.md").exists(), skill
+        assert (generated / ".codex" / "skills" / skill / "SKILL.md").exists(), skill
     managed_only = [
-        ".agents",
-        ".codex",
-        "tools/agent.py",
+        ".agents/managed",
+        ".agents/hooks",
+        ".codex/skills/assess-project-state",
         "tools/project.py",
         "project/state.yaml",
         "project/tasks",
@@ -299,13 +311,19 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
     ]
     for relative in managed_only:
         assert not (generated / relative).exists(), relative
+    assert (generated / "tools" / "agent.py").exists()
+    assert not (generated / ".agents" / "capabilities").exists()
 
     makefile = (generated / "Makefile").read_text()
     assert "sync-project-docs:" not in makefile
     assert "task-start:" not in makefile
     assert "validate-project:" not in makefile
+    assert "validate-agent-skills:" in makefile
     assert "validate-docs:" in makefile
-    assert "check: validate-docs format-check lint typecheck test" in makefile
+    assert "check: validate-docs validate-agent-skills format-check lint typecheck test" in makefile
+
+    env = {**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
+    subprocess.run(["make", "validate-agent-skills"], cwd=generated, env=env, check=True)
 
 
 def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
@@ -314,6 +332,14 @@ def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
     assert (generated / "project" / "state.yaml").exists()
     assert (generated / "project" / "tasks" / "T-001-initialize-project.md").exists()
     assert (generated / ".agents" / "context-map.yaml").exists()
+    for skill in [
+        "assess-project-state",
+        "choose-next-task",
+        "prepare-task",
+        "complete-task",
+        "reassess-project",
+    ]:
+        assert (generated / ".agents" / "managed" / "skills" / skill / "SKILL.md").exists(), skill
     makefile = (generated / "Makefile").read_text()
     for target in [
         "sync-project-docs:",
@@ -323,7 +349,59 @@ def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
         "task-approve:",
     ]:
         assert target in makefile
-    assert "check: validate-docs validate-project validate-agent-skills format-check lint typecheck test" in makefile
+    assert "check: validate-docs validate-agent-skills validate-project format-check lint typecheck test" in makefile
+
+    env = {**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
+    subprocess.run(["make", "validate-agent-skills"], cwd=generated, env=env, check=True)
+
+
+def test_capability_skills_render_only_for_matching_profiles(tmp_path: Path) -> None:
+    backend_lightweight = copy_project(
+        tmp_path,
+        project_type="backend",
+        runtime_level="shared",
+        governance="lightweight",
+    )
+    assert not (backend_lightweight / ".agents" / "capabilities").exists()
+    assert not (backend_lightweight / ".codex" / "skills" / "change-api-contract").exists()
+    assert not (backend_lightweight / ".codex" / "skills" / "verify-production-artifact").exists()
+
+    fullstack_lightweight = copy_project(
+        tmp_path,
+        project_type="fullstack",
+        runtime_level="local",
+        governance="lightweight",
+    )
+    assert (
+        fullstack_lightweight
+        / ".agents"
+        / "capabilities"
+        / "skills"
+        / "change-api-contract"
+        / "SKILL.md"
+    ).exists()
+    assert not (
+        fullstack_lightweight
+        / ".agents"
+        / "capabilities"
+        / "skills"
+        / "verify-production-artifact"
+    ).exists()
+
+    production_managed = copy_project(
+        tmp_path,
+        project_type="fullstack",
+        runtime_level="production",
+        governance="managed",
+    )
+    for skill in ["change-api-contract", "verify-production-artifact"]:
+        assert (
+            production_managed / ".agents" / "capabilities" / "skills" / skill / "SKILL.md"
+        ).exists(), skill
+        assert (production_managed / ".codex" / "skills" / skill / "SKILL.md").exists(), skill
+
+    env = {**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
+    subprocess.run(["make", "validate-agent-skills"], cwd=production_managed, env=env, check=True)
 
 
 def test_workflow_modes_render_expected_agent_policy(tmp_path: Path) -> None:
@@ -404,6 +482,23 @@ def test_conventional_commit_skill_uses_cheap_model_and_validator() -> None:
         check=False,
     )
     assert invalid.returncode != 0
+
+
+def test_codex_adapters_delegate_to_available_canonical_skills() -> None:
+    canonical = {
+        path.parent.name
+        for root in [
+            ROOT / ".agents" / "skills",
+            ROOT / ".agents" / "managed" / "skills",
+            ROOT / ".agents" / "capabilities" / "skills",
+        ]
+        for path in root.glob("*/SKILL.md")
+    }
+    for adapter in (ROOT / ".codex" / "skills").glob("*/SKILL.md"):
+        text = adapter.read_text(encoding="utf-8")
+        data = yaml.safe_load(text.split("---", 2)[1])
+        assert data["canonical_skill"] in canonical
+        assert len(text.splitlines()) <= 40
 
 
 def test_rendered_projects_do_not_include_cache_artifacts(tmp_path: Path) -> None:

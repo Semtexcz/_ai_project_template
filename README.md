@@ -11,6 +11,7 @@ Use this repository when you want a project scaffold that already knows how to:
 - choose a profile from `project_type` and `runtime_level`
 - choose `governance=lightweight` or `governance=managed`
 - choose `workflow_mode=local`, `branch`, or `pr`
+- use reusable core agent skills without opting into managed task lifecycle
 - keep technical guardrails executable through Make targets and tests
 - preserve managed task state, dashboards, and approvals when explicitly enabled
 - validate internal documentation links, Make commands, and profile drift
@@ -72,10 +73,11 @@ Copier renders `template/` from independent axes:
 - `workflow_mode`: `local`, `branch`, or `pr`
 
 The AI engineering kernel is common: build, test, lint, typecheck, docs
-validation, profile-specific API/client drift checks, and production artifact
-checks where selected. Lightweight governance renders only durable project
-context such as the brief and ADRs. Managed governance also renders project
-state, task lifecycle, boards, dashboard generation, dependencies, and approval
+validation, reusable core skills under `.agents/skills`, a thin `.codex`
+adapter, profile-specific API/client drift checks, and production artifact
+checks where selected. Lightweight governance renders durable project context
+without managed task state. Managed governance also renders project state, task
+lifecycle skills, boards, dashboard generation, dependencies, and approval
 metadata.
 
 The generated project owns product docs and durable project knowledge. The

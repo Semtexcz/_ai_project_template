@@ -1,4 +1,4 @@
-.PHONY: setup dev run test format format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build image-inspect prod-up prod-status prod-smoke prod-down docs validate-docs{% if governance == "managed" %} project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report{% endif %} down
+.PHONY: setup dev run test format format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build image-inspect prod-up prod-status prod-smoke prod-down docs validate-docs validate-agent-skills{% if governance == "managed" %} project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context agent-pre-task agent-pre-review agent-post-task agent-review-report{% endif %} down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -148,9 +148,9 @@ e2e-production:
 {% endif %}
 
 {% if project_type == "fullstack" %}
-check: validate-docs{% if governance == "managed" %} validate-project validate-agent-skills{% endif %} format-check lint typecheck api-check test
+check: validate-docs validate-agent-skills{% if governance == "managed" %} validate-project{% endif %} format-check lint typecheck api-check test
 {% else %}
-check: validate-docs{% if governance == "managed" %} validate-project validate-agent-skills{% endif %} format-check lint typecheck test
+check: validate-docs validate-agent-skills{% if governance == "managed" %} validate-project{% endif %} format-check lint typecheck test
 {% endif %}
 
 build:
@@ -247,15 +247,15 @@ validate-docs:
 	@test -f project/brief.md
 {% endif %}
 
+validate-agent-skills:
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py validate-skills
+
 {% if governance == "managed" %}
 agent-status:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py status
 
 agent-context:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py context --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
-
-validate-agent-skills:
-	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py validate-skills
 
 agent-pre-task:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py pre-task --task $(TASK)

@@ -137,6 +137,11 @@ make prod-down
 
 ## Workflow
 
+Reusable agent skills are available under `.agents/skills/` for orientation,
+implementation, verification, review, documentation updates, ADRs, conventional
+commits, and learning capture. `.codex/` contains thin Codex adapters that
+delegate to those canonical skills.
+
 {% if governance == "managed" %}
 Use one active task at a time:
 
@@ -145,23 +150,35 @@ make agent-status
 make agent-context TASK=<id>
 make task-start TASK=<id>
 make task-review TASK=<id>
+make validate-agent-skills
 make validate-project
 make validate-docs
 ```
 
 A1 and A2 approvals are human gates. Agents may prepare work and move it to
-review, but must not approve it.
+review, but must not approve it. Managed lifecycle skills live under
+`.agents/managed/skills/` and compose the reusable core skills where useful.
 {% else %}
 Start with enough context to work safely:
 
 ```bash
 sed -n '1,220p' project/brief.md
 sed -n '1,220p' docs/architecture.md
+make validate-agent-skills
 make check
 ```
 
 Build the smallest useful vertical slice, learn from it, then refine the brief,
 architecture notes, or ADRs when the learning is durable.
+{% endif %}
+
+{% if project_type == "fullstack" %}
+The `change-api-contract` capability skill is generated for full-stack API and
+client synchronization work.
+{% endif %}
+{% if runtime_level == "production" %}
+The `verify-production-artifact` capability skill is generated for production
+artifact verification.
 {% endif %}
 
 ## Navigation

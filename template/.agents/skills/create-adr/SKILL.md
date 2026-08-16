@@ -7,22 +7,30 @@ inputs:
   required:
     - decision
 reads:
+  - docs/architecture.md
   - docs/decisions/index.md
   - .agents/templates/adr.md
 commands:
-  - make validate-project
+  - make validate-docs
 outputs:
-  - ADR document
-  - updated ADR index
+  - ADR justification or no-ADR decision
+  - ADR document when justified
+  - updated ADR index when present
 approval_boundary:
   may_approve: false
 stop_conditions:
   - decision is only an implementation detail
   - required approval is missing
-  - ADR index is missing
+  - documentation validation fails
 ---
 
 # Create ADR
 
-Create an ADR only for durable architectural choices. Link it to the task and
-update the ADR index when the generated project contains one.
+First decide whether an ADR is justified. Create one for durable choices such as
+technology selection, architecture boundaries, persistence strategy,
+communication patterns, significant dependencies, or expensive-to-reverse
+decisions.
+
+Do not create ADRs for ordinary implementation details, trivial refactors,
+temporary experiments, or cheap obvious choices. In managed projects, link the
+ADR to the task when useful, but the ADR process itself is governance-neutral.

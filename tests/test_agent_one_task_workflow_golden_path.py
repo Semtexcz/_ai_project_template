@@ -244,7 +244,7 @@ def test_fullstack_context_routing(tmp_path: Path) -> None:
 
 def test_agent_negative_scenarios(tmp_path: Path) -> None:
     root = copy_project(tmp_path, project_type="script")
-    skill = root / ".agents" / "skills" / "prepare-task" / "SKILL.md"
+    skill = root / ".agents" / "managed" / "skills" / "prepare-task" / "SKILL.md"
     skill.write_text(skill.read_text(encoding="utf-8").replace("version: 1", "version: 2"), encoding="utf-8")
     result = run(["make", "validate-agent-skills"], root, expect_success=False)
     assert "version must be 1" in result.stdout
@@ -253,7 +253,7 @@ def test_agent_negative_scenarios(tmp_path: Path) -> None:
     (root / ".env").write_text("TOKEN=secret\n", encoding="utf-8")
     context_map = root / ".agents" / "context-map.yaml"
     context_map.write_text(
-        context_map.read_text(encoding="utf-8").replace("  - project/index.md", "  - project/index.md\n  - .env"),
+        context_map.read_text(encoding="utf-8").replace("  - AGENTS.md", "  - AGENTS.md\n  - .env"),
         encoding="utf-8",
     )
     result = run(["make", "agent-context", "TASK=T-001"], root, expect_success=False)

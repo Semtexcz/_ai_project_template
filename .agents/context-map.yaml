@@ -2,12 +2,21 @@ schema_version: 1
 
 always:
   - AGENTS.md
-  - project/state.yaml
-  - project/index.md
+  - project/brief.md
+  - docs/architecture.md
+  - docs/workflow.md
+  - docs/quality.md
+  - docs/decisions/index.md
 
 task:
   include:
     - project/tasks/{task_id}-*.md
+
+managed:
+  include:
+    - project/state.yaml
+    - project/index.md
+    - project/board.md
 
 project_type:
   script:
@@ -60,8 +69,8 @@ change_patterns:
     - backend/src/app/main.py
     - frontend/shared/api/
   "project/**":
-    - project/board.md
     - project/roadmap.md
+    - project/brief.md
   ".agents/**":
     - .agents/README.md
   "**/Dockerfile":
@@ -79,7 +88,7 @@ checks:
   "artifacts/openapi.json":
     - make api-check
   "project/**":
-    - make validate-project
+    - make validate-docs
   ".agents/**":
     - make validate-agent-skills
   ".codex/**":

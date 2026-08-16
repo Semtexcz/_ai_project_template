@@ -1,32 +1,44 @@
 ---
 name: review-change
 version: 1
-purpose: Prepare a scoped change for review.
-triggers: [review change, pre review, ready for review]
+purpose: Review the actual diff for correctness, risk, and readiness.
+triggers: [review change, inspect diff, pre review, ready for review]
 inputs:
   required:
-    - task_id
+    - requested_intent
 reads:
-  - project/state.yaml
-  - project/tasks/{{ task_id }}*.md
+  - AGENTS.md
   - .agents/context-map.yaml
+  - project/brief.md
+  - docs/architecture.md
+  - docs/quality.md
+  - docs/workflow.md
 commands:
-  - make agent-pre-review
-  - make task-review
+  - git diff --stat
+  - git diff
+  - make validate-docs
+  - make validate-agent-skills
+  - make check
 outputs:
-  - review readiness result
-  - verification evidence
+  - findings ordered by severity
+  - residual risks and test gaps
+  - readiness recommendation
 approval_boundary:
   may_approve: false
 stop_conditions:
-  - wrong active task
+  - requested intent is unclear
   - unsafe diff
   - failing checks
-  - missing acceptance evidence
+  - missing verification evidence
 ---
 
 # Review Change
 
-Inspect the diff against the task scope, run `make agent-pre-review TASK=<id>`,
-then use `make task-review TASK=<id>` when ready. Human approval remains outside
-the agent boundary.
+Inspect the diff itself before declaring readiness. Evaluate correctness against
+the requested intent, architecture invariants, unnecessary complexity,
+regressions, test coverage, documentation impact, security and risk
+implications, and accidental unrelated changes.
+
+Report findings before summaries or readiness statements. In managed projects,
+task acceptance criteria may add context, but lifecycle transitions remain
+outside this core review skill.
