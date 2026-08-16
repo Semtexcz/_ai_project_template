@@ -106,6 +106,24 @@ make release-check
 `make release-check` must preserve existing golden paths. It does not publish,
 tag, push images, or perform an external release.
 
+After reviewed changes are merged to `main`, create the Copier-visible template
+release with:
+
+```bash
+make template-release BUMP=patch
+```
+
+Agents should infer `BUMP` from the merged change set: use `major` for breaking
+template or update contracts, `minor` for new template capability, and `patch`
+for fixes, documentation, or tooling changes that preserve behavior. When no
+bump is supplied, the command defaults to `patch`.
+
+`make template-release` runs `make release-check`, updates
+`project/state.yaml.template.version`, commits `chore(release): vX.Y.Z`, and
+creates an annotated `vX.Y.Z` Git tag. Use `DRY_RUN=1` to preview without
+writing state, committing, or tagging. Releases are intended to run on `main`;
+`ALLOW_NON_MAIN=1` exists only for controlled tests or dry runs.
+
 ## Finish Work
 
 Before moving a task to review:

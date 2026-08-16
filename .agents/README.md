@@ -52,8 +52,10 @@ Capability skills:
 ## Context Map
 
 `.agents/context-map.yaml` defines the minimum files to load. Core context uses
-durable files that exist in lightweight and managed projects: `AGENTS.md`,
-`project/brief.md`, architecture, workflow, quality, and ADR documentation.
+durable files for the current repository. In this template repository, that
+means `AGENTS.md`, template architecture, template development, template
+ownership, and the Copier ADR. Generated projects use their generated brief,
+architecture, workflow, quality, and ADR documentation.
 
 Managed projects may add `project/state.yaml`, `project/index.md`,
 `project/board.md`, and active task files. Core skills must not require those
@@ -85,3 +87,12 @@ Hooks are managed-governance guardrails. They are generated only when
 
 Hooks may call project CLI functions, but they must not approve A1/A2 work or
 silently change task status.
+
+## Template Release Bumps
+
+When preparing a post-merge template release, agents infer the semantic version
+bump from the merged change set before running `make template-release`. Use
+`major` for breaking template or update contracts, `minor` for new template
+capability, and `patch` for fixes, documentation, or tooling changes that
+preserve behavior. If no bump is supplied, the release command defaults to
+`patch`.

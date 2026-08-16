@@ -2,11 +2,10 @@ schema_version: 1
 
 always:
   - AGENTS.md
-  - project/brief.md
-  - docs/architecture.md
-  - docs/workflow.md
-  - docs/quality.md
-  - docs/decisions/index.md
+  - docs/template-architecture.md
+  - docs/template-development.md
+  - docs/template-ownership.md
+  - docs/decisions/ADR-0001-use-copier.md
 
 task:
   include:

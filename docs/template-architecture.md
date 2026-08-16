@@ -176,3 +176,10 @@ make check
 template checks, generated project golden paths, Copier update checks, agent
 workflow checks, project-state mutation checks, production runtime inspection,
 and documentation drift checks.
+
+Template release tagging is a separate mutating workflow. After reviewed
+changes are merged to `main`, `make template-release` computes the next
+`project/state.yaml.template.version`, runs `make release-check`, commits the
+version update, and creates the matching annotated Git tag that Copier uses as
+the update ref. Validation targets, task review, and task completion do not
+create release tags.

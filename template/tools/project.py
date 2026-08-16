@@ -6,6 +6,7 @@ import argparse
 import copy
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +37,7 @@ CHECKBOX_RE = re.compile(r"^\s*-\s+\[( |x|X)\]\s+(.+)$")
 MAKE_COMMAND_RE = re.compile(r"\bmake\s+([A-Za-z0-9_-]+)")
 MAKE_TARGET_RE = re.compile(r"^([A-Za-z0-9_-]+):(?:\s|$)", re.MULTILINE)
 UNRENDERED_JINJA_RE = re.compile(r"({[{%#].*?[}%]})")
+VERSION_RE = re.compile(r"^v(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$")
 PERSONAL_PATH_RE = re.compile(
     "|".join(
         re.escape(marker)
@@ -76,6 +78,7 @@ TASK_STATUSES = {
 }
 APPROVAL_LEVELS = {"A0", "A1", "A2"}
 APPROVAL_STATUSES = {"not-required", "pending", "approved", "rejected"}
+BUMP_TYPES = {"major", "minor", "patch"}
 COLUMNS = [
     ("Backlog", "backlog"),
     ("Ready", "ready"),
@@ -1355,6 +1358,135 @@ def write_state(state: dict[str, Any]) -> None:
     tmp.replace(STATE_PATH)
 
 
+def run_command(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(command, cwd=ROOT, text=True, check=False)
+    if check and result.returncode != 0:
+        raise ProjectError(f"Command failed: {' '.join(command)}")
+    return result
+
+
+def command_output(command: list[str], *, check: bool = True) -> str:
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        suffix = f": {output}" if output else ""
+        raise ProjectError(f"Command failed: {' '.join(command)}{suffix}")
+    return result.stdout.strip()
+
+
+def parse_template_version(version: str) -> tuple[int, int, int]:
+    match = VERSION_RE.match(version)
+    if not match:
+        raise ProjectError(
+            f"Invalid template version '{version}'. Use SemVer tags in vX.Y.Z format."
+        )
+    return (
+        int(match.group("major")),
+        int(match.group("minor")),
+        int(match.group("patch")),
+    )
+
+
+def bump_template_version(version: str, bump: str) -> str:
+    if bump not in BUMP_TYPES:
+        raise ProjectError("BUMP must be one of: major, minor, patch.")
+    major, minor, patch = parse_template_version(version)
+    if bump == "major":
+        return f"v{major + 1}.0.0"
+    if bump == "minor":
+        return f"v{major}.{minor + 1}.0"
+    return f"v{major}.{minor}.{patch + 1}"
+
+
+def git_worktree_dirty() -> bool:
+    return bool(command_output(["git", "status", "--porcelain"]))
+
+
+def git_current_branch() -> str:
+    return command_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+
+
+def git_tag_exists(tag: str) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--quiet", "--verify", f"refs/tags/{tag}"],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def git_config_value(name: str) -> str:
+    return command_output(["git", "config", "--get", name], check=False)
+
+
+def validate_template_release(
+    state: dict[str, Any],
+    *,
+    bump: str,
+    allow_non_main: bool,
+) -> tuple[str, str]:
+    if state.get("project", {}).get("type") != "template":
+        raise ProjectError("Template releases are only supported for project.type=template.")
+    current_version = str(state.get("template", {}).get("version", ""))
+    next_version = bump_template_version(current_version, bump)
+    if git_tag_exists(next_version):
+        raise ProjectError(f"Git tag {next_version} already exists.")
+    if git_worktree_dirty():
+        raise ProjectError("Git worktree must be clean before creating a template release.")
+    branch = git_current_branch()
+    if branch != "main" and not allow_non_main:
+        raise ProjectError(
+            f"Template releases must run on main, not {branch}. Set ALLOW_NON_MAIN=1 only for tests or controlled dry runs."
+        )
+    if not git_config_value("user.email") or not git_config_value("user.name"):
+        raise ProjectError("Git user.name and user.email must be configured before release.")
+    return current_version, next_version
+
+
+def release_template(*, bump: str, dry_run: bool, allow_non_main: bool) -> None:
+    state = read_state()
+    current_version, next_version = validate_template_release(
+        state,
+        bump=bump,
+        allow_non_main=allow_non_main,
+    )
+    print(f"Template release: {current_version} -> {next_version} ({bump})")
+    run_command(["make", "release-check"])
+    if git_worktree_dirty():
+        raise ProjectError("Git worktree changed during release-check; inspect the diff before release.")
+    if dry_run:
+        print(f"Dry run only. No state, commit, or tag was created for {next_version}.")
+        return
+
+    candidate_state = copy.deepcopy(state)
+    candidate_state["template"]["version"] = next_version
+    candidate_tasks = load_tasks()
+    errors = validate_candidate(candidate_state, candidate_tasks)
+    if errors:
+        print_errors(errors)
+        raise SystemExit(1)
+    try:
+        commit_files_atomically({STATE_PATH: dump_simple_yaml(candidate_state)})
+        run_command(["git", "add", str(STATE_PATH.relative_to(ROOT))])
+        run_command(["git", "commit", "-m", f"chore(release): {next_version}"])
+        run_command(["git", "tag", "-a", next_version, "-m", f"Template release {next_version}"])
+    except ProjectError:
+        if not git_tag_exists(next_version):
+            write_state(state)
+            run_command(["git", "restore", "--staged", str(STATE_PATH.relative_to(ROOT))], check=False)
+        raise
+    print(f"Created template release {next_version}.")
+
+
 def controlled_transition(
     task_id: str,
     new_status: str,
@@ -1456,6 +1588,10 @@ def main() -> None:
     sub.add_parser("sync")
     sub.add_parser("validate")
     sub.add_parser("validate-docs")
+    release_cmd = sub.add_parser("release-template")
+    release_cmd.add_argument("--bump", choices=sorted(BUMP_TYPES), default="patch")
+    release_cmd.add_argument("--dry-run", action="store_true")
+    release_cmd.add_argument("--allow-non-main", action="store_true")
     for name in ["ready", "start", "review", "complete", "unblock", "cancel"]:
         command = sub.add_parser(name)
         command.add_argument("task")
@@ -1476,6 +1612,12 @@ def main() -> None:
             validate()
         elif args.command == "validate-docs":
             validate_docs_command()
+        elif args.command == "release-template":
+            release_template(
+                bump=args.bump,
+                dry_run=args.dry_run,
+                allow_non_main=args.allow_non_main,
+            )
         elif args.command == "ready":
             controlled_transition(args.task, "ready")
         elif args.command == "start":

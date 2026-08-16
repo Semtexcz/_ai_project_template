@@ -29,11 +29,11 @@ Use this repository when you want a project scaffold that already knows how to:
 | Last completed task | [T-021](project/tasks/T-021-fix-lightweight-render-matrix-ci.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | None |
+| Waiting | A1 approval pending: T-023 |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Start T-019. |
-| Next action command | `make task-start TASK=T-019` |
+| Recommended next action | Human A1 approval is required for T-023 before completion. |
+| Next action command | `make task-approve TASK=T-023 APPROVED_BY="<human>"` |
 <!-- project-status:end -->
 
 ## Quick Start
@@ -124,6 +124,11 @@ make release-check
 `make check` is the fast maintainer subset. `make release-check` runs the full
 pytest suite, including all golden paths, Copier update, workflow, production
 runtime inspection, and documentation validation.
+
+After reviewed template changes are merged to `main`, run
+`make template-release BUMP=<major|minor|patch>` to update
+`project/state.yaml.template.version`, commit the version change, and create
+the matching annotated Git tag used by Copier.
 
 ## Navigation
 
