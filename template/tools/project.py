@@ -1370,8 +1370,7 @@ def command_output(command: list[str], *, check: bool = True) -> str:
         command,
         cwd=ROOT,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if check and result.returncode != 0:
@@ -1462,7 +1461,9 @@ def release_template(*, bump: str, dry_run: bool, allow_non_main: bool) -> None:
     print(f"Template release: {current_version} -> {next_version} ({bump})")
     run_command(["make", "release-check"])
     if git_worktree_dirty():
-        raise ProjectError("Git worktree changed during release-check; inspect the diff before release.")
+        raise ProjectError(
+            "Git worktree changed during release-check; inspect the diff before release."
+        )
     if dry_run:
         print(f"Dry run only. No state, commit, or tag was created for {next_version}.")
         return
@@ -1482,7 +1483,9 @@ def release_template(*, bump: str, dry_run: bool, allow_non_main: bool) -> None:
     except ProjectError:
         if not git_tag_exists(next_version):
             write_state(state)
-            run_command(["git", "restore", "--staged", str(STATE_PATH.relative_to(ROOT))], check=False)
+            run_command(
+                ["git", "restore", "--staged", str(STATE_PATH.relative_to(ROOT))], check=False
+            )
         raise
     print(f"Created template release {next_version}.")
 

@@ -76,6 +76,13 @@ release validation, but no controlled command that updates
   reached the Copier update assertions after approved network access, then
   failed in generated `make setup` because `corepack` is not installed in this
   environment.
+- CI fix follow-up:
+  `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_template_static.py`
+  passed with approved network access: 17 tests in 146.84 seconds.
+- CI fix follow-up:
+  `UV_CACHE_DIR=/tmp/uv-cache uv run pytest
+  tests/test_agent_one_task_workflow_golden_path.py` passed with approved
+  network access: 4 tests in 258.84 seconds.
 
 ## Documentation Impact
 
