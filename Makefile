@@ -1,9 +1,12 @@
-.PHONY: check release-check template-release test-template test-copier-update project-status sync-project-docs validate-project validate-template-docs task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
+.PHONY: check check-architecture release-check template-release test-template test-copier-update project-status sync-project-docs validate-project validate-template-docs task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
 
-check: validate-project validate-template-docs validate-agent-skills
+check: validate-project validate-template-docs validate-agent-skills check-architecture
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} uv run pytest tests/test_template_static.py tests/test_project_state_validation_golden_path.py
 
-release-check: validate-project validate-template-docs validate-agent-skills
+check-architecture:
+	PYTHONDONTWRITEBYTECODE=1 python template/tools/architecture.py
+
+release-check: validate-project validate-template-docs validate-agent-skills check-architecture
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest
 
 template-release:

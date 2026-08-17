@@ -40,6 +40,8 @@ def test_generated_project_has_single_state_source_and_dashboard_tools() -> None
         "template/project/index.md.jinja",
         "template/project/board.md.jinja",
         "template/AGENTS.md.jinja",
+        "template/quality.yaml",
+        "template/tools/architecture.py",
         "template/.agents/context-map.yaml",
         "template/.agents/skills/conventional-commit/SKILL.md",
         "template/.agents/skills/conventional-commit/agents/openai.yaml",
@@ -160,7 +162,10 @@ def test_documentation_validation_targets_are_declared() -> None:
     project_tool = (ROOT / "template" / "tools" / "project.py").read_text()
 
     assert "validate-template-docs:" in makefile
+    assert "check-architecture:" in makefile
     assert "validate-docs:" in generated_makefile
+    assert "check-architecture:" in generated_makefile
+    assert "check: validate-docs validate-agent-skills check-architecture" in generated_makefile
     assert "validate-docs" in project_tool
     assert "validate_docs" in project_tool
 
@@ -319,11 +324,13 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
     assert "task-start:" not in makefile
     assert "validate-project:" not in makefile
     assert "validate-agent-skills:" in makefile
+    assert "check-architecture:" in makefile
     assert "validate-docs:" in makefile
-    assert "check: validate-docs validate-agent-skills format-check lint typecheck test" in makefile
+    assert "check: validate-docs validate-agent-skills check-architecture format-check lint typecheck test" in makefile
 
     env = {**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
     subprocess.run(["make", "validate-agent-skills"], cwd=generated, env=env, check=True)
+    subprocess.run(["make", "check-architecture"], cwd=generated, env=env, check=True)
 
 
 def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
@@ -344,15 +351,17 @@ def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
     for target in [
         "sync-project-docs:",
         "validate-project:",
+        "check-architecture:",
         "agent-context:",
         "task-start:",
         "task-approve:",
     ]:
         assert target in makefile
-    assert "check: validate-docs validate-agent-skills validate-project format-check lint typecheck test" in makefile
+    assert "check: validate-docs validate-agent-skills check-architecture validate-project format-check lint typecheck test" in makefile
 
     env = {**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
     subprocess.run(["make", "validate-agent-skills"], cwd=generated, env=env, check=True)
+    subprocess.run(["make", "check-architecture"], cwd=generated, env=env, check=True)
 
 
 def test_capability_skills_render_only_for_matching_profiles(tmp_path: Path) -> None:

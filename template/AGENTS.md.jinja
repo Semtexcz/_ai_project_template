@@ -26,6 +26,20 @@ machine for ordinary implementation work. Use the brief, architecture, workflow,
 quality gates, and any relevant ADRs as the durable context.
 {% endif %}
 
+## Code Architecture
+
+- Handwritten modules should have one clear primary responsibility.
+- Target Python module size is `<= 200` LOC; `> 300` LOC requires conscious
+  decomposition review; `> 500` LOC is a hard limit.
+- Generated code or genuinely exceptional cases may exceed the hard limit only
+  through an explicit documented exception.
+- Responsibility and cohesion take precedence over raw LOC. Do not mechanically
+  split code merely to satisfy line-count rules.
+- Avoid catch-all modules such as `utils.py`, `helpers.py`, and `common.py`
+  unless they represent a genuinely cohesive abstraction.
+- Before extending an existing module, determine whether the new behavior
+  belongs to its current responsibility.
+
 ## Architecture Rules
 
 - Start from the current project type: `{{ project_type }}`.
@@ -53,6 +67,7 @@ make dev
 make test
 make lint
 make typecheck
+make check-architecture
 make check
 make format
 make validate-docs

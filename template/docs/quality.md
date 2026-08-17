@@ -19,9 +19,29 @@ update_when:
 - Formatting and linting run through `make lint`.
 - Type checking runs through `make typecheck`.
 - Tests run through `make test`.
+- Python module design is checked through `make check-architecture`.
 - `make check` is the fast local/pre-review gate for the generated project.
 - The template repository has a separate full release-candidate gate across
   every generated profile and workflow.
+
+## Module Design
+
+Prefer handwritten Python modules with one clear primary responsibility. Source
+LOC is a review signal, not the architecture itself: `<= 200` LOC is the target,
+`301-500` LOC is a warning that decomposition should be considered, and `> 500`
+LOC is the deterministic hard limit.
+
+`make check-architecture` runs `tools/architecture.py` with `quality.yaml`. The
+checker counts non-blank, non-comment physical lines in `.py` files; docstrings
+and executable statements count as source. It excludes configured paths where
+the rule is inappropriate, such as tests, migrations, generated output, vendor
+code, build artifacts, and caches.
+
+Warnings above 300 LOC do not fail CI. A handwritten module above 500 LOC fails
+unless `quality.yaml` contains an explicit exception with a path and reason.
+Use exceptions only for generated code or genuinely exceptional cohesive files.
+Do not split modules by arbitrary line slicing; split only along meaningful
+domain or architectural boundaries.
 
 ## Test Expectations
 

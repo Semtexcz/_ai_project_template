@@ -1,4 +1,4 @@
-.PHONY: setup dev run test format format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build image-inspect prod-up prod-status prod-smoke prod-down docs validate-docs validate-agent-skills{% if governance == "managed" %} project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context agent-pre-task agent-pre-review agent-post-task agent-review-report{% endif %} down
+.PHONY: setup dev run test format format-check lint typecheck api-schema api-generate api-check e2e e2e-production check check-architecture build image-build image-inspect prod-up prod-status prod-smoke prod-down docs validate-docs validate-agent-skills{% if governance == "managed" %} project-status sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context agent-pre-task agent-pre-review agent-post-task agent-review-report{% endif %} down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -148,10 +148,13 @@ e2e-production:
 {% endif %}
 
 {% if project_type == "fullstack" %}
-check: validate-docs validate-agent-skills{% if governance == "managed" %} validate-project{% endif %} format-check lint typecheck api-check test
+check: validate-docs validate-agent-skills check-architecture{% if governance == "managed" %} validate-project{% endif %} format-check lint typecheck api-check test
 {% else %}
-check: validate-docs validate-agent-skills{% if governance == "managed" %} validate-project{% endif %} format-check lint typecheck test
+check: validate-docs validate-agent-skills check-architecture{% if governance == "managed" %} validate-project{% endif %} format-check lint typecheck test
 {% endif %}
+
+check-architecture:
+	PYTHONDONTWRITEBYTECODE=1 python tools/architecture.py
 
 build:
 {% if project_type in ["script", "library"] %}

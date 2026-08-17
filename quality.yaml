@@ -1,0 +1,19 @@
+module_design:
+  principle: single-responsibility
+
+  python:
+    target_loc: 200
+    soft_limit_loc: 300
+    hard_limit_loc: 500
+
+    exclude:
+      - tests/**
+      - migrations/**
+      - generated/**
+      - vendor/**
+
+    exceptions:
+      - path: template/tools/agent.py
+        reason: Legacy template-owned lifecycle tool; T-019 tracks decomposition.
+      - path: template/tools/project.py
+        reason: Legacy template-owned project-state tool; T-019 tracks decomposition.

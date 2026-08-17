@@ -94,6 +94,27 @@ make agent-post-task TASK=<id>
 Lightweight projects do not render those lifecycle commands, but they do render
 `make validate-agent-skills`.
 
+## Module Design Policy
+
+Generated projects include a deterministic Python module-size check in
+`tools/architecture.py`, configured by `quality.yaml`, and run through
+`make check-architecture` as part of `make check`. The policy is intentionally
+two-layered:
+
+- agent instructions and review skills enforce the judgment rule that
+  handwritten modules should have one clear primary responsibility
+- deterministic tooling reports source LOC, warns above 300 LOC, and fails above
+  500 LOC unless a documented exception exists
+
+The checker counts non-blank, non-comment physical lines in `.py` files.
+Docstrings count as source. Exclusions cover places where the rule is not
+meaningful, such as tests, generated output, vendor code, build artifacts, and
+caches. Exceptions must name a path and give an explicit reason.
+
+The 300 LOC threshold is only a decomposition signal. Cohesion takes precedence:
+agents should not split a module unless the new boundary represents a real
+domain or architectural responsibility.
+
 ## OpenAPI
 
 Full-stack profiles generate a TypeScript client from the real FastAPI OpenAPI
@@ -149,6 +170,7 @@ Generated project validation:
 ```bash
 make validate-docs
 make validate-agent-skills
+make check-architecture
 make check
 ```
 
@@ -169,6 +191,7 @@ Template validation:
 make validate-template-docs
 make validate-project
 make validate-agent-skills
+make check-architecture
 make check
 ```
 

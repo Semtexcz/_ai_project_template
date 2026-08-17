@@ -34,6 +34,20 @@ make agent-context TASK=<id>
 Canonical agent procedures are in `.agents/`. Codex-specific adapter notes are
 in `.codex/`. Project-specific context is in `project/` and `docs/`.
 
+## Code Architecture
+
+- Handwritten modules should have one clear primary responsibility.
+- Target Python module size is `<= 200` LOC; `> 300` LOC requires conscious
+  decomposition review; `> 500` LOC is a hard limit.
+- Generated code or genuinely exceptional cases may exceed the hard limit only
+  through an explicit documented exception.
+- Responsibility and cohesion take precedence over raw LOC. Do not mechanically
+  split code merely to satisfy line-count rules.
+- Avoid catch-all modules such as `utils.py`, `helpers.py`, and `common.py`
+  unless they represent a genuinely cohesive abstraction.
+- Before extending an existing module, determine whether the new behavior
+  belongs to its current responsibility.
+
 ## Boundaries
 
 Do not add production runtime, databases, queues, brokers, Redis, or external

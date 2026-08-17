@@ -85,7 +85,7 @@ def copy_workspace_to_template_repo(target: Path) -> None:
     makefile = target / "Makefile"
     makefile.write_text(
         makefile.read_text().replace(
-            "release-check: validate-project validate-template-docs validate-agent-skills\n"
+            "release-check: validate-project validate-template-docs validate-agent-skills check-architecture\n"
             "\tUV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest\n",
             "release-check:\n"
             "\t@echo release-check fixture\n",

@@ -1,0 +1,19 @@
+module_design:
+  principle: single-responsibility
+
+  python:
+    target_loc: 200
+    soft_limit_loc: 300
+    hard_limit_loc: 500
+
+    exclude:
+      - tests/**
+      - migrations/**
+      - generated/**
+      - vendor/**
+
+    exceptions:
+      - path: tools/agent.py
+        reason: Template-owned agent lifecycle tool retained for generated-project compatibility.
+      - path: tools/project.py
+        reason: Template-owned managed-governance lifecycle tool retained for generated-project compatibility.

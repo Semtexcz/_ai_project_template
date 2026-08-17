@@ -42,3 +42,13 @@ implications, and accidental unrelated changes.
 Report findings before summaries or readiness statements. In managed projects,
 task acceptance criteria may add context, but lifecycle transitions remain
 outside this core review skill.
+
+Include architecture readiness in the Definition of Done:
+
+- Every changed handwritten module has one clear primary responsibility.
+- No unrelated behavior was added to an existing module.
+- No unnecessary god module or generic catch-all helper module was introduced.
+- Python modules over 300 LOC were explicitly considered for decomposition.
+- No handwritten Python module exceeds 500 LOC without a documented exception.
+- Decomposition follows meaningful domain or architectural boundaries rather
+  than arbitrary line slicing.

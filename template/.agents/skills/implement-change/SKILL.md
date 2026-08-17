@@ -40,3 +40,18 @@ Choose the smallest coherent implementation that preserves architecture
 invariants. Prefer existing patterns and helpers over new abstractions. Run
 focused checks while working, then finish with the relevant repository checks.
 Do not mutate task state from this skill.
+
+Before extending an existing Python module, perform a module-responsibility
+check:
+
+- Identify the module's current primary responsibility.
+- Decide whether the requested behavior belongs to that responsibility.
+- Inspect the module's approximate size.
+- Prefer extracting a cohesive module when the change introduces a new
+  responsibility.
+- Explicitly consider decomposition when the resulting module would exceed 300
+  LOC.
+- Refuse artificial abstractions whose only purpose is reducing LOC.
+
+Keep the change as small as possible, but make it the smallest coherent change:
+cohesion and meaningful boundaries outrank raw line count.
