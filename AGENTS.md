@@ -61,9 +61,14 @@ status artifacts that actually exist here (`project/state.yaml`,
 - If no planning/status artifact needs a change, state that reconciliation was
   checked and no update was required.
 
+Because this repository uses managed governance, end agent reports with a short
+`Project State Check` stating what became complete, the next meaningful step,
+and why it follows from the current repository state.
+
 The task lifecycle, approval controls, `project/state.yaml`, and generated
 dashboards remain authoritative for managed task status. Reconciliation
-complements them by checking whether higher-level planning stays accurate.
+complements them by checking whether higher-level planning stays accurate; it
+never edits managed task state or generated boards directly.
 
 ## Boundaries
 
