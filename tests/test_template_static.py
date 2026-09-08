@@ -553,41 +553,66 @@ def test_rendered_projects_do_not_include_cache_artifacts(tmp_path: Path) -> Non
         assert offenders == []
 
 
-def test_project_state_reconciliation_policy_renders_in_generated_projects(tmp_path: Path) -> None:
-    projects = [
-        copy_project(tmp_path, governance="lightweight"),
-        copy_project(tmp_path, governance="managed", workflow_mode="pr"),
-    ]
+def test_project_state_reconciliation_renders_governance_split(tmp_path: Path) -> None:
+    lightweight = copy_project(tmp_path, governance="lightweight")
+    managed = copy_project(tmp_path, governance="managed", workflow_mode="pr")
 
-    for generated in projects:
+    # Shared: both profiles reconcile durable planning/status artifacts only when
+    # they exist and are affected, without mechanically advancing a backlog.
+    for generated in [lightweight, managed]:
         agents_md = (generated / "AGENTS.md").read_text(encoding="utf-8")
         assert "## Project State Reconciliation" in agents_md
-        assert "smallest evidence-producing next slice" in agents_md
-        assert "Project State Check" in agents_md
+        assert "never mechanically advance a" in agents_md
         assert "docs/roadmap.md" not in agents_md
 
-        workflow = (generated / "docs" / "workflow.md").read_text(encoding="utf-8")
-        assert "reconcile project state" in workflow
-        assert "not immutable task queues" in workflow
-
-        update_docs = (
-            generated / ".agents" / "skills" / "update-documentation" / "SKILL.md"
-        ).read_text(encoding="utf-8")
+        update_docs = " ".join(
+            (
+                generated / ".agents" / "skills" / "update-documentation" / "SKILL.md"
+            ).read_text(encoding="utf-8").split()
+        )
         assert "planning/status drift" in update_docs
         assert "milestone progression" in update_docs
         assert "roadmap/backlog changes" in update_docs
         assert "next-task changes" in update_docs
-        assert "Identify the planning/status artifacts" in update_docs
-        normalized = " ".join(update_docs.split())
-        truthful_phrase = (
-            "Prefer truthful current-state documentation over preserving the "
-            "previous backlog order"
-        )
-        assert truthful_phrase in normalized
+        assert "planning/status artifacts this repository actually keeps" in update_docs
+        assert "not a lifecycle engine" in update_docs
+        assert "Never mutate managed task/approval state" in update_docs
 
-        review_change = (
-            generated / ".agents" / "skills" / "review-change" / "SKILL.md"
-        ).read_text(encoding="utf-8")
+        review_change = " ".join(
+            (
+                generated / ".agents" / "skills" / "review-change" / "SKILL.md"
+            ).read_text(encoding="utf-8").split()
+        )
         assert "contradict the actual post-change repository state" in review_change
         assert "marked complete only when it was actually delivered" in review_change
         assert "material planning/status drift as a readiness finding" in review_change
+        assert "If the project keeps no such artifacts" in review_change
+
+    # Managed: stronger reconciliation plus the Project State Check footer.
+    managed_agents = " ".join((managed / "AGENTS.md").read_text(encoding="utf-8").split())
+    assert "smallest evidence-producing next slice" in managed_agents
+    assert "Project State Check" in managed_agents
+    assert "roadmap/milestone/task-level planning" in managed_agents
+    assert "remain authoritative for task status" in managed_agents
+
+    managed_workflow = " ".join(
+        (managed / "docs" / "workflow.md").read_text(encoding="utf-8").split()
+    )
+    assert "reconcile project state" in managed_workflow
+    assert "not immutable task queues" in managed_workflow
+
+    # Lightweight: no mandatory task selection, roadmap thinking, or footer.
+    lightweight_agents = " ".join(
+        (lightweight / "AGENTS.md").read_text(encoding="utf-8").split()
+    )
+    assert "smallest evidence-producing next slice" not in lightweight_agents
+    assert "Project State Check" not in lightweight_agents
+    assert "Lightweight projects do not require task selection" in lightweight_agents
+
+    lightweight_workflow = " ".join(
+        (lightweight / "docs" / "workflow.md").read_text(encoding="utf-8").split()
+    )
+    assert "reconcile project state" not in lightweight_workflow
+    assert "update durable docs" in lightweight_workflow
+    assert "Project State Check" not in lightweight_workflow
+

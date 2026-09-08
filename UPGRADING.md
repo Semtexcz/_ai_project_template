@@ -109,12 +109,16 @@ commit the upgrade.
 
 ## Project State Reconciliation Note
 
-Newer template versions add a general project-state reconciliation policy to
-generated `AGENTS.md` and `docs/workflow.md`. Both files are merge-sensitive:
-existing generated projects with local customizations may receive merge
-conflicts during `copier update`. Resolve those conflicts by preserving
-project-specific rules while incorporating the general reconciliation policy.
-No file migration is required.
+Newer template versions add a project-state reconciliation policy to generated
+`AGENTS.md` and `docs/workflow.md`. Managed generated projects receive the full
+policy (roadmap/milestone/task-level reconciliation, next-task re-evaluation,
+and a concise `Project State Check`); lightweight generated projects receive
+only the shared guidance to keep durable planning/status artifacts truthful when
+they exist, without task selection or report-footers. Both files are
+merge-sensitive: existing generated projects with local customizations may
+receive merge conflicts during `copier update`. Resolve those conflicts by
+preserving project-specific rules while incorporating the reconciliation policy
+that matches the project's governance. No file migration is required.
 
 ## Migrations
 

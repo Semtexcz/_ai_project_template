@@ -8,6 +8,7 @@
 - Added a targeted two-version Copier update integration test using temporary Git commits and tags.
 - Recorded template version metadata in generated projects through `.template-version` rendered from the Copier Git ref.
 - Current limitation: update safety is tested for the fullstack-local golden path; future structural migrations require explicit migration tests.
+- Refined generated project-state reconciliation so managed projects keep stronger reconciliation (including a `Project State Check`) while lightweight projects only keep durable planning/status artifacts truthful when present.
 
 ## 0.1.0 - 2026-07-31
 

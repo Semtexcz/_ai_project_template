@@ -88,37 +88,38 @@ make sync-project-docs
 
 ## Project State Reconciliation
 
-Before declaring a change ready, reconcile durable planning/status
-documentation with the actual repository state whenever the change can affect
-implemented capabilities, architecture decisions, examples or executable
-scenarios, milestone progress, previously planned work, or next-task selection.
+Before declaring a change ready, check whether durable planning/status
+documentation exists and whether this change materially affects it. Depending
+on the project, that documentation may include roadmap or backlog notes,
+milestones, next-task statements, deferred decisions, or phase/status
+documentation. Do not assume any single path such as a fixed roadmap file.
 
-- Identify the planning/status artifacts that actually exist in this project.
-  Depending on governance and project customization, these may include a
-  roadmap, milestones, a backlog, project status, next-task statements,
-  deferred decisions, or phase/status documentation. Do not assume any single
-  path such as a fixed roadmap file.
-- Compare those artifacts against the repository state after implementation.
-  Mark work complete only when it was actually delivered, and do not
-  mechanically advance the previous backlog order.
-- Re-evaluate the next meaningful task from current implemented capabilities,
-  milestone goals, unresolved evidence gaps, accepted architecture decisions,
-  existing realistic examples or prototypes, and current constraints. Prefer
-  the smallest evidence-producing next slice over speculative architecture.
-- Search planning/status artifacts for stale wording such as "next task",
-  "planned", "deferred", "not yet implemented", "open decision",
-  "prerequisite", "upcoming", or "blocked".
-- If no planning/status artifact needs a change, state that reconciliation was
-  checked and no update was required.
+If such artifacts exist and are affected, reconcile them with the actual
+repository state: remove stale claims, update durable documentation truthfully,
+mark complete only work actually delivered, and never mechanically advance a
+roadmap or backlog. If nothing needs to change, state that reconciliation was
+checked and no update was required.
+{% if governance == "managed" %}
+This project also keeps managed planning/status artifacts (roadmap, milestones,
+backlog, and the task lifecycle). Reconcile roadmap/milestone/task-level
+planning with the post-change repository state and re-evaluate the next
+meaningful task where appropriate, preferring the smallest evidence-producing
+next slice. Search for stale wording such as "next task", "planned",
+"deferred", "not yet implemented", "open decision", "prerequisite", "upcoming",
+or "blocked". End agent reports with a concise `Project State Check` that
+states what became complete, the next meaningful step, and why it follows from
+the current repository state.
 
-End the agent report with a short `Project State Check` that states what became
-complete, what is now the next meaningful step, and why that next step follows
-from the current repository state.
-
-For managed projects, the task lifecycle, approval controls, managed project
-state, and generated boards remain authoritative for task status. Reconciliation
-complements that machinery by checking whether higher-level planning stays
-accurate; it does not replace it.
+The task lifecycle, approval controls, `project/state.yaml`, and generated
+boards remain authoritative for task status. Reconciliation complements that
+machinery by keeping higher-level planning truthful; it never replaces managed
+state or edits it directly.
+{% else %}
+Lightweight projects do not require task selection, next-task statements,
+roadmap thinking, or a managed-style report footer. Use the brief,
+architecture, workflow, quality gates, and ADRs as durable context and update
+them only when implementation teaches something durable.
+{% endif %}
 
 ## Workflow
 
