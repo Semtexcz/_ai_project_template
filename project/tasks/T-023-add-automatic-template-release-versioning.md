@@ -3,7 +3,7 @@ id: T-023
 
 title: Add automatic template release versioning
 
-status: in-progress
+status: review
 
 priority: 1
 

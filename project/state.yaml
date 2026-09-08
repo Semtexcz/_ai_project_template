@@ -13,7 +13,7 @@ lifecycle:
   next_gate: release-candidate-remediation
 
 work:
-  active_task: T-023
+  active_task: null
   blocked: false
 
 template:
