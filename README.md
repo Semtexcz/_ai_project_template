@@ -27,13 +27,13 @@ Use this repository when you want a project scaffold that already knows how to:
 | Phase | delivery |
 | Milestone | M-08 |
 | Last completed task | [T-021](project/tasks/T-021-fix-lightweight-render-matrix-ci.md) |
-| Active task | None |
-| Approval | None |
-| Waiting | A1 approval pending: T-023 |
+| Active task | [T-023](project/tasks/T-023-add-automatic-template-release-versioning.md) |
+| Approval | A1 / pending |
+| Waiting | None |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Human A1 approval is required for T-023 before completion. |
-| Next action command | `make task-approve TASK=T-023 APPROVED_BY="<human>"` |
+| Recommended next action | Complete T-023. |
+| Next action command | `make task-review TASK=T-023` |
 <!-- project-status:end -->
 
 ## Quick Start
@@ -125,10 +125,14 @@ make release-check
 pytest suite, including all golden paths, Copier update, workflow, production
 runtime inspection, and documentation validation.
 
-After reviewed template changes are merged to `main`, run
-`make template-release BUMP=<major|minor|patch>` to update
-`project/state.yaml.template.version`, commit the version change, and create
-the matching annotated Git tag used by Copier.
+After reviewed template changes are merged to `main` by a human, run
+`make template-release BUMP=<major|minor|patch>` to prepare a local release: it
+runs the release gate, updates `template.version` in `project/state.yaml`, and
+creates the matching annotated Git tag on `main`. The command never pushes. The
+release becomes visible to Copier and GitHub only after a human publishes the
+commit and tag with `git push origin main --follow-tags`. See
+[docs/template-development.md](docs/template-development.md) for the full
+release and publication procedure.
 
 ## Navigation
 

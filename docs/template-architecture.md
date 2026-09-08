@@ -177,9 +177,12 @@ template checks, generated project golden paths, Copier update checks, agent
 workflow checks, project-state mutation checks, production runtime inspection,
 and documentation drift checks.
 
-Template release tagging is a separate mutating workflow. After reviewed
-changes are merged to `main`, `make template-release` computes the next
-`project/state.yaml.template.version`, runs `make release-check`, commits the
-version update, and creates the matching annotated Git tag that Copier uses as
-the update ref. Validation targets, task review, and task completion do not
-create release tags.
+Template release is a separate post-merge maintainer workflow, not part of agent
+change delivery. After reviewed changes are merged to `main`, the
+maintainer-only `make template-release` (implemented in
+`tools/template_release.py`, outside the rendered template directory) validates,
+runs `make release-check`, and creates a local `chore(release): vX.Y.Z` commit
+and matching annotated `vX.Y.Z` tag on `main`. The command never pushes; a human
+publishes the commit and tag to `origin` (for example `git push origin main
+--follow-tags`) before Copier can use the new tag. Validation targets, task
+review, and task completion do not create release commits or tags.

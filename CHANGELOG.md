@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a maintainer-only `make template-release` workflow that prepares a local template release (version commit plus annotated tag) and leaves the repository clean if release creation fails. Local release is separate from the explicit push that makes the version visible to Copier and GitHub.
 - Added a supported Copier update workflow for projects generated from a versioned Git template source.
 - Documented the template-owned, project-owned, and merge-sensitive file ownership model.
 - Added a targeted two-version Copier update integration test using temporary Git commits and tags.

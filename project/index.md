@@ -7,10 +7,10 @@
 | Phase | delivery |
 | Milestone | M-08 |
 | Next gate | release-candidate-remediation |
-| Active task | None |
-| Approval | None |
+| Active task | [T-023](tasks/T-023-add-automatic-template-release-versioning.md) |
+| Approval | A1 / pending |
 | Blocker | None |
-| Recommended next action | Human A1 approval is required for T-023 before completion. |
+| Recommended next action | Complete T-023. |
 
 Links: [Board](board.md) | [Roadmap](roadmap.md)
 <!-- project-index:end -->

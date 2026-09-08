@@ -88,11 +88,18 @@ Hooks are managed-governance guardrails. They are generated only when
 Hooks may call project CLI functions, but they must not approve A1/A2 work or
 silently change task status.
 
-## Template Release Bumps
+## Template Releases
 
-When preparing a post-merge template release, agents infer the semantic version
-bump from the merged change set before running `make template-release`. Use
-`major` for breaking template or update contracts, `minor` for new template
-capability, and `patch` for fixes, documentation, or tooling changes that
-preserve behavior. If no bump is supplied, the release command defaults to
-`patch`.
+Template releases are post-merge maintainer actions on `main`. They are not
+part of the branch -> commit -> push -> pull request workflow, and agents must
+not use `make template-release` to commit directly to `main`. The command
+refuses non-`main` branches and dirty worktrees and lives only in the template
+repository root (`tools/template_release.py`), never in generated projects.
+
+`make template-release` creates a LOCAL version commit and annotated tag only.
+Publication is a separate human action (`git push origin main --follow-tags`);
+until that happens the release is not visible to Copier or GitHub. When
+proposing a post-merge release, infer the semantic version bump from the merged
+change set: `major` for breaking template or update contracts, `minor` for new
+template capability, and `patch` for fixes, documentation, or tooling changes
+that preserve behavior. Without a bump the command defaults to `patch`.

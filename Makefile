@@ -7,7 +7,7 @@ release-check: validate-project validate-template-docs validate-agent-skills
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest
 
 template-release:
-	PYTHONDONTWRITEBYTECODE=1 python template/tools/project.py release-template $(if $(BUMP),--bump $(BUMP),) $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,) $(if $(filter 1 true yes,$(ALLOW_NON_MAIN)),--allow-non-main,)
+	PYTHONDONTWRITEBYTECODE=1 python tools/template_release.py $(if $(BUMP),--bump $(BUMP),) $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,) $(if $(filter 1 true yes,$(ALLOW_NON_MAIN)),--allow-non-main,)
 
 test-template:
 	uv run pytest

@@ -30,6 +30,8 @@ make agent-context TASK=<id>
 - For every agent-made change, commit the agent's own changes, push the branch
   to `origin`, and open a ready GitHub pull request. Do not push directly to
   `main`.
+- `make template-release` is a post-merge, human-run maintainer action on
+  `main`; never use it to bypass the branch/PR workflow.
 
 Canonical agent procedures are in `.agents/`. Codex-specific adapter notes are
 in `.codex/`. Project-specific context is in `project/` and `docs/`.

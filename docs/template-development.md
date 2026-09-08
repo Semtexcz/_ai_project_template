@@ -106,23 +106,61 @@ make release-check
 `make release-check` must preserve existing golden paths. It does not publish,
 tag, push images, or perform an external release.
 
-After reviewed changes are merged to `main`, create the Copier-visible template
-release with:
+## Template Release And Publication
+
+Template release is a post-merge maintainer operation, separate from the agent
+`branch -> commit -> push -> PR -> merge` workflow. It runs on `main` only after
+a human merges the reviewed change. A coding agent on a feature branch cannot
+use it to bypass the PR workflow: the command rejects non-`main` branches and
+dirty worktrees.
+
+### What `make template-release` does
+
+`make template-release BUMP=<major|minor|patch>` prepares a **local** release:
+
+1. validates the current version, the requested bump, the branch (`main`
+   unless `ALLOW_NON_MAIN=1` is set for tests or dry runs), a clean worktree, a
+   missing target tag, and Git identity;
+2. runs `make release-check`;
+3. validates the candidate project state;
+4. updates `template.version` in `project/state.yaml`, creates the
+   `chore(release): vX.Y.Z` commit, and creates the annotated `vX.Y.Z` Git tag
+   on `main`.
+
+Use `DRY_RUN=1` to preview the release without writing state, committing, or
+tagging.
+
+### What it does NOT do
+
+`make template-release` never pushes. It does not publish anything to GitHub,
+does not create a GitHub Release, and does not, by itself, expose the new
+version to Copier. It is not a substitute for the agent PR workflow and gives no
+one authority to commit to `main` outside the post-merge release procedure.
+
+### When the release becomes Copier/GitHub visible
+
+The release becomes visible to Copier and GitHub only after the commit and the
+tag are pushed to `origin`. Until then the release exists only in the local
+clone.
+
+### Publishing the release
+
+A maintainer publishes the prepared local release with an explicit human
+action:
 
 ```bash
-make template-release BUMP=patch
+git push origin main --follow-tags
 ```
 
-Agents should infer `BUMP` from the merged change set: use `major` for breaking
-template or update contracts, `minor` for new template capability, and `patch`
-for fixes, documentation, or tooling changes that preserve behavior. When no
-bump is supplied, the command defaults to `patch`.
+No automation in this repository pushes release commits or tags automatically.
 
-`make template-release` runs `make release-check`, updates
-`project/state.yaml.template.version`, commits `chore(release): vX.Y.Z`, and
-creates an annotated `vX.Y.Z` Git tag. Use `DRY_RUN=1` to preview without
-writing state, committing, or tagging. Releases are intended to run on `main`;
-`ALLOW_NON_MAIN=1` exists only for controlled tests or dry runs.
+### Choosing the bump
+
+The maintainer chooses `BUMP` from the merged change set: use `major` for
+breaking template or update contracts, `minor` for new template capability, and
+`patch` for fixes, documentation, or tooling changes that preserve behavior.
+Without a `BUMP`, the command defaults to `patch`. Agents may propose the bump
+in review; executing the release remains a human post-merge action on `main`.
 
 ## Finish Work
 
