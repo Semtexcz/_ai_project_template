@@ -42,3 +42,16 @@ implications, and accidental unrelated changes.
 Report findings before summaries or readiness statements. In managed projects,
 task acceptance criteria may add context, but lifecycle transitions remain
 outside this core review skill.
+
+Include planning/status readiness in the Definition of Done:
+
+- Does any roadmap, backlog, milestone, next-task, deferred-status, or other
+  planning statement contradict the actual post-change repository state?
+- Is completed work marked complete only when it was actually delivered?
+- Is next-task wording still justified by the current repository state?
+- Were stale deferred or open statements removed or updated?
+
+Treat material planning/status drift as a readiness finding. Do not make every
+incidental documentation mismatch a blocker; only material contradictions
+between the actual repository state and durable planning/status documentation
+should affect readiness.

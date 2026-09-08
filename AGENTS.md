@@ -39,6 +39,32 @@ make agent-context TASK=<id>
 Canonical agent procedures are in `.agents/`. Codex-specific adapter notes are
 in `.codex/`. Project-specific context is in `project/` and `docs/`.
 
+## Project State Reconciliation
+
+Before declaring template work ready, reconcile durable planning/status
+documentation with the actual repository state whenever a change can affect
+template capabilities, architecture decisions, roadmap or milestone progress,
+previously planned work, or next-task selection. Identify the planning and
+status artifacts that actually exist here (`project/state.yaml`,
+`project/board.md`, `project/index.md`, `project/roadmap.md`,
+`project/tasks/`) and compare them against the post-change repository state.
+
+- Mark work complete only when it was actually delivered; do not mechanically
+  advance the previous backlog order.
+- Re-evaluate the next meaningful task from current template capabilities,
+  milestone goals, unresolved evidence gaps, accepted architecture decisions,
+  and existing examples or tests. Prefer the smallest evidence-producing next
+  slice.
+- Search planning/status artifacts for stale wording such as "next task",
+  "planned", "deferred", "not yet implemented", "open decision",
+  "prerequisite", "upcoming", or "blocked".
+- If no planning/status artifact needs a change, state that reconciliation was
+  checked and no update was required.
+
+The task lifecycle, approval controls, `project/state.yaml`, and generated
+dashboards remain authoritative for managed task status. Reconciliation
+complements them by checking whether higher-level planning stays accurate.
+
 ## Boundaries
 
 Do not add production runtime, databases, queues, brokers, Redis, or external

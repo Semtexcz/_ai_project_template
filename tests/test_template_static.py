@@ -551,3 +551,43 @@ def test_rendered_projects_do_not_include_cache_artifacts(tmp_path: Path) -> Non
             if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}
         ]
         assert offenders == []
+
+
+def test_project_state_reconciliation_policy_renders_in_generated_projects(tmp_path: Path) -> None:
+    projects = [
+        copy_project(tmp_path, governance="lightweight"),
+        copy_project(tmp_path, governance="managed", workflow_mode="pr"),
+    ]
+
+    for generated in projects:
+        agents_md = (generated / "AGENTS.md").read_text(encoding="utf-8")
+        assert "## Project State Reconciliation" in agents_md
+        assert "smallest evidence-producing next slice" in agents_md
+        assert "Project State Check" in agents_md
+        assert "docs/roadmap.md" not in agents_md
+
+        workflow = (generated / "docs" / "workflow.md").read_text(encoding="utf-8")
+        assert "reconcile project state" in workflow
+        assert "not immutable task queues" in workflow
+
+        update_docs = (
+            generated / ".agents" / "skills" / "update-documentation" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        assert "planning/status drift" in update_docs
+        assert "milestone progression" in update_docs
+        assert "roadmap/backlog changes" in update_docs
+        assert "next-task changes" in update_docs
+        assert "Identify the planning/status artifacts" in update_docs
+        normalized = " ".join(update_docs.split())
+        truthful_phrase = (
+            "Prefer truthful current-state documentation over preserving the "
+            "previous backlog order"
+        )
+        assert truthful_phrase in normalized
+
+        review_change = (
+            generated / ".agents" / "skills" / "review-change" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        assert "contradict the actual post-change repository state" in review_change
+        assert "marked complete only when it was actually delivered" in review_change
+        assert "material planning/status drift as a readiness finding" in review_change

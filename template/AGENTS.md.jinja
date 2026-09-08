@@ -86,6 +86,40 @@ make sync-project-docs
 - `make task-approve` is for humans only. AI agents must not autonomously record A1 or A2 approval.
 {% endif %}
 
+## Project State Reconciliation
+
+Before declaring a change ready, reconcile durable planning/status
+documentation with the actual repository state whenever the change can affect
+implemented capabilities, architecture decisions, examples or executable
+scenarios, milestone progress, previously planned work, or next-task selection.
+
+- Identify the planning/status artifacts that actually exist in this project.
+  Depending on governance and project customization, these may include a
+  roadmap, milestones, a backlog, project status, next-task statements,
+  deferred decisions, or phase/status documentation. Do not assume any single
+  path such as a fixed roadmap file.
+- Compare those artifacts against the repository state after implementation.
+  Mark work complete only when it was actually delivered, and do not
+  mechanically advance the previous backlog order.
+- Re-evaluate the next meaningful task from current implemented capabilities,
+  milestone goals, unresolved evidence gaps, accepted architecture decisions,
+  existing realistic examples or prototypes, and current constraints. Prefer
+  the smallest evidence-producing next slice over speculative architecture.
+- Search planning/status artifacts for stale wording such as "next task",
+  "planned", "deferred", "not yet implemented", "open decision",
+  "prerequisite", "upcoming", or "blocked".
+- If no planning/status artifact needs a change, state that reconciliation was
+  checked and no update was required.
+
+End the agent report with a short `Project State Check` that states what became
+complete, what is now the next meaningful step, and why that next step follows
+from the current repository state.
+
+For managed projects, the task lifecycle, approval controls, managed project
+state, and generated boards remain authoritative for task status. Reconciliation
+complements that machinery by checking whether higher-level planning stays
+accurate; it does not replace it.
+
 ## Workflow
 
 {% if workflow_mode == "local" %}

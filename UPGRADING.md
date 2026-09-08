@@ -107,6 +107,15 @@ conflict markers by default or `.rej` files when `--conflict rej` is selected.
 Do not blindly accept conflicts. Resolve them, rerun the checks, and only then
 commit the upgrade.
 
+## Project State Reconciliation Note
+
+Newer template versions add a general project-state reconciliation policy to
+generated `AGENTS.md` and `docs/workflow.md`. Both files are merge-sensitive:
+existing generated projects with local customizations may receive merge
+conflicts during `copier update`. Resolve those conflicts by preserving
+project-specific rules while incorporating the general reconciliation policy.
+No file migration is required.
+
 ## Migrations
 
 The governance refactor adds answers rather than silently moving product-owned

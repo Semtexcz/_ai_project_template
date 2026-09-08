@@ -17,6 +17,8 @@ managed:
     - project/state.yaml
     - project/index.md
     - project/board.md
+    - project/roadmap.md
+    - project/milestones/
 
 project_type:
   script:
