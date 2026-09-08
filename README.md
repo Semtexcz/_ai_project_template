@@ -125,12 +125,19 @@ make release-check
 pytest suite, including all golden paths, Copier update, workflow, production
 runtime inspection, and documentation validation.
 
-After reviewed template changes are merged to `main` by a human, run
-`make template-release BUMP=<major|minor|patch>` to prepare a local release: it
-runs the release gate, updates `template.version` in `project/state.yaml`, and
-creates the matching annotated Git tag on `main`. The command never pushes. The
-release becomes visible to Copier and GitHub only after a human publishes the
-commit and tag with `git push origin main --follow-tags`. See
+Template releases follow the repository's PR-only `main` rule in two phases.
+
+1. On a release branch, prepare the reviewable version commit:
+   `make template-release-prepare BUMP=<major|minor|patch>`. It runs the release
+   gate, updates `template.version` in `project/state.yaml`, and creates a
+   normal `chore(release): vX.Y.Z` commit. It creates no tag, pushes nothing,
+   and refuses to run on `main`.
+2. After CI and a human merge the release PR to `main`, tag the merged commit:
+   `make template-release-tag`. It verifies local `main` matches `origin/main`
+   and that `HEAD` is the exact release commit, then creates an annotated
+   `vX.Y.Z` tag. Tagging creates no commits.
+
+Publish only the intended tag with `git push origin vX.Y.Z`. See
 [docs/template-development.md](docs/template-development.md) for the full
 release and publication procedure.
 

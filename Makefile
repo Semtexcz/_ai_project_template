@@ -1,4 +1,4 @@
-.PHONY: check release-check template-release test-template test-copier-update project-status sync-project-docs validate-project validate-template-docs task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
+.PHONY: check release-check template-release-prepare template-release-tag test-template test-copier-update project-status sync-project-docs validate-project validate-template-docs task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
 
 check: validate-project validate-template-docs validate-agent-skills
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} uv run pytest tests/test_template_static.py tests/test_project_state_validation_golden_path.py
@@ -6,8 +6,11 @@ check: validate-project validate-template-docs validate-agent-skills
 release-check: validate-project validate-template-docs validate-agent-skills
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest
 
-template-release:
-	PYTHONDONTWRITEBYTECODE=1 python tools/template_release.py $(if $(BUMP),--bump $(BUMP),) $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,) $(if $(filter 1 true yes,$(ALLOW_NON_MAIN)),--allow-non-main,)
+template-release-prepare:
+	PYTHONDONTWRITEBYTECODE=1 python tools/template_release.py prepare $(if $(BUMP),--bump $(BUMP),) $(if $(filter 1 true yes,$(DRY_RUN)),--dry-run,)
+
+template-release-tag:
+	PYTHONDONTWRITEBYTECODE=1 python tools/template_release.py tag
 
 test-template:
 	uv run pytest

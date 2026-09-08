@@ -90,16 +90,29 @@ silently change task status.
 
 ## Template Releases
 
-Template releases are post-merge maintainer actions on `main`. They are not
-part of the branch -> commit -> push -> pull request workflow, and agents must
-not use `make template-release` to commit directly to `main`. The command
-refuses non-`main` branches and dirty worktrees and lives only in the template
-repository root (`tools/template_release.py`), never in generated projects.
+Template releases use a two-phase, PR-only flow. They are maintainer actions in
+the template repository root (`tools/template_release.py`), never in generated
+projects, and they are never a backdoor for committing to `main`.
 
-`make template-release` creates a LOCAL version commit and annotated tag only.
-Publication is a separate human action (`git push origin main --follow-tags`);
-until that happens the release is not visible to Copier or GitHub. When
-proposing a post-merge release, infer the semantic version bump from the merged
-change set: `major` for breaking template or update contracts, `minor` for new
+Phase 1 (`make template-release-prepare BUMP=<major|minor|patch>`) prepares an
+ordinary, reviewable version commit on a non-`main` release branch. It runs the
+release gate, updates `project/state.yaml.template.version`, commits
+`chore(release): vX.Y.Z`, creates no tag, pushes nothing, and refuses to run on
+`main`. The commit reaches `main` only through the normal push -> pull request
+-> CI -> human approval -> merge workflow.
+
+Phase 2 (`make template-release-tag`) runs on clean, up-to-date `main` after
+the release PR is merged. It fetches `origin main` (remote-tracking ref only),
+verifies local `main` equals `origin/main`, verifies `HEAD` is the exact
+`chore(release): vX.Y.Z` commit, refuses existing local or remote tags, and
+creates an annotated tag. It never creates commits, never rewrites history, and
+never force-pushes. Tagging is post-merge release metadata and grants no
+exception to PR-only `main` governance.
+
+Publication pushes only the intended tag (`git push origin vX.Y.Z`);
+`--follow-tags` is not recommended because it can publish unrelated annotated
+tags. Until publication the tag is not visible to Copier or GitHub. When
+proposing a release, infer the semantic version bump from the merged change
+set: `major` for breaking template or update contracts, `minor` for new
 template capability, and `patch` for fixes, documentation, or tooling changes
 that preserve behavior. Without a bump the command defaults to `patch`.

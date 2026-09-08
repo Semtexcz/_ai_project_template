@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Added a maintainer-only `make template-release` workflow that prepares a local template release (version commit plus annotated tag) and leaves the repository clean if release creation fails. Local release is separate from the explicit push that makes the version visible to Copier and GitHub.
+- Reworked the template release workflow into a PR-only, two-phase flow: `make template-release-prepare BUMP=<major|minor|patch>` creates an ordinary, reviewable `chore(release): vX.Y.Z` version commit on a non-`main` release branch (no tag, no push), and `make template-release-tag` creates the annotated release tag only after that commit is merged to `main` and local `main` equals `origin/main`. Publication pushes only the intended tag (`git push origin vX.Y.Z`). Direct release commits on `main`, `git update-ref` branch advancement by release tooling, and the `git push origin main --follow-tags` publication recommendation are removed.
 - Added a supported Copier update workflow for projects generated from a versioned Git template source.
 - Documented the template-owned, project-owned, and merge-sensitive file ownership model.
 - Added a targeted two-version Copier update integration test using temporary Git commits and tags.

@@ -234,7 +234,19 @@ def create_template_v2(template_repo: Path, env: Mapping[str, str]) -> str:
         )
     )
     commit_all(template_repo, env, "template v1.1.0")
-    run_command(["make", "template-release", "BUMP=minor"], template_repo, env)
+    # PR-only two-phase release: version bumps reach main only through a PR merge.
+    origin = template_repo.parent / "origin-template.git"
+    run_command(["git", "init", "--bare", "-q", str(origin)], template_repo, env)
+    run_command(["git", "remote", "add", "origin", str(origin)], template_repo, env)
+    run_command(["git", "push", "-q", "-u", "origin", "main"], template_repo, env)
+    run_command(["git", "checkout", "-q", "-b", "release/v1.1.0"], template_repo, env)
+    run_command(["make", "template-release-prepare", "BUMP=minor"], template_repo, env)
+    run_command(["git", "push", "-q", "-u", "origin", "release/v1.1.0"], template_repo, env)
+    run_command(["git", "checkout", "-q", "main"], template_repo, env)
+    # Simulate the human GitHub PR merge: origin/main advances to the release commit.
+    run_command(["git", "merge", "-q", "--ff-only", "release/v1.1.0"], template_repo, env)
+    run_command(["git", "push", "-q", "origin", "main"], template_repo, env)
+    run_command(["make", "template-release-tag"], template_repo, env)
     return run_command(["git", "rev-parse", "HEAD"], template_repo, env).stdout.strip()
 
 
