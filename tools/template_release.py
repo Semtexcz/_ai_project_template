@@ -35,9 +35,9 @@ mutation and it creates only an annotated tag:
 2. refuse an existing remote tag before any fetch;
 3. fetch ``origin main`` (updates ``refs/remotes/origin/main`` only);
 4. require local ``main`` == ``origin/main`` (no stale/diverged main);
-5. verify ``HEAD`` is the exact release commit: its subject is
-   ``chore(release): vX.Y.Z`` matching ``project/state.yaml.template.version``
-   and the version was actually changed by that commit;
+5. verify ``HEAD`` is the release boundary: ``project/state.yaml`` records
+   ``vX.Y.Z`` at ``HEAD`` and an older version at ``HEAD^1`` (the pre-merge
+   mainline parent for merge commits);
 6. refuse an existing local tag;
 7. create an annotated ``vX.Y.Z`` tag pointing at ``HEAD``.
 
@@ -177,10 +177,6 @@ def git_current_branch() -> str:
 
 def git_head_sha() -> str:
     return command_output(["git", "rev-parse", "HEAD"])
-
-
-def git_head_subject() -> str:
-    return command_output(["git", "log", "-1", "--pretty=%s"])
 
 
 def git_has_parent() -> bool:
@@ -455,8 +451,6 @@ def tag_template_release() -> None:
 
     current_version = str(state.get("template", {}).get("version", ""))
     parse_template_version(current_version)
-    expected_subject = f"chore(release): {current_version}"
-
     # Remote collision safety runs first: a later fetch would auto-follow an
     # existing remote tag into the local tag list and hide the remote check.
     if git_origin_tag_exists(current_version):
@@ -492,36 +486,30 @@ def tag_template_release() -> None:
             f"project/state.yaml at HEAD does not record version {current_version}. "
             "Refusing to tag an unexpected release state."
         )
-    subject = git_head_subject()
-    if subject != expected_subject:
-        raise ReleaseError(
-            f"Refusing to tag: HEAD subject is '{subject}', expected "
-            f"'{expected_subject}'. The release tag must point to the exact release "
-            "commit that the release PR merged to main."
-        )
     if not git_has_parent():
         raise ReleaseError(
-            "Refusing to tag: HEAD has no parent, so the version change cannot be "
-            "verified as a committed release change."
+            "Refusing to tag: HEAD has no first parent, so the version transition "
+            "cannot be verified as a committed release boundary."
         )
-    parent_version = git_file_version(project, "HEAD^")
+    parent_version = git_file_version(project, "HEAD^1")
     try:
         parse_template_version(parent_version or "")
     except ReleaseError as exc:
         raise ReleaseError(
             "Refusing to tag: could not read a valid previous template version from "
-            "HEAD^. The version change must be an ordinary committed change. " + str(exc)
+            "HEAD^1 (the pre-merge mainline state). The version change must be an "
+            "ordinary committed change. " + str(exc)
         ) from exc
     if parent_version == current_version:
         raise ReleaseError(
-            "Refusing to tag: HEAD does not change template.version (its parent already "
-            f"records {current_version}). The release tag must point to the commit that "
-            "performed the version bump."
+            f"Version {current_version} was already present before the current main tip. "
+            "Tag the release immediately after its PR merge or identify the intended "
+            "release commit explicitly."
         )
     if parse_template_version(current_version) <= parse_template_version(str(parent_version)):
         raise ReleaseError(
-            f"Refusing to tag: version did not advance ({parent_version} -> "
-            f"{current_version})."
+            f"Refusing to tag: template.version did not advance at the current main tip "
+            f"({parent_version} -> {current_version})."
         )
     if git_tag_exists(current_version):
         raise ReleaseError(f"Git tag {current_version} already exists locally.")

@@ -171,8 +171,8 @@ where governance requires it.
 
 ### Phase 2 - tag the merged release (on up-to-date main)
 
-After the release PR is merged and `main` contains
-`chore(release): v1.2.0`, update local `main` and run:
+After the release PR is merged and the current `main` tip introduces
+`template.version` `v1.2.0`, update local `main` and run:
 
 ```bash
 git switch main
@@ -190,9 +190,8 @@ make template-release-tag
 4. requires local `main` == `origin/main` and fails clearly when local main is
    behind, ahead, or diverged;
 5. reads `template.version` from `project/state.yaml`;
-6. verifies `HEAD` is the expected release commit: its subject is exactly
-   `chore(release): vX.Y.Z` and the commit actually changed the version from
-   its parent;
+6. verifies that `HEAD` records `vX.Y.Z` and its first parent (`HEAD^1`)
+   records a valid, strictly older template version;
 7. refuses an already-existing local tag;
 8. creates an annotated `vX.Y.Z` tag pointing at `HEAD`.
 
@@ -225,11 +224,14 @@ the following hold:
 
 - `HEAD` is on `main` and equals `origin/main`;
 - `project/state.yaml.template.version` at `HEAD` is `vX.Y.Z`;
-- the `HEAD` commit subject is `chore(release): vX.Y.Z`;
-- the `HEAD` commit's parent records an older, valid template version.
+- `HEAD^1` (the pre-merge mainline parent for a merge commit) records a valid,
+  strictly older template version.
 
-This links the tag deterministically to the release PR result and prevents
-tagging arbitrary commits.
+This identifies the current main tip as the release boundary and prevents
+tagging arbitrary later commits. It supports merge commits, squash commits, and
+fast-forward/rebase history without depending on GitHub commit-message layout.
+The prepared `chore(release): vX.Y.Z` subject remains review evidence, but is
+not a tag-time requirement because merge strategies may rewrite it.
 
 ### Failure and recovery
 

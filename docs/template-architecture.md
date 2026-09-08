@@ -185,8 +185,10 @@ directory) validates, runs `make release-check`, and creates a normal
 or pushes and refuses to run on `main`; the version commit reaches `main` only
 through the normal pull request and human merge. After the merge,
 `make template-release-tag` runs on clean, up-to-date `main`, verifies local
-`main` equals `origin/main` and that `HEAD` is the exact release commit, and
-creates an annotated `vX.Y.Z` tag pointing at `HEAD`. Tagging creates no
+`main` equals `origin/main` and that the current main tip introduced the
+`template.version` transition, and creates an annotated `vX.Y.Z` tag pointing
+at that release boundary. The tip can be a merge commit, squash commit, or the
+release commit itself under fast-forward/rebase history. Tagging creates no
 commit, and a human publishes only the intended tag (`git push origin vX.Y.Z`)
 before Copier can use it. Validation targets, task review, and task completion
 do not create release commits or tags.

@@ -98,6 +98,7 @@ def add_origin(repo: Path, tmp_path: Path) -> Path:
     run(["git", "init", "--bare", "-q", str(origin)], tmp_path)
     run(["git", "remote", "add", "origin", str(origin)], repo)
     run(["git", "push", "-q", "-u", "origin", "main"], repo)
+    run(["git", "--git-dir", str(origin), "symbolic-ref", "HEAD", "refs/heads/main"], tmp_path)
     return origin
 
 
@@ -311,11 +312,11 @@ def test_template_release_prepare_failure_leaves_no_partial_state(
 
 
 def prepare_and_publish_release(tmp_path: Path) -> tuple[Path, Path, str, str]:
-    """Run the full phase-1 flow and simulate a PR merge to origin main.
+    """Run phase 1 and simulate GitHub's merge-commit PR merge to origin/main.
 
-    Returns (repo, origin, release_sha, version). The merge is simulated with a
-    normal git fast-forward merge followed by a push to the bare origin, which
-    is what a GitHub PR merge performs on origin/main.
+    Returns (repo, origin, main_tip_sha, version). The tag must point to the
+    merge commit that introduced the release state transition, not the inner
+    release-branch commit.
     """
     repo = tmp_path / "template"
     copy_template_repo(repo)
@@ -327,13 +328,31 @@ def prepare_and_publish_release(tmp_path: Path) -> tuple[Path, Path, str, str]:
     result = run(["make", "template-release-prepare", "BUMP=patch"], repo)
     assert f"Prepared template release {expected_version}" in result.stdout
     assert run(["git", "tag", "--list"], repo).stdout.strip() == ""
-    release_sha = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
 
     run(["git", "push", "-q", "-u", "origin", f"release/{expected_version}"], repo)
     run(["git", "checkout", "-q", "main"], repo)
-    run(["git", "merge", "-q", "--ff-only", f"release/{expected_version}"], repo)
+    run(
+        [
+            "git", "merge", "-q", "--no-ff", f"release/{expected_version}",
+            "-m", "Merge pull request #123 from test/release",
+        ],
+        repo,
+    )
+    main_tip_sha = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
     run(["git", "push", "-q", "origin", "main"], repo)
-    return repo, origin, release_sha, expected_version
+    return repo, origin, main_tip_sha, expected_version
+
+
+def prepare_release_branch(tmp_path: Path, name: str) -> tuple[Path, Path, str, str]:
+    repo = tmp_path / name
+    copy_template_repo(repo)
+    init_release_repo(repo)
+    origin = add_origin(repo, tmp_path)
+    version = "v1.1.2"
+    run(["git", "checkout", "-q", "-b", f"release/{version}"], repo)
+    run(["make", "template-release-prepare", "BUMP=patch"], repo)
+    run(["git", "push", "-q", "-u", "origin", f"release/{version}"], repo)
+    return repo, origin, version, f"release/{version}"
 
 
 def remote_main_sha(repo: Path) -> str:
@@ -362,19 +381,20 @@ def test_template_release_tag_rejects_dirty_worktree(tmp_path: Path) -> None:
     assert_snapshot_equal(repo, before)
 
 
-def test_template_release_tag_rejects_unexpected_head_subject(tmp_path: Path) -> None:
+def test_template_release_tag_rejects_unrelated_commit_after_release_merge(tmp_path: Path) -> None:
     repo, _origin, _sha, version = prepare_and_publish_release(tmp_path)
     readme = repo / "README.md"
     readme.write_text(readme.read_text(encoding="utf-8") + "\npost-release note\n", encoding="utf-8")
     run(["git", "add", "-A"], repo)
     run(["git", "commit", "-q", "-m", "docs: post-release note"], repo)
+    unrelated_sha = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
     run(["git", "push", "-q", "origin", "main"], repo)
 
     result = run(["make", "template-release-tag"], repo, expect_success=False)
 
-    output = output_of(result)
-    assert "HEAD subject is 'docs: post-release note'" in output
-    assert f"expected 'chore(release): {version}'" in output
+    assert f"Version {version} was already present before the current main tip" in output_of(result)
+    assert run(["git", "rev-parse", "HEAD"], repo).stdout.strip() == unrelated_sha
+    assert run(["git", "tag", "--list", version], repo).stdout.strip() == ""
 
 
 def test_template_release_tag_rejects_fake_release_subject_without_state_change(tmp_path: Path) -> None:
@@ -389,25 +409,23 @@ def test_template_release_tag_rejects_fake_release_subject_without_state_change(
     result = run(["make", "template-release-tag"], repo, expect_success=False)
 
     output = output_of(result)
-    assert "HEAD does not change template.version" in output
-    assert f"already records {version}" in output
+    assert f"Version {version} was already present before the current main tip" in output
 
 
-def test_template_release_tag_rejects_mismatched_state_version(tmp_path: Path) -> None:
+def test_template_release_tag_rejects_non_advancing_version_transition(tmp_path: Path) -> None:
     repo, _origin, _sha, _version = prepare_and_publish_release(tmp_path)
     state = repo / "project" / "state.yaml"
     state.write_text(
-        state.read_text(encoding="utf-8").replace("version: v1.1.2", "version: v1.1.3"),
+        state.read_text(encoding="utf-8").replace("version: v1.1.2", "version: v1.1.1"),
         encoding="utf-8",
     )
     run(["git", "add", "-A"], repo)
-    run(["git", "commit", "-q", "-m", "chore(release): v1.1.2"], repo)
+    run(["git", "commit", "-q", "-m", "chore: accidental version rollback"], repo)
     run(["git", "push", "-q", "origin", "main"], repo)
 
     result = run(["make", "template-release-tag"], repo, expect_success=False)
 
-    output = output_of(result)
-    assert "expected 'chore(release): v1.1.3'" in output
+    assert "template.version did not advance at the current main tip" in output_of(result)
 
 
 def test_template_release_tag_rejects_existing_local_tag(tmp_path: Path) -> None:
@@ -436,7 +454,7 @@ def test_template_release_tag_rejects_existing_remote_tag(tmp_path: Path) -> Non
 def test_template_release_tag_rejects_stale_local_main(tmp_path: Path) -> None:
     repo, origin, _sha, _version = prepare_and_publish_release(tmp_path)
     clone = tmp_path / "fresh-clone"
-    run(["git", "clone", "-q", str(origin), str(clone)], tmp_path)
+    run(["git", "clone", "-q", "--branch", "main", str(origin), str(clone)], tmp_path)
     run(["git", "config", "user.email", "release-test@example.invalid"], clone)
     run(["git", "config", "user.name", "Release Test"], clone)
     readme = clone / "README.md"
@@ -457,7 +475,7 @@ def test_template_release_tag_rejects_stale_local_main(tmp_path: Path) -> None:
 def test_template_release_tag_rejects_diverged_main(tmp_path: Path) -> None:
     repo, origin, _sha, _version = prepare_and_publish_release(tmp_path)
     clone = tmp_path / "fresh-clone"
-    run(["git", "clone", "-q", str(origin), str(clone)], tmp_path)
+    run(["git", "clone", "-q", "--branch", "main", str(origin), str(clone)], tmp_path)
     run(["git", "config", "user.email", "release-test@example.invalid"], clone)
     run(["git", "config", "user.name", "Release Test"], clone)
     readme = clone / "README.md"
@@ -478,7 +496,32 @@ def test_template_release_tag_rejects_diverged_main(tmp_path: Path) -> None:
     assert_snapshot_equal(repo, before)
 
 
-def test_template_release_tag_creates_annotated_tag_on_exact_release_commit(tmp_path: Path) -> None:
+def test_template_release_tag_accepts_fast_forward_release_boundary(tmp_path: Path) -> None:
+    repo, _origin, version, release_branch_name = prepare_release_branch(tmp_path, "fast-forward-template")
+    run(["git", "checkout", "-q", "main"], repo)
+    run(["git", "merge", "-q", "--ff-only", release_branch_name], repo)
+    head = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+    run(["git", "push", "-q", "origin", "main"], repo)
+
+    run(["make", "template-release-tag"], repo)
+
+    assert run(["git", "rev-parse", f"{version}^{{}}"], repo).stdout.strip() == head
+
+
+def test_template_release_tag_accepts_squash_like_release_boundary(tmp_path: Path) -> None:
+    repo, _origin, version, release_branch_name = prepare_release_branch(tmp_path, "squash-template")
+    run(["git", "checkout", "-q", "main"], repo)
+    run(["git", "merge", "-q", "--squash", release_branch_name], repo)
+    run(["git", "commit", "-q", "-m", "release: merge template version update"], repo)
+    head = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+    run(["git", "push", "-q", "origin", "main"], repo)
+
+    run(["make", "template-release-tag"], repo)
+
+    assert run(["git", "rev-parse", f"{version}^{{}}"], repo).stdout.strip() == head
+
+
+def test_template_release_tag_creates_annotated_tag_on_merge_commit_release_boundary(tmp_path: Path) -> None:
     repo, _origin, release_sha, version = prepare_and_publish_release(tmp_path)
     head_before = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
     log_before = run(["git", "log", "--oneline"], repo).stdout
@@ -492,6 +535,7 @@ def test_template_release_tag_creates_annotated_tag_on_exact_release_commit(tmp_
     peeled = run(["git", "rev-parse", f"{version}^{{}}"], repo).stdout.strip()
     assert peeled == release_sha
     assert peeled == run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
+    assert len(run(["git", "rev-list", "--parents", "-n", "1", "HEAD"], repo).stdout.split()) == 3
     assert run(["git", "rev-parse", "HEAD"], repo).stdout.strip() == head_before
     assert run(["git", "log", "--oneline"], repo).stdout == log_before
     assert state_text(repo) == state_before

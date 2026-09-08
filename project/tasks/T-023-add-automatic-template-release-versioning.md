@@ -51,9 +51,9 @@ repository change; only the release tag is created after the merge.
   run on `main`.
 - Phase 2 `make template-release-tag`: after the release PR is merged, run on
   clean `main`, fetch `origin main` (remote-tracking ref only), require local
-  `main` == `origin/main`, verify `HEAD` is the exact release commit, refuse
-  existing local and remote tags, and create an annotated `vX.Y.Z` tag at
-  `HEAD`. Tagging creates no commit and never rewrites history.
+  `main` == `origin/main`, verify the current main tip introduced the
+  `template.version` transition from its first parent, refuse existing local
+  and remote tags, and create an annotated `vX.Y.Z` tag at that release boundary. Tagging creates no commit and never rewrites history.
 - Remove direct-main release behavior: no version commit created directly on
   `main`, no `git update-ref` ref advancement by release tooling, and no
   `--follow-tags` publication recommendation. Publication is the explicit
@@ -82,9 +82,9 @@ repository change; only the release tag is created after the merge.
   tags, and release-gate failure; a prepare failure restores state and index
   with no partial release commit.
 - [x] `make template-release-tag` requires clean `main`, fetches `origin main`,
-  requires local `main` == `origin/main`, verifies the exact release commit via
-  subject and state transition, refuses existing local and remote tags, and
-  creates an annotated tag on the merged release commit without creating
+  requires local `main` == `origin/main`, verifies that the current main tip
+  introduced the version transition from its first parent, refuses existing
+  local and remote tags, and creates an annotated tag on the release boundary without creating
   commits or touching project state.
 - [x] Tag phase rejects non-`main`, dirty worktrees, unexpected or missing
   release commits, mismatched state versions, existing local/remote tags, and
@@ -102,16 +102,17 @@ repository change; only the release tag is created after the merge.
 
 ## Verification
 
-- `tests/test_template_release_workflow.py` passes: 30 tests with real temporary
-  Git repositories and a bare remote. Prepare coverage includes patch/minor/major
-  bumps, invalid version, invalid bump, dirty worktree, rejection on `main`,
-  dry run, existing tag, release-check failure, injected state/commit failures,
-  and generated-project isolation. Tag coverage includes rejection off `main`,
-  dirty worktree, unexpected/missing release commit, mismatched state version,
-  existing local tag, existing remote tag, stale and diverged local `main`,
-  exact annotated tag creation, no new commit, unchanged state, injected tag
-  failure, and publication of only the intended tag with unrelated local tags
-  left unpushed.
+- `tests/test_template_release_workflow.py` passes: 32 tests with real temporary
+  Git repositories and a deterministic bare remote whose default branch is
+  explicitly `main`. Prepare coverage includes patch/minor/major bumps, invalid
+  version, invalid bump, dirty worktree, rejection on `main`, dry run, existing
+  tag, release-check failure, injected state/commit failures, and generated-project
+  isolation. Tag coverage includes merge-commit, fast-forward, and squash-like
+  release boundaries; rejection off `main`, dirty worktree, invalid/non-advancing
+  transitions, existing local/remote tags, stale and diverged local `main`, and
+  an unrelated post-merge commit; annotated tag creation, no new commit, unchanged
+  state, injected tag failure, and publication of only the intended tag with
+  unrelated local tags left unpushed.
 - `make validate-project`, `make validate-agent-skills`,
   `make validate-template-docs`, and `make check` pass.
 - The full `tests/test_copier_update_golden_path.py` Copier update golden path
@@ -135,9 +136,10 @@ Template releases now use a PR-only, two-phase flow backed by a maintainer-only
 `make template-release-prepare` prepares an ordinary, reviewable version commit
 on a release branch (no tag, no push, refuses `main`); the commit reaches
 `main` through the normal pull request and human merge. After the merge,
-`make template-release-tag` verifies clean, up-to-date `main`, confirms `HEAD`
-is the exact `chore(release): vX.Y.Z` commit whose state changed from its
-parent, refuses existing local/remote tags, and creates an annotated tag.
+`make template-release-tag` verifies clean, up-to-date `main`, confirms the current `main` tip introduced the version transition from its
+first parent, refuses existing local/remote tags, and creates an annotated tag.
+That release boundary may be a merge commit, squash commit, or the release
+commit itself under fast-forward/rebase history.
 Tagging creates no commit; publication pushes only the intended tag. Release
 tooling no longer leaks into generated projects. The template repository agent
 context map repair is retained.

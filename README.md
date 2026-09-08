@@ -134,8 +134,10 @@ Template releases follow the repository's PR-only `main` rule in two phases.
    and refuses to run on `main`.
 2. After CI and a human merge the release PR to `main`, tag the merged commit:
    `make template-release-tag`. It verifies local `main` matches `origin/main`
-   and that `HEAD` is the exact release commit, then creates an annotated
-   `vX.Y.Z` tag. Tagging creates no commits.
+   and that the current `main` tip introduced the `template.version` transition,
+   then creates an annotated `vX.Y.Z` tag at that release boundary. The tip may
+   be a merge commit, squash commit, or release commit under fast-forward/rebase
+   history. Tagging creates no commits.
 
 Publish only the intended tag with `git push origin vX.Y.Z`. See
 [docs/template-development.md](docs/template-development.md) for the full
