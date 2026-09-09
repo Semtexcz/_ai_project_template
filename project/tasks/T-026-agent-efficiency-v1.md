@@ -3,7 +3,7 @@ id: T-026
 
 title: Agent efficiency v1
 
-status: review
+status: done
 
 priority: 1
 
@@ -13,15 +13,15 @@ depends_on: []
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
 blocked_reason: null
 
 unblock_action: null
 
-approved_by: null
+approved_by: Daniel Kopecký
 
-approved_at: null
+approved_at: 2026-09-09T13:26:58+02:00
 ---
 
 # T-026: Agent Efficiency v1

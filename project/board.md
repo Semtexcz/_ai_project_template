@@ -19,7 +19,6 @@ _None_
 - [T-017](tasks/T-017-enforce-agent-pr-workflow.md) - P1 - Enforce agent PR workflow
 - [T-018](tasks/T-018-add-conventional-commit-agent-skill.md) - P1 - Add conventional commit agent skill
 - [T-022](tasks/T-022-refactor-agent-skill-architecture.md) - P1 - Refactor agent skill architecture
-- [T-026](tasks/T-026-agent-efficiency-v1.md) - P1 - Agent efficiency v1
 
 ## Blocked
 
@@ -46,6 +45,7 @@ _None_
 - [T-021](tasks/T-021-fix-lightweight-render-matrix-ci.md) - P1 - Fix lightweight render matrix CI
 - [T-023](tasks/T-023-add-automatic-template-release-versioning.md) - P1 - Add automatic template release versioning
 - [T-025](tasks/T-025-refine-project-state-reconciliation-for-lightweight-governance.md) - P1 - Refine project-state reconciliation for lightweight governance
+- [T-026](tasks/T-026-agent-efficiency-v1.md) - P1 - Agent efficiency v1
 
 ## Cancelled
 

@@ -26,14 +26,14 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Last completed task | [T-025](project/tasks/T-025-refine-project-state-reconciliation-for-lightweight-governance.md) |
+| Last completed task | [T-026](project/tasks/T-026-agent-efficiency-v1.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | A1 approval pending: T-026 |
+| Waiting | None |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Human A1 approval is required for T-026 before completion. |
-| Next action command | `make task-approve TASK=T-026 APPROVED_BY="<human>"` |
+| Recommended next action | Start T-019. |
+| Next action command | `make task-start TASK=T-019` |
 <!-- project-status:end -->
 
 ## Quick Start
