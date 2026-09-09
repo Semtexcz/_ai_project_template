@@ -173,7 +173,9 @@ make task-ready TASK=T-001
 make task-start TASK=T-001
 make agent-pre-review TASK=T-001
 make task-review TASK=T-001
+{% if workflow_mode != "pr" %}
 make task-complete TASK=T-001
+{% endif %}
 make agent-post-task TASK=T-001
 make task-block TASK=T-001 REASON="..." UNBLOCK="..."
 make task-unblock TASK=T-001
@@ -197,7 +199,8 @@ request. Pull requests must reference exactly one task id (`T-###`) in the
 branch name or title so the association is deterministic; CI runs
 `make pr-validate` to check the pull request is structurally ready for a human
 merge. A1 approval fields stay `pending` in the task record by design: they are
-local pre-merge state only, never the authoritative approval.
+local pre-merge state only, never the authoritative approval. `make task-complete`
+is used only for A0 local completion; A1/A2 complete at the human merge.
 {% endif %}
 {% endif %}
 

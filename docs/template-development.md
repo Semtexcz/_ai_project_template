@@ -279,8 +279,27 @@ make agent-pre-review TASK=<id>
 make task-review TASK=<id>
 ```
 
-For A1 or A2 tasks, stop in review with approval pending. A human can later run:
+The completion boundary after `review` depends on the project's
+`workflow_mode`; `template/docs/workflow.md.jinja` (rendered as
+`docs/workflow.md` in generated projects) is the canonical full description.
 
-```bash
-make task-approve TASK=<id> APPROVED_BY="<human>"
+`workflow_mode: pr`
+
+```text
+A1: implementation -> review -> pull request -> human GitHub merge
+A2: human pre-start approval -> implementation -> review -> pull request -> human GitHub merge
 ```
+
+The human GitHub merge is the completion boundary. A1 must not run
+`make task-approve`, A1/A2 must not use `make task-complete` as their
+completion boundary, and no post-merge `task-approve`/`task-complete`/sync or
+cleanup lifecycle work is required. A2 keeps its explicit human approval
+before work starts.
+
+`workflow_mode: local`/`branch` (offline fallback)
+
+```text
+A1/A2: review -> human task-approve -> task-complete
+```
+
+A0 tasks keep their existing local completion behavior.
