@@ -5,6 +5,7 @@ import argparse
 import fnmatch
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -448,12 +449,13 @@ def validate_context_map() -> list[str]:
             if not isinstance(entry, str):
                 errors.append(f".agents/context-map.yaml {section} entries must be strings.")
                 continue
-            if any(token in entry for token in ["..", "~"]):
-                errors.append(f"Context path {entry} cannot traverse outside the project.")
+            try:
+                _normalized, base = project_relative_path(entry, label="Context path")
+            except AgentError as exc:
+                errors.append(str(exc))
                 continue
             if any(ch in entry for ch in "*?["):
                 continue  # wildcard entries are expanded deterministically later
-            base = ROOT / entry
             if base.is_dir():
                 errors.append(
                     f"Context path {entry} is a directory; directories belong under "
@@ -462,6 +464,16 @@ def validate_context_map() -> list[str]:
                 continue
             if required and not context_source_exists(entry):
                 errors.append(f"Required context file {entry} does not exist.")
+
+    def validate_search_root_entries(section: str, entries: Any) -> None:
+        if not isinstance(entries, list):
+            errors.append(f".agents/context-map.yaml {section} must be a list.")
+            return
+        for entry in entries:
+            try:
+                normalize_search_root(entry)
+            except AgentError as exc:
+                errors.append(str(exc))
 
     bootstrap = data.get("bootstrap")
     if not isinstance(bootstrap, dict) or not isinstance(bootstrap.get("files"), list):
@@ -490,6 +502,9 @@ def validate_context_map() -> list[str]:
             validate_file_entries(
                 f"project_type.{profile}.files", entry.get("files"), required=False
             )
+            validate_search_root_entries(
+                f"project_type.{profile}.search_roots", entry.get("search_roots", [])
+            )
     change_patterns = data.get("change_patterns") or {}
     if isinstance(change_patterns, dict):
         for pattern, entry in change_patterns.items():
@@ -501,6 +516,9 @@ def validate_context_map() -> list[str]:
                 continue
             validate_file_entries(
                 f"change_patterns.{pattern}.files", entry.get("files"), required=False
+            )
+            validate_search_root_entries(
+                f"change_patterns.{pattern}.search_roots", entry.get("search_roots", [])
             )
     checks = data.get("checks") or {}
     if isinstance(checks, dict):
@@ -665,17 +683,79 @@ def get_task(task_id: str | None) -> Any:
     return task
 
 
+def path_matches(path: str, pattern: str) -> bool:
+    """Match repository-relative paths with deterministic ``**`` semantics.
+
+    Separators are normalized to ``/``. A ``**/`` segment matches zero or more
+    directories, so ``src/**/*.py`` matches both ``src/foo.py`` and
+    ``src/pkg/foo.py``. Patterns without a separator retain basename matching
+    for repository-wide exclusions such as ``*.pem``.
+    """
+    normalized_path = path.replace("\\", "/").strip("/")
+    normalized_pattern = pattern.replace("\\", "/").strip("/")
+    if not normalized_path or not normalized_pattern:
+        return False
+    target = normalized_path
+    if "/" not in normalized_pattern:
+        target = normalized_path.rsplit("/", 1)[-1]
+    segments = normalized_pattern.split("/")
+    expression = "^"
+    for index, segment in enumerate(segments):
+        previous = segments[index - 1] if index else None
+        if segment == "**":
+            if index == len(segments) - 1:
+                if index and previous != "**":
+                    expression += "/"
+                expression += ".*"
+            else:
+                if index and previous != "**":
+                    expression += "/"
+                expression += "(?:[^/]+/)*"
+            continue
+        if index and previous != "**":
+            expression += "/"
+        expression += fnmatch.translate(segment)[4:-3]
+    return re.fullmatch(expression, target) is not None
+
+
 def excluded(path: str, patterns: list[str]) -> bool:
-    return any(
-        fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(Path(path).name, pattern)
-        for pattern in patterns
-    )
+    return any(path_matches(path, pattern) for pattern in patterns)
+
+
+def project_relative_path(value: str, *, label: str) -> tuple[str, Path]:
+    """Normalize a configured project-relative path and prove it stays in ROOT."""
+    if not isinstance(value, str) or not value.strip():
+        raise AgentError(f"{label} must be a non-empty string.")
+    normalized = value.replace("\\", "/").strip()
+    parts = [part for part in normalized.split("/") if part]
+    if (
+        normalized.startswith("/")
+        or re.match(r"^[A-Za-z]:[/\\]", normalized)
+        or "~" in normalized
+        or any(part == ".." for part in parts)
+    ):
+        raise AgentError(f"{label} {value} cannot traverse outside the project.")
+    candidate = (ROOT / normalized).resolve()
+    try:
+        candidate.relative_to(ROOT.resolve())
+    except ValueError as exc:
+        raise AgentError(f"{label} {value} resolves outside the project root.") from exc
+    return normalized, candidate
 
 
 def safe_project_path(pattern: str) -> Path:
-    if any(token in pattern for token in ["..", "~"]) or Path(pattern).is_absolute():
-        raise AgentError(f"Context path {pattern} cannot traverse outside the project.")
-    return ROOT / pattern
+    _normalized, path = project_relative_path(pattern, label="Context path")
+    return path
+
+
+def normalize_search_root(value: str) -> str:
+    """Return a safe, normalized directory root without requiring it to exist."""
+    normalized, path = project_relative_path(value, label="Search root")
+    if any(ch in normalized for ch in "*?["):
+        raise AgentError(f"Search root {value} must not contain glob syntax.")
+    if path.exists() and not path.is_dir():
+        raise AgentError(f"Search root {value} must be a directory.")
+    return normalized.rstrip("/")
 
 
 def add_existing_file(files: list[str], seen: set[str], path: Path, excludes: list[str]) -> None:
@@ -918,7 +998,7 @@ def recommended_checks(config: dict[str, Any], changes: list[str]) -> list[str]:
     seen: set[str] = set()
     for changed in changes:
         for pattern, commands in mapping.items():
-            if fnmatch.fnmatch(changed, pattern):
+            if path_matches(changed, pattern):
                 for command in commands or []:
                     if command not in seen:
                         matched.append(command)
@@ -1045,19 +1125,18 @@ def resolve_skill_context(
         if not isinstance(entry, str) or not entry.strip() or "{{" in entry:
             continue  # templated/empty read entries cannot be resolved eagerly
         pattern = entry.strip()
-        if any(token in pattern for token in ["..", "~"]) or Path(pattern).is_absolute():
-            raise AgentError(f"Skill read {pattern} cannot traverse outside the project.")
-        base = ROOT / pattern
-        if any(ch in pattern for ch in "*?["):
-            for match in sorted(ROOT.glob(pattern)):
+        normalized, base = project_relative_path(pattern, label="Skill read")
+        if any(ch in normalized for ch in "*?["):
+            for match in sorted(ROOT.glob(normalized)):
+                relative = match.relative_to(ROOT).as_posix()
                 if match.is_dir():
-                    roots.add(match.relative_to(ROOT).as_posix())
+                    roots.add(normalize_search_root(relative))
                 elif match.is_file():
-                    explicit.add(match.relative_to(ROOT).as_posix())
+                    explicit.add(relative)
         elif base.is_dir():
-            roots.add(pattern)
+            roots.add(normalize_search_root(normalized))
         elif base.exists():
-            explicit.add(pattern)
+            explicit.add(normalized)
     return skill_name, sorted(explicit), sorted(roots)
 
 
@@ -1094,9 +1173,7 @@ def collect_context_candidates(
 
     def add_roots(patterns: list[str]) -> None:
         for pattern in patterns or []:
-            normalized = (pattern or "").rstrip("/")
-            if normalized:
-                roots.add(normalized)
+            roots.add(normalize_search_root(pattern))
 
     task_patterns = [
         pattern.format(task_id=task.id)
@@ -1124,7 +1201,7 @@ def collect_context_candidates(
     change_patterns = config.get("change_patterns", {}) or {}
     for changed in changes:
         for pattern, mapping in change_patterns.items():
-            if not isinstance(mapping, dict) or not fnmatch.fnmatch(changed, pattern):
+            if not isinstance(mapping, dict) or not path_matches(changed, pattern):
                 continue
             add_files("change", mapping.get("files", []) or [])
             add_roots(mapping.get("search_roots", []) or [])

@@ -355,6 +355,153 @@ def test_recommended_checks_are_change_aware() -> None:
     assert checks_for([]) == ["make check"]
 
 
+
+@pytest.mark.parametrize(
+    ("pattern", "path", "expected"),
+    [
+        ("src/**/*.py", "src/foo.py", True),
+        ("src/**/*.py", "src/pkg/foo.py", True),
+        ("tests/**/*.py", "tests/test_api.py", True),
+        ("tests/**/*.py", "tests/unit/test_api.py", True),
+        ("backend/**/*.py", "backend/main.py", True),
+        ("backend/**/*.py", "backend/src/app/main.py", True),
+        ("frontend/**/*", "frontend/nuxt.config.ts", True),
+        ("frontend/**/*", "frontend/pages/index.vue", True),
+        ("docs/**", "docs/quality.md", True),
+        ("docs/**", "docs/dev/architecture.md", True),
+        ("**/Dockerfile", "Dockerfile", True),
+        ("**/Dockerfile", "backend/Dockerfile", True),
+        ("**/*.md", "README.md", True),
+        ("**/*.md", "docs/quality.md", True),
+        ("src/**/*.py", "tests/test_api.py", False),
+        ("tests/**/*.py", "tests/test_api.ts", False),
+        ("frontend/**/*", "frontend", False),
+        ("**/Dockerfile", "backend/dockerfile", False),
+    ],
+)
+def test_path_matches_repository_globs(pattern: str, path: str, expected: bool) -> None:
+    agent = load_agent_module()
+    assert agent.path_matches(path.replace("/", "\\"), pattern) is expected
+
+
+def test_change_routing_uses_repository_glob_matcher() -> None:
+    agent = load_agent_module()
+    config = agent.read_yaml(ROOT / "template" / ".agents" / "context-map.yaml")
+
+    assert agent.recommended_checks(config, ["src/foo.py"]) == [
+        "make test",
+        "make typecheck",
+        "make lint",
+    ]
+    assert agent.recommended_checks(config, ["tests/test_api.py"]) == ["make test"]
+    assert agent.recommended_checks(config, ["frontend/nuxt.config.ts"]) == ["make test"]
+    assert agent.recommended_checks(config, ["docs/foo.md"]) == ["make validate-docs"]
+
+
+def test_search_roots_are_validated_and_runtime_safe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent = load_agent_module()
+    root = tmp_path / "project"
+    agents = root / ".agents"
+    agents.mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / "AGENTS.md").write_text("# Rules\n", encoding="utf-8")
+    (root / "project" / "tasks").mkdir(parents=True)
+    (root / "project" / "tasks" / "T-001-example.md").write_text("# Task\n", encoding="utf-8")
+    monkeypatch.setattr(agent, "ROOT", root)
+    monkeypatch.setattr(agent, "AGENTS_DIR", agents)
+
+    base = """\
+schema_version: 2
+bootstrap:
+  files: [AGENTS.md]
+task:
+  files: ["project/tasks/{task_id}-*.md"]
+exclude: []
+project_type:
+  script:
+    files: []
+    search_roots:
+      - src/
+change_patterns:
+  "src/**/*.py":
+    files: []
+    search_roots:
+      - src/
+checks: {}
+"""
+    context_map = agents / "context-map.yaml"
+    context_map.write_text(base, encoding="utf-8")
+    assert agent.validate_context_map() == []
+
+    for section, invalid in [
+        ("project_type", "../../outside"),
+        ("project_type", "/tmp"),
+        ("project_type", "~/secret"),
+        ("project_type", "not-a-list"),
+        ("project_type", "42"),
+        ("change_patterns", "../../outside"),
+        ("change_patterns", "/tmp"),
+        ("change_patterns", "~/secret"),
+        ("change_patterns", "not-a-list"),
+        ("change_patterns", "42"),
+    ]:
+        if invalid == "not-a-list":
+            replacement = "search_roots: src/"
+        elif invalid == "42":
+            replacement = "search_roots: [42]"
+        else:
+            replacement = f"search_roots: [{invalid}]"
+        modified = base.replace(
+            "search_roots:\n      - src/",
+            replacement if section == "project_type" else "search_roots:\n      - src/",
+            1,
+        )
+        if section == "change_patterns":
+            prefix, suffix = base.split('change_patterns:', 1)
+            modified = prefix + 'change_patterns:' + suffix.replace(
+                "search_roots:\n      - src/", replacement, 1
+            )
+        context_map.write_text(modified, encoding="utf-8")
+        errors = agent.validate_context_map()
+        assert errors, (section, invalid)
+        assert any("Search root" in error or "search_roots" in error for error in errors)
+
+    with pytest.raises(agent.AgentError, match="Search root .*outside"):
+        agent.collect_context_candidates(
+            task=type("Task", (), {"id": "T-001"})(),
+            config={
+                "task": {"files": ["project/tasks/{task_id}-*.md"]},
+                "bootstrap": {"files": ["AGENTS.md"]},
+                "change_patterns": {
+                    "src/**/*.py": {"files": [], "search_roots": ["../../outside"]}
+                },
+            },
+            excludes=[],
+            skill_files=[],
+            skill_roots=[],
+            mode="new",
+            changes=["src/foo.py"],
+            deleted=set(),
+            project_type="script",
+            runtime_level="local",
+        )
+
+
+def test_codex_context_adapters_are_skill_aware_and_synchronized() -> None:
+    expected = {
+        "implement-change": "make agent-context TASK=<id> SKILL=implement-change",
+        "review-change": "make agent-context TASK=<id> SKILL=review-change MODE=resume",
+        "update-documentation": "make agent-context TASK=<id> SKILL=update-documentation",
+        "verify-change": "make agent-context TASK=<id> SKILL=verify-change MODE=resume",
+    }
+    for skill, command in expected.items():
+        adapter = ROOT / ".codex" / "skills" / skill / "SKILL.md"
+        generated = ROOT / "template" / ".codex" / "skills" / skill / "SKILL.md"
+        assert command in adapter.read_text(encoding="utf-8")
+        assert generated.read_text(encoding="utf-8") == adapter.read_text(encoding="utf-8")
+
 def test_pre_review_runs_one_canonical_gate() -> None:
     text = AGENT_TOOL.read_text(encoding="utf-8")
     marker = "def pre_review("
