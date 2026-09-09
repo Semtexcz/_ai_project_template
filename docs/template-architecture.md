@@ -176,3 +176,19 @@ make check
 template checks, generated project golden paths, Copier update checks, agent
 workflow checks, project-state mutation checks, production runtime inspection,
 and documentation drift checks.
+
+Template release is a two-phase maintainer workflow that preserves the PR-only
+`main` rule. `make template-release-prepare BUMP=<major|minor|patch>`
+(implemented in `tools/template_release.py`, outside the rendered template
+directory) validates, runs `make release-check`, and creates a normal
+`chore(release): vX.Y.Z` commit on a non-`main` release branch. It never tags
+or pushes and refuses to run on `main`; the version commit reaches `main` only
+through the normal pull request and human merge. After the merge,
+`make template-release-tag` runs on clean, up-to-date `main`, verifies local
+`main` equals `origin/main` and that the current main tip introduced the
+`template.version` transition, and creates an annotated `vX.Y.Z` tag pointing
+at that release boundary. The tip can be a merge commit, squash commit, or the
+release commit itself under fast-forward/rebase history. Tagging creates no
+commit, and a human publishes only the intended tag (`git push origin vX.Y.Z`)
+before Copier can use it. Validation targets, task review, and task completion
+do not create release commits or tags.

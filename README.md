@@ -29,11 +29,11 @@ Use this repository when you want a project scaffold that already knows how to:
 | Last completed task | [T-021](project/tasks/T-021-fix-lightweight-render-matrix-ci.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | None |
+| Waiting | A1 approval pending: T-023 |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Start T-019. |
-| Next action command | `make task-start TASK=T-019` |
+| Recommended next action | Human A1 approval is required for T-023 before completion. |
+| Next action command | `make task-approve TASK=T-023 APPROVED_BY="<human>"` |
 <!-- project-status:end -->
 
 ## Quick Start
@@ -124,6 +124,24 @@ make release-check
 `make check` is the fast maintainer subset. `make release-check` runs the full
 pytest suite, including all golden paths, Copier update, workflow, production
 runtime inspection, and documentation validation.
+
+Template releases follow the repository's PR-only `main` rule in two phases.
+
+1. On a release branch, prepare the reviewable version commit:
+   `make template-release-prepare BUMP=<major|minor|patch>`. It runs the release
+   gate, updates `template.version` in `project/state.yaml`, and creates a
+   normal `chore(release): vX.Y.Z` commit. It creates no tag, pushes nothing,
+   and refuses to run on `main`.
+2. After CI and a human merge the release PR to `main`, tag the merged commit:
+   `make template-release-tag`. It verifies local `main` matches `origin/main`
+   and that the current `main` tip introduced the `template.version` transition,
+   then creates an annotated `vX.Y.Z` tag at that release boundary. The tip may
+   be a merge commit, squash commit, or release commit under fast-forward/rebase
+   history. Tagging creates no commits.
+
+Publish only the intended tag with `git push origin vX.Y.Z`. See
+[docs/template-development.md](docs/template-development.md) for the full
+release and publication procedure.
 
 ## Navigation
 

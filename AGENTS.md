@@ -30,6 +30,11 @@ make agent-context TASK=<id>
 - For every agent-made change, commit the agent's own changes, push the branch
   to `origin`, and open a ready GitHub pull request. Do not push directly to
   `main`.
+- Template releases use two maintainer-only commands that never bypass the
+  branch/PR workflow: `make template-release-prepare BUMP=<major|minor|patch>`
+  creates the reviewable version commit on a non-`main` release branch, and
+  `make template-release-tag` creates the annotated release tag only after the
+  release PR is merged to `main` and local `main` matches `origin/main`.
 
 Canonical agent procedures are in `.agents/`. Codex-specific adapter notes are
 in `.codex/`. Project-specific context is in `project/` and `docs/`.

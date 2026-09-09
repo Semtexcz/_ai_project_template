@@ -52,8 +52,10 @@ Capability skills:
 ## Context Map
 
 `.agents/context-map.yaml` defines the minimum files to load. Core context uses
-durable files that exist in lightweight and managed projects: `AGENTS.md`,
-`project/brief.md`, architecture, workflow, quality, and ADR documentation.
+durable files for the current repository. In this template repository, that
+means `AGENTS.md`, template architecture, template development, template
+ownership, and the Copier ADR. Generated projects use their generated brief,
+architecture, workflow, quality, and ADR documentation.
 
 Managed projects may add `project/state.yaml`, `project/index.md`,
 `project/board.md`, and active task files. Core skills must not require those
@@ -85,3 +87,34 @@ Hooks are managed-governance guardrails. They are generated only when
 
 Hooks may call project CLI functions, but they must not approve A1/A2 work or
 silently change task status.
+
+## Template Releases
+
+Template releases use a two-phase, PR-only flow. They are maintainer actions in
+the template repository root (`tools/template_release.py`), never in generated
+projects, and they are never a backdoor for committing to `main`.
+
+Phase 1 (`make template-release-prepare BUMP=<major|minor|patch>`) prepares an
+ordinary, reviewable version commit on a non-`main` release branch. It runs the
+release gate, updates `project/state.yaml.template.version`, commits
+`chore(release): vX.Y.Z`, creates no tag, pushes nothing, and refuses to run on
+`main`. The commit reaches `main` only through the normal push -> pull request
+-> CI -> human approval -> merge workflow.
+
+Phase 2 (`make template-release-tag`) runs on clean, up-to-date `main` after
+the release PR is merged. It fetches `origin main` (remote-tracking ref only),
+verifies local `main` equals `origin/main`, verifies the current main tip
+introduced the `template.version` transition from its first parent, refuses
+existing local or remote tags, and creates an annotated tag at that release
+boundary. The boundary may be a merge commit, squash commit, or the release
+commit itself under fast-forward/rebase history. It never creates commits, never
+rewrites history, and never force-pushes. Tagging is post-merge release metadata
+and grants no exception to PR-only `main` governance.
+
+Publication pushes only the intended tag (`git push origin vX.Y.Z`);
+`--follow-tags` is not recommended because it can publish unrelated annotated
+tags. Until publication the tag is not visible to Copier or GitHub. When
+proposing a release, infer the semantic version bump from the merged change
+set: `major` for breaking template or update contracts, `minor` for new
+template capability, and `patch` for fixes, documentation, or tooling changes
+that preserve behavior. Without a bump the command defaults to `patch`.

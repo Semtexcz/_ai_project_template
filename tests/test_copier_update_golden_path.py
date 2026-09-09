@@ -79,10 +79,23 @@ def copy_workspace_to_template_repo(target: Path) -> None:
             "__pycache__",
         ),
     )
+    state_path = target / "project" / "state.yaml"
+    state_text = state_path.read_text().replace("version: v1.1.1", "version: v1.0.0")
+    state_path.write_text(state_text)
+    makefile = target / "Makefile"
+    makefile.write_text(
+        makefile.read_text().replace(
+            "release-check: validate-project validate-template-docs validate-agent-skills\n"
+            "\tUV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest\n",
+            "release-check:\n"
+            "\t@echo release-check fixture\n",
+        )
+    )
 
 
 def init_git_repo(path: Path, env: Mapping[str, str]) -> None:
     run_command(["git", "init", "-q"], path, env)
+    run_command(["git", "branch", "-M", "main"], path, env)
     run_command(["git", "config", "user.email", "copier-test@example.invalid"], path, env)
     run_command(["git", "config", "user.name", "Copier Update Test"], path, env)
 
@@ -220,9 +233,26 @@ def create_template_v2(template_repo: Path, env: Mapping[str, str]) -> str:
             "## Quick Start\n\nTemplate update marker: v1.1.0.\n\n```bash\nmake setup\nmake check\nmake build\n```",
         )
     )
-    commit = commit_all(template_repo, env, "template v1.1.0")
-    run_command(["git", "tag", "v1.1.0"], template_repo, env)
-    return commit
+    commit_all(template_repo, env, "template v1.1.0")
+    # PR-only two-phase release: version bumps reach main only through a PR merge.
+    origin = template_repo.parent / "origin-template.git"
+    run_command(["git", "init", "--bare", "-q", str(origin)], template_repo, env)
+    run_command(["git", "remote", "add", "origin", str(origin)], template_repo, env)
+    run_command(["git", "push", "-q", "-u", "origin", "main"], template_repo, env)
+    run_command(["git", "--git-dir", str(origin), "symbolic-ref", "HEAD", "refs/heads/main"], template_repo, env)
+    run_command(["git", "checkout", "-q", "-b", "release/v1.1.0"], template_repo, env)
+    run_command(["make", "template-release-prepare", "BUMP=minor"], template_repo, env)
+    run_command(["git", "push", "-q", "-u", "origin", "release/v1.1.0"], template_repo, env)
+    run_command(["git", "checkout", "-q", "main"], template_repo, env)
+    # Simulate the human GitHub merge-commit PR merge: main advances at a release boundary.
+    run_command(
+        ["git", "merge", "-q", "--no-ff", "release/v1.1.0", "-m", "Merge pull request #123 from test/release"],
+        template_repo,
+        env,
+    )
+    run_command(["git", "push", "-q", "origin", "main"], template_repo, env)
+    run_command(["make", "template-release-tag"], template_repo, env)
+    return run_command(["git", "rev-parse", "HEAD"], template_repo, env).stdout.strip()
 
 
 def update_project(project: Path, env: Mapping[str, str], ref: str, *, expect_success: bool) -> subprocess.CompletedProcess[str]:
