@@ -103,11 +103,13 @@ release gate, updates `project/state.yaml.template.version`, commits
 
 Phase 2 (`make template-release-tag`) runs on clean, up-to-date `main` after
 the release PR is merged. It fetches `origin main` (remote-tracking ref only),
-verifies local `main` equals `origin/main`, verifies `HEAD` is the exact
-`chore(release): vX.Y.Z` commit, refuses existing local or remote tags, and
-creates an annotated tag. It never creates commits, never rewrites history, and
-never force-pushes. Tagging is post-merge release metadata and grants no
-exception to PR-only `main` governance.
+verifies local `main` equals `origin/main`, verifies the current main tip
+introduced the `template.version` transition from its first parent, refuses
+existing local or remote tags, and creates an annotated tag at that release
+boundary. The boundary may be a merge commit, squash commit, or the release
+commit itself under fast-forward/rebase history. It never creates commits, never
+rewrites history, and never force-pushes. Tagging is post-merge release metadata
+and grants no exception to PR-only `main` governance.
 
 Publication pushes only the intended tag (`git push origin vX.Y.Z`);
 `--follow-tags` is not recommended because it can publish unrelated annotated
