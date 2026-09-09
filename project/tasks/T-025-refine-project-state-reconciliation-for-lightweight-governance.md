@@ -3,7 +3,7 @@ id: T-025
 
 title: Refine project-state reconciliation for lightweight governance
 
-status: review
+status: done
 
 priority: 1
 
@@ -13,15 +13,15 @@ depends_on: []
 
 approval_level: A1
 
-approval_status: pending
+approval_status: approved
 
 blocked_reason: null
 
 unblock_action: null
 
-approved_by: null
+approved_by: Daniel
 
-approved_at: null
+approved_at: 2026-09-09T10:51:21+02:00
 ---
 
 # T-025: Refine Project State Reconciliation for Lightweight Governance

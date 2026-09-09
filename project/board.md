@@ -20,7 +20,6 @@ _None_
 - [T-018](tasks/T-018-add-conventional-commit-agent-skill.md) - P1 - Add conventional commit agent skill
 - [T-022](tasks/T-022-refactor-agent-skill-architecture.md) - P1 - Refactor agent skill architecture
 - [T-023](tasks/T-023-add-automatic-template-release-versioning.md) - P1 - Add automatic template release versioning
-- [T-025](tasks/T-025-refine-project-state-reconciliation-for-lightweight-governance.md) - P1 - Refine project-state reconciliation for lightweight governance
 
 ## Blocked
 
@@ -45,6 +44,7 @@ _None_
 - [T-015](tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) - P1 - Make template and generated-project documentation self-explanatory
 - [T-020](tasks/T-020-introduce-lightweight-progressive-governance.md) - P1 - Introduce lightweight progressive governance
 - [T-021](tasks/T-021-fix-lightweight-render-matrix-ci.md) - P1 - Fix lightweight render matrix CI
+- [T-025](tasks/T-025-refine-project-state-reconciliation-for-lightweight-governance.md) - P1 - Refine project-state reconciliation for lightweight governance
 
 ## Cancelled
 
