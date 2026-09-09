@@ -16,7 +16,7 @@ _None_
 ## Review
 
 - [T-022](tasks/T-022-refactor-agent-skill-architecture.md) - P1 - Refactor agent skill architecture
-- [T-027](tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) - P1 - Simplify GitHub-backed A1 approval to the human PR merge - awaiting human GitHub merge
+- [T-028](tasks/T-028-audit-and-optimize-template-authoring-for-low-change-amplification.md) - P1 - Audit and optimize template authoring for low change amplification - awaiting human GitHub merge
 
 ## Blocked
 
@@ -47,6 +47,7 @@ _None_
 - [T-023](tasks/T-023-add-automatic-template-release-versioning.md) - P1 - Add automatic template release versioning
 - [T-025](tasks/T-025-refine-project-state-reconciliation-for-lightweight-governance.md) - P1 - Refine project-state reconciliation for lightweight governance
 - [T-026](tasks/T-026-agent-efficiency-v1.md) - P1 - Agent efficiency v1
+- [T-027](tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) - P1 - Simplify GitHub-backed A1 approval to the human PR merge - completed by merged Git provenance
 
 ## Cancelled
 

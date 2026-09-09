@@ -21,16 +21,14 @@ managed:
     - project/roadmap.md
 
 # Explicit files are eagerly loaded candidates. Directories are search roots
-# only; a directory entry is never recursively loaded into context.
+# only; a directory entry is never recursively loaded into context. The
+# template profile keeps a minimal default root set; `change_patterns` below
+# supplies the narrow neighborhood for the actual changed surface.
 project_type:
   template:
     files: []
     search_roots:
-      - docs/
-      - project/
       - tests/
-      - template/
-      - tools/
 
 # Deterministic context budget. Task, selected skill, and bootstrap files are
 # protected: generation fails loudly instead of silently dropping them.
@@ -39,7 +37,12 @@ budget:
   max_bytes: 120000
 
 # Changed paths route to narrowly relevant explicit files and search roots.
+# One concept -> one narrow neighborhood: canonical agent layer, its template
+# mirrors, each template scaffold surface, and its focused tests. Search roots
+# are discovery hints only and are never eagerly loaded.
 change_patterns:
+  # Canonical agent layer (root). template/.agents and template/.codex are
+  # derived mirrors: edit the root files, then run `make sync-agent-layer`.
   ".agents/**":
     files:
       - .agents/README.md
@@ -49,16 +52,116 @@ change_patterns:
     files: []
     search_roots:
       - .codex/
+  "template/.agents/**":
+    files: []
+    search_roots:
+      - template/.agents/
+  "template/.codex/**":
+    files: []
+    search_roots:
+      - template/.codex/
+
+  # Documentation system.
   "docs/**":
     files: []
     search_roots:
       - docs/
-  "template/**":
+  "audits/**":
+    files: []
+    search_roots:
+      - audits/
+  "template/docs/**":
     files:
       - docs/template-development.md
     search_roots:
-      - template/
+      - template/docs/
+
+  # Root template authoring surfaces. The authoring guide is the only eager
+  # file; the neighborhood stays limited to the affected scaffold.
+  "template/AGENTS.md.jinja":
+    files:
+      - docs/template-development.md
+    search_roots: []
+  "template/README.md.jinja":
+    files:
+      - docs/template-development.md
+    search_roots: []
+  "template/Makefile.jinja":
+    files:
+      - docs/template-development.md
+    search_roots: []
+  "template/.gitignore.jinja":
+    files:
+      - docs/template-development.md
+    search_roots: []
+  "template/.template-version.jinja":
+    files:
+      - docs/template-development.md
+    search_roots: []
+  "template/compose.yaml.jinja":
+    files:
+      - docs/template-development.md
+    search_roots: []
+  "template/pyproject.toml.jinja":
+    files:
+      - docs/template-development.md
+    search_roots: []
+
+  # Template surfaces.
+  "template/.github/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/.github/
+  "template/project/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/project/
+  "template/tools/agent.py":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/tools/
       - tests/
+  "template/tools/project.py":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/tools/
+      - tests/
+  "template/tools/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/tools/
+  "template/backend/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/backend/
+  "template/frontend/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/frontend/
+  "template/examples/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/examples/
+  "template/src/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/src/
+  "template/tests/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/tests/
+
+  # Repository tests, governance state, maintainer tooling.
   "tests/**":
     files: []
     search_roots:
@@ -71,19 +174,41 @@ change_patterns:
     files:
       - Makefile
     search_roots: []
+  "tools/**":
+    files: []
+    search_roots:
+      - tools/
   "copier.yml":
     files:
       - copier.yml
     search_roots: []
 
 # Focused validation recommendations per changed path. Make commands that do
-# not exist in this repository are ignored by the resolver.
+# not exist in this repository are ignored by the resolver; any command may be
+# listed (for example exact `uv run pytest <file>` invocations for test files).
+# Prefer `make check` at pre-review and `make release-check` for the full gate.
 checks:
+  # Canonical agent layer and its derived template mirrors. Changing a mirror by
+  # hand is drift; run `make sync-agent-layer` instead.
   ".agents/**":
     - make validate-agent-skills
+    - make validate-agent-layer
   ".codex/**":
     - make validate-agent-skills
+    - make validate-agent-layer
+  "template/.agents/**":
+    - make validate-agent-layer
+    - make validate-agent-skills
+  "template/.codex/**":
+    - make validate-agent-layer
+    - make validate-agent-skills
+
+  # Documentation system (root docs, audits, generated doc templates).
   "docs/**":
+    - make validate-template-docs
+  "audits/**":
+    - make validate-template-docs
+  "template/docs/**":
     - make validate-template-docs
   "AGENTS.md":
     - make validate-template-docs
@@ -93,18 +218,94 @@ checks:
     - make validate-template-docs
   "UPGRADING.md":
     - make validate-template-docs
-  "Makefile":
-    - make validate-agent-skills
-  "copier.yml":
+  "template/AGENTS.md.jinja":
     - make validate-template-docs
+  "template/README.md.jinja":
+    - make validate-template-docs
+
+  # Root scaffold contracts: generated Makefile, Copier config, CI, and static
+  # jinja files are proven by the static template tests.
+  "template/Makefile.jinja":
+    - make test-static
+    - make validate-template-docs
+  "template/.gitignore.jinja":
+    - make test-static
+  "template/.template-version.jinja":
+    - make test-static
+  "template/compose.yaml.jinja":
+    - make test-static
+  "template/pyproject.toml.jinja":
+    - make test-static
+  "template/.github/**":
+    - make test-static
+  "copier.yml":
+    - make test-static
+
+  # Project lifecycle: generated governance seeds and the canonical lifecycle
+  # tooling are proven by static + lifecycle tests.
+  "template/project/**":
+    - make test-static
+    - make test-lifecycle
+  "template/tools/agent.py":
+    - make validate-agent-skills
+    - make test-agent
+  "template/tools/project.py":
+    - make validate-project
+    - make test-lifecycle
   "project/**":
     - make validate-project
-  "template/**":
-    - make check
-  "tests/**":
-    - make check
-  "tools/**":
-    - make check
+
+  # Scaffold surfaces and their focused profile tests.
+  "template/backend/**":
+    - make test-backend
+  "template/frontend/**":
+    - make test-frontend
+  "template/examples/**":
+    - make test-frontend
+  "template/src/**":
+    - make test-python-profiles
+  "template/tests/**":
+    - make test-python-profiles
+
+  # Exact test-file changes run exactly that file.
+  "tests/test_agent_efficiency.py":
+    - uv run pytest tests/test_agent_efficiency.py
+  "tests/test_agent_one_task_workflow_golden_path.py":
+    - uv run pytest tests/test_agent_one_task_workflow_golden_path.py
+  "tests/test_project_state_validation_golden_path.py":
+    - uv run pytest tests/test_project_state_validation_golden_path.py
+  "tests/test_template_static.py":
+    - uv run pytest tests/test_template_static.py
+  "tests/test_agent_layer_mirror.py":
+    - uv run pytest tests/test_agent_layer_mirror.py
+  "tests/test_agent_context_routing.py":
+    - uv run pytest tests/test_agent_context_routing.py
+  "tests/test_template_release_workflow.py":
+    - uv run pytest tests/test_template_release_workflow.py
+  "tests/test_copier_update_golden_path.py":
+    - uv run pytest tests/test_copier_update_golden_path.py
+  "tests/test_script_local_golden_path.py":
+    - uv run pytest tests/test_script_local_golden_path.py
+  "tests/test_library_shared_golden_path.py":
+    - uv run pytest tests/test_library_shared_golden_path.py
+  "tests/test_backend_shared_golden_path.py":
+    - uv run pytest tests/test_backend_shared_golden_path.py
+  "tests/test_frontend_shared_golden_path.py":
+    - uv run pytest tests/test_frontend_shared_golden_path.py
+  "tests/test_fullstack_local_golden_path.py":
+    - uv run pytest tests/test_fullstack_local_golden_path.py
+  "tests/test_fullstack_production_golden_path.py":
+    - uv run pytest tests/test_fullstack_production_golden_path.py
+
+  # Maintainer tooling.
+  "Makefile":
+    - make validate-agent-skills
+  "tools/agent_layer.py":
+    - make test-mirror
+  "tools/template_release.py":
+    - make test-release-workflow
+  "tools/template_docs.py":
+    - make validate-template-docs
 
 exclude:
   - "**/.env"

@@ -26,14 +26,14 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Last completed task | [T-026](project/tasks/T-026-agent-efficiency-v1.md) |
+| Last completed task | [T-027](project/tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | Awaiting human GitHub merge: T-027 |
+| Waiting | Awaiting human GitHub merge: T-028 |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Await human GitHub merge for T-027; merge is the completion boundary. |
-| Next action command | `make project-status` (await human GitHub merge of T-027). |
+| Recommended next action | Await human GitHub merge for T-028; merge is the completion boundary. |
+| Next action command | `make project-status` (await human GitHub merge of T-028). |
 <!-- project-status:end -->
 
 ## Quick Start

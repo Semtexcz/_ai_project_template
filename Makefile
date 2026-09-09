@@ -1,9 +1,9 @@
-.PHONY: check release-check template-release-prepare template-release-tag test-template test-copier-update project-status sync-project-docs validate-project validate-template-docs task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve pr-validate agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
+.PHONY: check release-check template-release-prepare template-release-tag test-template test-agent test-workflow test-lifecycle test-static test-mirror test-release-workflow test-backend test-frontend test-python-profiles test-copier-update project-status sync-project-docs validate-project validate-template-docs validate-agent-layer sync-agent-layer task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve pr-validate agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
 
-check: validate-project validate-template-docs validate-agent-skills
-	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} uv run pytest tests/test_template_static.py tests/test_project_state_validation_golden_path.py
+check: validate-project validate-template-docs validate-agent-skills validate-agent-layer
+	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} uv run pytest tests/test_template_static.py tests/test_project_state_validation_golden_path.py tests/test_agent_layer_mirror.py tests/test_agent_context_routing.py
 
-release-check: validate-project validate-template-docs validate-agent-skills
+release-check: validate-project validate-template-docs validate-agent-skills validate-agent-layer
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest
 
 template-release-prepare:
@@ -14,6 +14,33 @@ template-release-tag:
 
 test-template:
 	uv run pytest
+
+test-agent:
+	uv run pytest tests/test_agent_efficiency.py
+
+test-workflow:
+	uv run pytest tests/test_agent_one_task_workflow_golden_path.py
+
+test-lifecycle:
+	uv run pytest tests/test_project_state_validation_golden_path.py
+
+test-static:
+	uv run pytest tests/test_template_static.py
+
+test-mirror:
+	uv run pytest tests/test_agent_layer_mirror.py
+
+test-release-workflow:
+	uv run pytest tests/test_template_release_workflow.py
+
+test-backend:
+	uv run pytest tests/test_backend_shared_golden_path.py tests/test_fullstack_local_golden_path.py tests/test_fullstack_production_golden_path.py
+
+test-frontend:
+	uv run pytest tests/test_frontend_shared_golden_path.py tests/test_fullstack_local_golden_path.py tests/test_fullstack_production_golden_path.py
+
+test-python-profiles:
+	uv run pytest tests/test_script_local_golden_path.py tests/test_library_shared_golden_path.py tests/test_backend_shared_golden_path.py tests/test_fullstack_local_golden_path.py tests/test_fullstack_production_golden_path.py
 
 test-copier-update:
 	uv run pytest tests/test_copier_update_golden_path.py
@@ -38,6 +65,12 @@ agent-context:
 
 validate-agent-skills:
 	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py validate-skills
+
+validate-agent-layer:
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent_layer.py check
+
+sync-agent-layer:
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent_layer.py sync
 
 agent-pre-task:
 	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py pre-task --task $(TASK)
