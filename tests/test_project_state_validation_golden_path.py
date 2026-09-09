@@ -561,7 +561,22 @@ def test_task_merge_completed_is_merge_strategy_independent(tmp_path: Path) -> N
         run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "review-ready state"], root)
         run(["git", "checkout", "-q", "main"], root)
         if strategy == "merge":
-            run(["git", "merge", "--no-ff", "-q", "-m", "not parsed", "feat/T-002"], root)
+            run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=Test Human",
+                    "-c",
+                    "user.email=human@example.com",
+                    "merge",
+                    "--no-ff",
+                    "-q",
+                    "-m",
+                    "not parsed",
+                    "feat/T-002",
+                ],
+                root,
+            )
         elif strategy == "squash":
             run(["git", "merge", "--squash", "-q", "feat/T-002"], root)
             run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "not parsed"], root)
