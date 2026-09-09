@@ -22,8 +22,7 @@ omitted files.
 Only one task may be `in-progress`. A1 and A2 approvals must be granted by a
 human; agents can move implemented A1 work to review but must not approve it.
 For generated managed projects the approval boundary follows `workflow_mode`:
-in `pr` mode the human GitHub merge of the task's pull request completes A1/A2
-work (merge is authoritative; no post-merge lifecycle command or cleanup pull
+in `pr` mode A1/A2 work remains in review until the human GitHub merge of the task's pull request (merge is authoritative; no post-merge lifecycle command or cleanup pull
 request), while `local`/`branch` mode keeps the explicit human
 `make task-approve` plus `make task-complete` fallback. Agents must work on a
 non-`main` branch, commit their own changes, push that branch to `origin`, and

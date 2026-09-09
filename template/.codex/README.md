@@ -27,6 +27,6 @@ Lightweight projects do not require task state. Use durable project context and
 core skills directly.
 
 Codex must not run `make task-approve`; A1 and A2 approvals are human actions.
-In `workflow_mode: pr`, move A1/A2 work to review and prepare the pull request;
-the human GitHub merge is the approval and completion boundary and no post-merge
-lifecycle command is needed.
+In `workflow_mode: pr`, A1/A2 work remains in review until the associated pull
+request is human-merged. That merge is the completion boundary; no post-merge
+lifecycle command is required.

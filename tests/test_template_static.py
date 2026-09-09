@@ -637,7 +637,7 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     # The pr-mode merge boundary is documented and the offline fallback stays.
     assert "the human GitHub merge of the task's pull request is the normal" in agents
     assert "`local`/`branch` mode a human records A1/A2 approval" in agents
-    assert "A1 and A2 work is completed by a human GitHub merge" in readme
+    assert "A1 and A2 work remains in review until a human GitHub merge" in readme
     assert "offline fallback" in readme
     assert "make pr-validate" in workflow
     assert "task-complete" in makefile
@@ -648,6 +648,9 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     assert "github_merge_completes" in project_tool
     assert "A1 approval cannot be recorded locally in workflow_mode=pr" in project_tool
     assert "human GitHub merge is the normal A1 approval/completion boundary" in root_agents
+    maintainer_state = yaml.safe_load((ROOT / "project" / "state.yaml").read_text(encoding="utf-8"))
+    assert maintainer_state["project"]["workflow_mode"] == "pr"
+    assert "task_merge_completed" in project_tool
 
     # The pr-mode machinery stays conditional; lightweight defaults are untouched.
     assert '{% if governance == "managed" and workflow_mode == "pr" %}' in ci

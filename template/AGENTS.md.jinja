@@ -78,7 +78,7 @@ make task-ready TASK=T-001
 make task-start TASK=T-001
 make task-review TASK=T-001
 {% if workflow_mode == "pr" %}
-{# In pr mode the human GitHub merge completes A1/A2 work; task-complete is
+{# In pr mode A1/A2 work remains in review until the human GitHub merge; task-complete is
    not part of the normal agent flow for A1/A2. A0 work can still be completed
    with the CLI. #}
 {% else %}

@@ -162,7 +162,7 @@ For existing managed generated projects:
   a human records A1/A2 approval with `make task-approve`, then
   `make task-complete`.
 - For projects that use `workflow_mode: pr`, the deterministic interpretation
-  is: an A1/A2 task in `review` is completed by the human GitHub merge of its
+  is: an A1/A2 task in `review` remains pending until the human GitHub merge of its
   pull request. `approval_status: pending` on such a task is local pre-merge
   state only and is not an authoritative approval claim. If you previously
   completed A1 tasks locally after merge with `task-approve`/`task-complete`,

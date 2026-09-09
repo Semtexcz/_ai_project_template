@@ -162,7 +162,7 @@ make validate-docs
 omitted files. Use `MODE=resume` when resuming or fixing an existing PR.
 
 {% if workflow_mode == "pr" %}
-A1 and A2 work is completed by a human GitHub merge of the task's pull request:
+A1 and A2 work remains in review until a human GitHub merge of the task's pull request:
 agents move work to review and open one pull request per task, and must never
 approve or merge their own governed work. `make task-approve` is for A2
 pre-start approval only in `pr` mode; no post-merge lifecycle command or

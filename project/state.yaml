@@ -4,6 +4,7 @@ project:
   name: AI Project Golden Path Template
   type: template
   runtime_level: local
+  workflow_mode: pr
   risk: medium
   status: active
 

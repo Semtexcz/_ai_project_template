@@ -15,11 +15,8 @@ _None_
 
 ## Review
 
-- [T-016](tasks/T-016-remediate-static-ci-pnpm-bootstrap.md) - P1 - Remediate static CI pnpm bootstrap
-- [T-017](tasks/T-017-enforce-agent-pr-workflow.md) - P1 - Enforce agent PR workflow
-- [T-018](tasks/T-018-add-conventional-commit-agent-skill.md) - P1 - Add conventional commit agent skill
 - [T-022](tasks/T-022-refactor-agent-skill-architecture.md) - P1 - Refactor agent skill architecture
-- [T-027](tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) - P1 - Simplify GitHub-backed A1 approval to the human PR merge
+- [T-027](tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) - P1 - Simplify GitHub-backed A1 approval to the human PR merge - awaiting human GitHub merge
 
 ## Blocked
 
@@ -42,6 +39,9 @@ _None_
 - [T-013](tasks/T-013-remediate-rc-003-rc-004-and-rc-006-release-hygiene-and-gate.md) - P1 - Remediate RC-003 RC-004 and RC-006 release hygiene and gate
 - [T-014](tasks/T-014-run-targeted-remediation-audit.md) - P1 - Run targeted remediation audit
 - [T-015](tasks/T-015-make-template-and-generated-project-documentation-self-explanatory.md) - P1 - Make template and generated-project documentation self-explanatory
+- [T-016](tasks/T-016-remediate-static-ci-pnpm-bootstrap.md) - P1 - Remediate static CI pnpm bootstrap - completed by merged Git provenance
+- [T-017](tasks/T-017-enforce-agent-pr-workflow.md) - P1 - Enforce agent PR workflow - completed by merged Git provenance
+- [T-018](tasks/T-018-add-conventional-commit-agent-skill.md) - P1 - Add conventional commit agent skill - completed by merged Git provenance
 - [T-020](tasks/T-020-introduce-lightweight-progressive-governance.md) - P1 - Introduce lightweight progressive governance
 - [T-021](tasks/T-021-fix-lightweight-render-matrix-ci.md) - P1 - Fix lightweight render matrix CI
 - [T-023](tasks/T-023-add-automatic-template-release-versioning.md) - P1 - Add automatic template release versioning

@@ -96,11 +96,43 @@ their own governed work.
 
 ## Verification
 
-- `make check` passed (31 tests: template static and project-state lifecycle,
-  including the new GitHub merge lifecycle, self-approval, A2, association,
-  legacy metadata, and offline fallback coverage).
-- `make validate-project`, `make validate-template-docs`, and
-  `make validate-agent-skills` passed.
+Before the human merge, this task intentionally stays on the PR branch as
+`status: review` / `approval_status: pending`; no local `task-approve` or
+`task-complete` was run and none may be run in `workflow_mode: pr`.
+
+- Effective status is derived from Git base provenance, never from `review`
+  alone: `template/tools/project.py` implements one canonical helper that asks
+  whether the review-ready A1/A2 task record is present in the authoritative
+  base tree (`HEAD` on `main`/`master`, else `origin/main`/`origin/master`,
+  else local `main`/`master`). Merge commits, squash merges, and
+  rebase/fast-forward merges all behave identically because the helper does not
+  inspect merge commits or commit messages.
+- Pre-merge regression coverage: an A1 task in `review` is rendered as
+  `awaiting human GitHub merge` on the board/dashboard, `waiting_text` and the
+  recommended next action report the merge wait (no `make task-approve`
+  recommendation), `last_completed_task` stays on the previous task, and a
+  dependent task (`T-003` depending on `T-002`) remains blocked for both
+  `task-ready` and `task-start`.
+- Post-merge regression coverage: after the review-ready record is merged onto
+  `main`, the derived view moves the task to Done, the dependent task becomes
+  ready/startable, and `make sync-project-docs` plus `make validate-project`
+  remain no-ops with a clean worktree. No post-merge lifecycle commit or
+  cleanup pull request is produced.
+- Merge-strategy coverage proves the same derivation for `--no-ff` merge,
+  squash, and `--ff-only` histories.
+- The `_ai_project_template` maintainer state now explicitly sets
+  `project.workflow_mode: pr` (static regression test), so this repository
+  dogfoods the reviewed lifecycle; already-merged historical review records
+  (T-016/T-017/T-018) derive as Done from main provenance without rewriting
+  their task metadata.
+- Focused regression suites pass: `make check` (32 passed: template static 19,
+  project-state lifecycle 13 including the GitHub PR lifecycle,
+  before/after-merge dependency blocking, merge-strategy independence,
+  self-approval rejection, A2 pre-start approval, deterministic PR
+  association, historical metadata, and offline fallback), plus the branch-mode
+  agent one-task workflow golden path (4 passed).
+- `make release-check` (full pytest) result and the latest complete GitHub
+  Actions run are recorded in the pull request once green.
 
 ## Documentation Impact
 
@@ -110,5 +142,7 @@ guidance.
 
 ## Completion Notes
 
-Implementation complete and handed to review in the issue #9 pull request.
-Completion remains subject to human approval.
+Implementation is review-ready and opened as the issue #9 pull request.
+Completion remains pending the human GitHub merge; this task record stays at
+`review` / `approval_status: pending` by design and requires no post-merge
+lifecycle mutation.

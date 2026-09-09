@@ -6,6 +6,7 @@ import argparse
 import copy
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -117,20 +118,67 @@ def is_github_pr_mode(state: dict[str, Any]) -> bool:
     return state_workflow_mode(state) == "pr"
 
 
-def github_merge_completes(state: dict[str, Any], task: Task) -> bool:
-    """A pr-mode A1/A2 task in review is completed by the human GitHub merge.
+def git_stdout(args: list[str]) -> str | None:
+    """Return stdout from a read-only Git command, or None when it cannot run."""
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
 
-    The task record intentionally never records that approval locally. Boards
-    and planning treat the review state as the completed, post-merge view:
-    the merge is the only remaining step and the record is written in its
-    final merged form before the pull request opens.
+
+def git_authoritative_base_ref() -> str | None:
+    """Resolve the branch whose history is authoritative for PR completion.
+
+    A checkout of main/master is itself the authoritative post-merge view. On a
+    feature branch, prefer the remote-tracking base and retain Agent Efficiency's
+    local main/master fallbacks for repositories without a configured remote.
     """
-    return (
-        state is not None
-        and is_github_pr_mode(state)
-        and task.status == "review"
-        and task.approval_level in GITHUB_MERGE_LEVELS
-    )
+    current = (git_stdout(["branch", "--show-current"]) or "").strip()
+    if current in {"main", "master"}:
+        return "HEAD"
+    for ref in ["origin/main", "origin/master", "main", "master"]:
+        if git_stdout(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"]) is not None:
+            return ref
+    return None
+
+
+def task_merge_completed(state: dict[str, Any] | None, task: Task) -> bool:
+    """Whether this review-ready A1/A2 record has landed on the base branch.
+
+    The persisted record remains ``review``/``pending``. Completion is derived
+    only when the same task record is present in the authoritative base tree, so
+    merge commits, squash merges, and rebase/fast-forward merges behave alike.
+    """
+    if (
+        state is None
+        or not is_github_pr_mode(state)
+        or task.status != "review"
+        or task.approval_level not in GITHUB_MERGE_LEVELS
+    ):
+        return False
+    base_ref = git_authoritative_base_ref()
+    if base_ref is None:
+        return False
+    task_path = relative(task.path)
+    base_text = git_stdout(["show", f"{base_ref}:{task_path}"])
+    if base_text is None:
+        return False
+    return base_text == task.path.read_text(encoding="utf-8")
+
+
+def github_merge_completes(state: dict[str, Any] | None, task: Task) -> bool:
+    """Compatibility name for the canonical Git-provenance completion check."""
+    return task_merge_completed(state, task)
 
 
 def effective_status(state: dict[str, Any], task: Task) -> str:
@@ -426,7 +474,7 @@ def dependencies_done(
         dependency = tasks_by_id[dep]
         if dependency.status in {"done", "cancelled"}:
             return True
-        return state is not None and github_merge_completes(state, dependency)
+        return effective_status(state, dependency) in {"done", "cancelled"}
 
     return all(is_complete(dep) for dep in task.depends_on if dep in tasks_by_id)
 
@@ -791,6 +839,7 @@ def validate_approval(task: Task, state: dict[str, Any] | None = None) -> list[s
     errors: list[str] = []
     prefix = f"{task.id}:"
     pr_mode = state is not None and is_github_pr_mode(state)
+    merged = bool(state) and task_merge_completed(state, task)
     if task.approval_level == "A0":
         if task.approval_status != "not-required":
             errors.append(f"{prefix} A0 tasks must use approval_status not-required.")
@@ -810,7 +859,7 @@ def validate_approval(task: Task, state: dict[str, Any] | None = None) -> list[s
             errors.append(
                 f"{prefix} approval metadata is present but approval_status is not approved. Clear it or approve explicitly."
             )
-    if pr_mode and task.approval_level == "A1" and task.status != "done":
+    if pr_mode and not merged and task.approval_level == "A1" and task.status != "done":
         if task.approval_status == "approved" or task.approved_by or task.approved_at:
             errors.append(
                 f"{prefix} A1 approval cannot be recorded locally in workflow_mode=pr. "
@@ -891,10 +940,7 @@ def validate_task_graph(
                 dep
                 for dep in task.depends_on
                 if dep in tasks_by
-                and tasks_by[dep].status not in {"done", "cancelled"}
-                and not (
-                    state is not None and github_merge_completes(state, tasks_by[dep])
-                )
+                and effective_status(state, tasks_by[dep]) not in {"done", "cancelled"}
             ]
             errors.append(
                 f"{task.id}: cannot be {task.status}; dependencies are not done: {', '.join(missing)}. Complete dependencies first."
@@ -1006,9 +1052,7 @@ def approval_text(task: Task | None) -> str:
     return f"{task.approval_level} / {task.approval_status}"
 
 
-def last_completed_task(
-    tasks: list[Task], base: Path, state: dict[str, Any] | None = None
-) -> str:
+def last_completed_task(tasks: list[Task], base: Path, state: dict[str, Any] | None = None) -> str:
     done = sorted(
         (task for task in tasks if effective_status(state, task) == "done"),
         key=task_sort_key,
@@ -1019,6 +1063,7 @@ def last_completed_task(
 
 
 def waiting_text(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
+    pr_mode = state is not None and is_github_pr_mode(state)
     blocked = sorted((task for task in tasks if task.status == "blocked"), key=task_sort_key)
     if blocked:
         return f"Blocked: {blocked[0].id}"
@@ -1028,13 +1073,15 @@ def waiting_text(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
             for task in tasks
             if task.status == "review"
             and task.approval_level in {"A1", "A2"}
-            and task.approval_status != "approved"
             and not github_merge_completes(state, task)
+            and (pr_mode or task.approval_status != "approved")
         ),
         key=task_sort_key,
     )
     if review_waiting:
         task = review_waiting[0]
+        if pr_mode:
+            return f"Awaiting human GitHub merge: {task.id}"
         return f"{task.approval_level} approval pending: {task.id}"
     pending_a2 = sorted(
         (
@@ -1065,6 +1112,7 @@ def recommended_next_action(
     if invalid:
         return "Fix project validation errors, then run: make validate-project."
     tasks_by = task_by_id(tasks)
+    pr_mode = is_github_pr_mode(state)
     blocked = sorted((task for task in tasks if task.status == "blocked"), key=task_sort_key)
     if blocked:
         task = blocked[0]
@@ -1090,13 +1138,15 @@ def recommended_next_action(
             for task in tasks
             if task.status == "review"
             and task.approval_level in {"A1", "A2"}
-            and task.approval_status != "approved"
             and not github_merge_completes(state, task)
+            and (pr_mode or task.approval_status != "approved")
         ),
         key=task_sort_key,
     )
     if review_waiting:
         task = review_waiting[0]
+        if pr_mode:
+            return f"Await human GitHub merge for {task.id}; merge is the completion boundary."
         return f"Human {task.approval_level} approval is required for {task.id} before completion."
     ready = sorted(
         (
@@ -1118,6 +1168,7 @@ def recommended_next_command(
     if invalid:
         return "`make validate-project`"
     tasks_by = task_by_id(tasks)
+    pr_mode = is_github_pr_mode(state)
     blocked = sorted((task for task in tasks if task.status == "blocked"), key=task_sort_key)
     if blocked:
         return f"`make task-unblock TASK={blocked[0].id}`"
@@ -1142,13 +1193,16 @@ def recommended_next_command(
             for task in tasks
             if task.status == "review"
             and task.approval_level in {"A1", "A2"}
-            and task.approval_status != "approved"
             and not github_merge_completes(state, task)
+            and (pr_mode or task.approval_status != "approved")
         ),
         key=task_sort_key,
     )
     if review_waiting:
-        return f'`make task-approve TASK={review_waiting[0].id} APPROVED_BY="<human>"`'
+        task = review_waiting[0]
+        if pr_mode:
+            return f"`make project-status` (await human GitHub merge of {task.id})."
+        return f'`make task-approve TASK={task.id} APPROVED_BY="<human>"`'
     ready = sorted(
         (
             task
@@ -1224,8 +1278,14 @@ def kanban_block(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
                 rel = relative(task.path, ROOT / "project")
                 if status == "blocked" and task.blocked_reason:
                     suffix = f" - blocked: {task.blocked_reason}"
-                elif github_merge_completes(state, task):
-                    suffix = " - GitHub merge completes"
+                elif task_merge_completed(state, task):
+                    suffix = " - completed by merged Git provenance"
+                elif (
+                    is_github_pr_mode(state)
+                    and task.status == "review"
+                    and task.approval_level in GITHUB_MERGE_LEVELS
+                ):
+                    suffix = " - awaiting human GitHub merge"
                 else:
                     suffix = ""
                 lines.append(f"- [{task.id}]({rel}) - P{task.priority} - {task.title}{suffix}")

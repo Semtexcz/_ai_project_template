@@ -501,92 +501,73 @@ def test_project_state_validation_negative_cases(tmp_path: Path) -> None:
         output = result.stdout + result.stderr
         assert expected in output, name
 def test_github_pr_a1_merge_lifecycle_needs_no_cleanup(tmp_path: Path) -> None:
-    """GitHub-backed A1: review + PR validation + human merge is the whole path."""
+    """Review remains pending until the review-ready record lands on main."""
     root = make_project(tmp_path / "pr-a1", workflow_mode="pr")
-
-    # Prove the merged tree is already final: no lifecycle-only commit survives.
+    write_task(root, "T-003", depends_on="[T-002]")
     run(["git", "init", "-b", "main"], root)
     run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "add", "-A"], root)
     run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "base"], root)
     run(["git", "checkout", "-q", "-b", "feat/T-002-greeting"], root)
-
     run(["make", "task-complete", "TASK=T-001"], root)
     run(["make", "task-ready", "TASK=T-002"], root)
     run(["make", "task-start", "TASK=T-002"], root)
     run(["make", "task-review", "TASK=T-002"], root)
 
-    # Agents cannot approve or complete A1 in pr mode.
-    result = run(
-        ["make", "task-approve", "TASK=T-002", "APPROVED_BY=Test Human"],
-        root,
-        expect_success=False,
-    )
-    assert "GitHub merge is the only A1" in result.stdout
-    result = run(["make", "task-complete", "TASK=T-002"], root, expect_success=False)
-    assert "GitHub merge" in result.stdout
-
-    # The task record stays in review without local approval fields.
-    task_text = (root / "project" / "tasks" / "T-002-task.md").read_text()
-    assert "status: review" in task_text
-    assert "approval_status: pending" in task_text
-    assert "approved_by:" in task_text
-
-    # Dashboards reflect the derived post-merge view without a stale approval claim.
-    board = (root / "project" / "board.md").read_text()
-    assert "- GitHub merge completes" in board
-    review_section = board.split("## Review", 1)[1].split("## Blocked", 1)[0]
-    assert "T-002" not in review_section
-    status_text = run(["make", "project-status"], root).stdout
-    assert "A1 approval pending" not in status_text
-
-    # Structural PR validation passes for the deterministic association.
-    run_with_env(
-        ["make", "pr-validate"],
-        root,
-        {
-            "PR_HEAD_REF": "feat/T-002-greeting",
-            "PR_TITLE": "T-002: Add greeting",
-            "PR_BODY": "Implements T-002.",
-        },
-    )
-    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "add", "-A"], root)
-    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "feat: T-002 greeting"], root)
-
-    # Human merge is the approval boundary; the merged tree is already final.
-    run(["git", "checkout", "-q", "main"], root)
-    run(
-        [
-            "git",
-            "-c",
-            "user.name=Test Human",
-            "-c",
-            "user.email=human@example.com",
-            "merge",
-            "--no-ff",
-            "-q",
-            "-m",
-            "Merge pull request for T-002",
-            "feat/T-002-greeting",
-        ],
-        root,
-    )
-    run(["make", "validate-project"], root)
-    control_paths = [
-        root / "README.md",
-        root / "project" / "index.md",
-        root / "project" / "board.md",
-        root / "project" / "state.yaml",
-        root / "project" / "tasks" / "T-002-task.md",
-    ]
-    before = {path: path.read_text() for path in control_paths}
     run(["make", "sync-project-docs"], root)
-    after = {path: path.read_text() for path in control_paths}
-    assert before == after, "post-merge sync must be a no-op"
-    status = run(["git", "status", "--porcelain"], root).stdout
-    assert status.strip() == "", f"merged main must be clean: {status}"
-    status_text = run(["make", "project-status"], root).stdout
-    assert "Active task | None" in status_text
-    assert "| Approval | None |" in status_text
+    board = (root / "project" / "board.md").read_text()
+    review = board.split("## Review", 1)[1].split("## Blocked", 1)[0]
+    done = board.split("## Done", 1)[1].split("## Cancelled", 1)[0]
+    assert "T-002" in review and "awaiting human GitHub merge" in review
+    assert "T-002" not in done
+    status = run(["make", "project-status"], root).stdout
+    assert "Awaiting human GitHub merge: T-002" in status
+    assert "Last completed task | [T-001]" in status
+    assert "`make project-status` (await human GitHub merge of T-002)." in status
+    result = run(["make", "task-ready", "TASK=T-003"], root, expect_success=False)
+    assert "dependencies are done" in result.stdout
+    result = run(["make", "task-start", "TASK=T-003"], root, expect_success=False)
+    assert "Invalid transition" in result.stdout or "dependencies are done" in result.stdout
+
+    run_with_env(["make", "pr-validate"], root, {"PR_HEAD_REF": "feat/T-002-greeting", "PR_TITLE": "T-002: Add greeting", "PR_BODY": ""})
+    run(["git", "add", "-A"], root)
+    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "review-ready state"], root)
+    run(["git", "checkout", "-q", "main"], root)
+    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "merge", "--no-ff", "-q", "-m", "unrelated wording", "feat/T-002-greeting"], root)
+    run(["make", "sync-project-docs"], root)
+    run(["make", "validate-project"], root)
+    status = run(["make", "project-status"], root).stdout
+    assert "Last completed task | [T-002]" in status
+    assert "Awaiting human GitHub merge: T-002" not in status
+    run(["make", "task-ready", "TASK=T-003"], root)
+    control_paths = [root / item for item in ["README.md", "project/index.md", "project/board.md", "project/state.yaml", "project/tasks/T-002-task.md"]]
+    before = {item: item.read_text() for item in control_paths}
+    run(["make", "sync-project-docs"], root)
+    assert before == {item: item.read_text() for item in control_paths}
+
+
+def test_task_merge_completed_is_merge_strategy_independent(tmp_path: Path) -> None:
+    for strategy in ["merge", "squash", "fast-forward"]:
+        root = make_project(tmp_path / strategy, workflow_mode="pr")
+        run(["git", "init", "-b", "main"], root)
+        run(["git", "add", "-A"], root)
+        run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "base"], root)
+        run(["git", "checkout", "-q", "-b", "feat/T-002"], root)
+        run(["make", "task-complete", "TASK=T-001"], root)
+        run(["make", "task-ready", "TASK=T-002"], root)
+        run(["make", "task-start", "TASK=T-002"], root)
+        run(["make", "task-review", "TASK=T-002"], root)
+        run(["make", "sync-project-docs"], root)
+        run(["git", "add", "-A"], root)
+        run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "review-ready state"], root)
+        run(["git", "checkout", "-q", "main"], root)
+        if strategy == "merge":
+            run(["git", "merge", "--no-ff", "-q", "-m", "not parsed", "feat/T-002"], root)
+        elif strategy == "squash":
+            run(["git", "merge", "--squash", "-q", "feat/T-002"], root)
+            run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "not parsed"], root)
+        else:
+            run(["git", "merge", "--ff-only", "-q", "feat/T-002"], root)
+        assert "Last completed task | [T-002]" in run(["make", "project-status"], root).stdout
 
 
 def test_github_pr_agent_cannot_manufacture_a1_approval(tmp_path: Path) -> None:
@@ -647,8 +628,9 @@ def test_github_pr_a2_keeps_stronger_prestart_boundary(tmp_path: Path) -> None:
             "PR_BODY": "T-004 implementation.",
         },
     )
+    run(["make", "sync-project-docs"], root)
     board = (root / "project" / "board.md").read_text()
-    assert "T-004" in board.split("## Done", 1)[1].split("## Cancelled", 1)[0]
+    assert "T-004" in board.split("## Review", 1)[1].split("## Blocked", 1)[0]
     run(["make", "validate-project"], root)
 
 
