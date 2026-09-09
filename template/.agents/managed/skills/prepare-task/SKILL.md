@@ -31,4 +31,6 @@ Fill Goal, Context, Scope, Out of Scope, Acceptance Criteria, Verification, and
 Documentation Impact. Keep the record concise and durable: state the intent,
 scope, and reproducible verification, then stop. Do not turn the task file into
 an execution journal; transient detail belongs in commits and review
-discussion. Use `make task-ready TASK=<id>` for the transition.
+discussion. Use `make task-ready TASK=<id>` for the transition. In
+`workflow_mode: pr`, preparation ends at `review` plus the task's pull request;
+do not prepare `task-approve`/`task-complete` steps for A1 work.

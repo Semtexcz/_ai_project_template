@@ -1,4 +1,4 @@
-.PHONY: check release-check template-release-prepare template-release-tag test-template test-copier-update project-status sync-project-docs validate-project validate-template-docs task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
+.PHONY: check release-check template-release-prepare template-release-tag test-template test-copier-update project-status sync-project-docs validate-project validate-template-docs task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve pr-validate agent-status agent-context validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
 
 check: validate-project validate-template-docs validate-agent-skills
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} uv run pytest tests/test_template_static.py tests/test_project_state_validation_golden_path.py
@@ -74,3 +74,6 @@ task-cancel:
 
 task-approve:
 	PYTHONDONTWRITEBYTECODE=1 python template/tools/project.py approve $(TASK) --approved-by "$(APPROVED_BY)"
+
+pr-validate:
+	PYTHONDONTWRITEBYTECODE=1 python template/tools/project.py pr-validate

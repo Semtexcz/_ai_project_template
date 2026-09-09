@@ -616,3 +616,41 @@ def test_project_state_reconciliation_renders_governance_split(tmp_path: Path) -
     assert "update durable docs" in lightweight_workflow
     assert "Project State Check" not in lightweight_workflow
 
+def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
+    def flatten(path_text: str) -> str:
+        return " ".join(path_text.split())
+
+    agents = flatten((ROOT / "template" / "AGENTS.md.jinja").read_text(encoding="utf-8"))
+    workflow = flatten(
+        (ROOT / "template" / "docs" / "workflow.md.jinja").read_text(encoding="utf-8")
+    )
+    readme = flatten((ROOT / "template" / "README.md.jinja").read_text(encoding="utf-8"))
+    makefile = (ROOT / "template" / "Makefile.jinja").read_text(encoding="utf-8")
+    ci = (ROOT / "template" / ".github" / "workflows" / "ci.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+    project_tool = (ROOT / "template" / "tools" / "project.py").read_text(
+        encoding="utf-8"
+    )
+    root_agents = flatten((ROOT / "AGENTS.md").read_text(encoding="utf-8"))
+
+    # The pr-mode merge boundary is documented and the offline fallback stays.
+    assert "the human GitHub merge of the task's pull request is the normal" in agents
+    assert "`local`/`branch` mode a human records A1/A2 approval" in agents
+    assert "A1 and A2 work is completed by a human GitHub merge" in readme
+    assert "offline fallback" in readme
+    assert "make pr-validate" in workflow
+    assert "task-complete" in makefile
+    assert "pr-validate" in makefile
+    assert "governed-pr-validation" in ci
+    assert "PR_HEAD_REF" in ci
+    assert "def pr_validate" in project_tool
+    assert "github_merge_completes" in project_tool
+    assert "A1 approval cannot be recorded locally in workflow_mode=pr" in project_tool
+    assert "human GitHub merge is the normal A1 approval/completion boundary" in root_agents
+
+    # The pr-mode machinery stays conditional; lightweight defaults are untouched.
+    assert '{% if governance == "managed" and workflow_mode == "pr" %}' in ci
+    assert "{% if workflow_mode == \"pr\" %}" in makefile
+    assert "{% if workflow_mode == \"pr\" %}" in agents
+

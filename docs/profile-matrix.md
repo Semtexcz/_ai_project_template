@@ -41,7 +41,7 @@ truth.
 |---|---|---|
 | `local` | Yes | Work may happen in the current local repository; commits, pushes, and PRs are optional unless requested. |
 | `branch` | No | Work should happen on a dedicated branch; commits may be created, but push/PR is optional unless requested. |
-| `pr` | No | Preserve strict branch -> commit -> push -> ready PR workflow and generated main-push CI guard where CI is rendered. |
+| `pr` | No | Preserve strict branch -> commit -> push -> ready PR workflow and generated main-push CI guard where CI is rendered. In managed `pr` projects, the human GitHub merge of a task's pull request is the A1 approval/completion boundary (and A2's completion boundary); agents stop at `review`, and `make pr-validate` checks the pull request is structurally ready. |
 
 ## Golden Path Profiles
 

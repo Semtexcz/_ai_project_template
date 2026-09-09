@@ -28,4 +28,6 @@ stop_conditions:
 
 Run `make agent-status`. It uses the project next-action algorithm, so do not
 invent a second prioritization model. If validation fails, fix that before
-choosing or starting work.
+choosing or starting work. In `workflow_mode: pr`, an A1/A2 task in `review` is
+completed by the human GitHub merge; `make agent-status` already treats it as
+completed, so do not report it as pending local approval.

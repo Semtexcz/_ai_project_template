@@ -38,7 +38,11 @@ implications, and accidental unrelated changes.
 
 Report findings before summaries or readiness statements. In managed projects,
 task acceptance criteria may add context, but lifecycle transitions remain
-outside this core review skill.
+outside this core review skill. In `workflow_mode: pr` managed projects,
+readiness means the diff is safe and the associated task is in `review` with no
+self-recorded approval: the human GitHub merge of the pull request is the
+approval and completion boundary. Readiness never includes recording approval or
+merging the pull request.
 
 Include planning/status readiness in the Definition of Done when the project
 keeps planning/status artifacts and the change can affect them:

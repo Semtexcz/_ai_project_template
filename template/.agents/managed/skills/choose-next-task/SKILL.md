@@ -27,4 +27,7 @@ stop_conditions:
 # Choose Next Task
 
 Use the recommendation from `make agent-status`. Prefer completing or unblocking
-existing work before proposing one small task for the current gate.
+existing work before proposing one small task for the current gate. In
+`workflow_mode: pr`, A1/A2 tasks already in `review` are completed by the human
+GitHub merge and are not next-task candidates; do not create lifecycle-only
+approval or cleanup tasks for them.

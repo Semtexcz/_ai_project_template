@@ -292,6 +292,17 @@ task-cancel:
 
 task-approve:
 	PYTHONDONTWRITEBYTECODE=1 python tools/project.py approve $(TASK) --approved-by "$(APPROVED_BY)"
+
+{% if workflow_mode == "pr" %}
+.PHONY: pr-validate
+
+# Pre-merge structural validation for governed pull requests. Consumes the PR
+# context from environment variables (PR_HEAD_REF, PR_TITLE, PR_BODY) and
+# fails unless the pull request deterministically references one review-ready
+# task. Run this in CI before a human merges a managed pull request.
+pr-validate:
+	PYTHONDONTWRITEBYTECODE=1 python tools/project.py pr-validate
+{% endif %}
 {% endif %}
 
 down:

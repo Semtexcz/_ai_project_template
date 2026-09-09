@@ -19,6 +19,7 @@ _None_
 - [T-017](tasks/T-017-enforce-agent-pr-workflow.md) - P1 - Enforce agent PR workflow
 - [T-018](tasks/T-018-add-conventional-commit-agent-skill.md) - P1 - Add conventional commit agent skill
 - [T-022](tasks/T-022-refactor-agent-skill-architecture.md) - P1 - Refactor agent skill architecture
+- [T-027](tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) - P1 - Simplify GitHub-backed A1 approval to the human PR merge
 
 ## Blocked
 

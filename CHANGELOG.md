@@ -10,6 +10,7 @@
 - Current limitation: update safety is tested for the fullstack-local golden path; future structural migrations require explicit migration tests.
 - Refined generated project-state reconciliation so managed projects keep stronger reconciliation (including a `Project State Check`) while lightweight projects only keep durable planning/status artifacts truthful when present.
 - Agent efficiency v1: three-tier context loading, skill-aware `make agent-context TASK=<id> SKILL=<skill>`, `files` vs `search_roots` context-map semantics (schema v2), deterministic `budget` with omission reporting, branch-aware changed-file detection, change-aware recommended checks, one canonical full `make check` gate in `agent-pre-review`, a resume/review-fix `MODE=resume`, and concise durable task-record guidance.
+- Simplified the managed approval lifecycle for GitHub-backed projects: in `workflow_mode: pr` the human GitHub merge of a task's pull request is the A1 approval/completion boundary (and A2's completion boundary). Agents move A1/A2 work to `review`, associate one task id (`T-###`) per pull request, and stop; `make pr-validate` checks pre-merge structural readiness; A1 `task-approve` and A1/A2 `task-complete` are rejected in `pr` mode; boards/dashboards derive the completed view; and no post-merge lifecycle command or cleanup pull request is required. `local`/`branch` mode keeps the explicit human `task-approve` + `task-complete` fallback, and historical `done` approval metadata remains valid.
 
 ## 0.1.0 - 2026-07-31
 

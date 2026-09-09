@@ -77,7 +77,13 @@ make validate-project
 make task-ready TASK=T-001
 make task-start TASK=T-001
 make task-review TASK=T-001
+{% if workflow_mode == "pr" %}
+{# In pr mode the human GitHub merge completes A1/A2 work; task-complete is
+   not part of the normal agent flow for A1/A2. A0 work can still be completed
+   with the CLI. #}
+{% else %}
 make task-complete TASK=T-001
+{% endif %}
 make task-block TASK=T-001 REASON="..." UNBLOCK="..."
 make task-unblock TASK=T-001
 make task-cancel TASK=T-001
@@ -90,8 +96,19 @@ make sync-project-docs
 - Ordinary reversible implementation work can proceed autonomously when it is already scoped and automated checks pass.
 - Human approval is required for destructive or irreversible data operations, authentication or authorization boundaries, security-sensitive changes, secret handling, paid external services, production deployment, destructive schema migrations, major scope expansion, and infrastructure with significant operational or financial consequences.
 {% if governance == "managed" %}
-- Managed A2 work needs human approval before start. Managed A1 work can proceed, but cannot be completed without human approval.
+- Managed A2 work needs human approval before start. Managed A1 work can proceed, but completion requires a human decision.
+{% if workflow_mode == "pr" %}
+- In `pr` mode the human GitHub merge of the task's pull request is the normal
+  A1 approval/completion boundary (and A2's completion boundary). Agents move
+  A1/A2 work to review, open exactly one pull request per task, and stop.
+  Do not run `make task-complete` or `make task-approve` for A1 in `pr` mode and
+  do not manufacture approval evidence: the merged pull request is the evidence.
 - `make task-approve` is for humans only. AI agents must not autonomously record A1 or A2 approval.
+{% else %}
+- In `local`/`branch` mode a human records A1/A2 approval with
+  `make task-approve`; that explicit local approval is the offline fallback.
+- `make task-approve` is for humans only. AI agents must not autonomously record A1 or A2 approval.
+{% endif %}
 {% endif %}
 
 ## Project State Reconciliation

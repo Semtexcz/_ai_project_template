@@ -1,7 +1,7 @@
 ---
 name: complete-task
 version: 1
-purpose: Complete one managed task after DoD and approval requirements are met.
+purpose: Complete one managed task when the project CLI allows completion.
 triggers: [complete task, close task, task done]
 inputs:
   required:
@@ -28,6 +28,10 @@ stop_conditions:
 
 # Complete Task
 
-Use `make task-complete TASK=<id>` only when the project CLI allows it. For A1
-and A2 tasks, stop until a human records approval. Run post-task checks after
+Check `project/state.yaml` first. In `workflow_mode: pr`, A1 and A2
+implementation ends at `review`; the human GitHub merge of the pull request is
+the completion boundary and `make task-complete` is not used for those tasks.
+In `local`/`branch` mode, or for A0 tasks, use `make task-complete TASK=<id>`
+when the project CLI allows it. For A1 and A2 in offline mode, stop until a
+human records approval. Run post-task checks only where the CLI accepted the
 completion.

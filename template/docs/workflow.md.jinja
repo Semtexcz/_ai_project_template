@@ -187,6 +187,18 @@ Allowed transitions are `backlog -> ready`, `ready -> in-progress`,
 `review -> done`, `blocked -> ready`, `blocked -> in-progress`, and cancellation
 from any active state. A0 tasks may also move from `in-progress` directly to
 `done` when Definition of Done is satisfied.
+
+{% if workflow_mode == "pr" %}
+In `pr` mode, A1 and A2 implementation work ends at `review`. The human GitHub
+merge of the task's pull request is the completion boundary: the merged pull
+request is the authoritative approval evidence and there is no post-merge
+`task-approve`, `task-complete`, sync, cleanup branch, or lifecycle-only pull
+request. Pull requests must reference exactly one task id (`T-###`) in the
+branch name or title so the association is deterministic; CI runs
+`make pr-validate` to check the pull request is structurally ready for a human
+merge. A1 approval fields stay `pending` in the task record by design: they are
+local pre-merge state only, never the authoritative approval.
+{% endif %}
 {% endif %}
 
 ## Human Approval
@@ -213,15 +225,35 @@ ordinary public behavior required by already-scoped work.
 Managed approval levels:
 
 - A0: no human approval required; use `approval_status: not-required`
-- A1: implementation can proceed, but `review -> done` requires human approval
-- A2: work cannot start until a human has explicitly approved it
+- A1: implementation can proceed; completion requires one human decision at the
+  configured approval boundary
+- A2: work cannot start until a human has explicitly approved it (stronger
+  pre-start boundary that stays distinct from A1)
 
-AI agents must not autonomously create human approvals. A human may record one
-with:
+{% if workflow_mode == "pr" %}
+Approval boundary in `pr` mode:
+
+- A1: the human GitHub merge of the task's pull request. `approval_status`
+  stays `pending` locally and `task-approve` must not be used for A1.
+- A2: a human first records explicit pre-start approval with
+  `make task-approve`, and the human GitHub merge is the completion boundary.
+
+AI agents must never manufacture or record human approval and must not merge
+their own governed pull requests. After a human merges a pull request, no
+local lifecycle command is required.
+{% else %}
+Approval boundary in `local`/`branch` mode (offline fallback): a human records
+approval explicitly with:
 
 ```bash
 make task-approve TASK=T-001 APPROVED_BY="Human Name"
 ```
+
+A1/A2 completion then uses `make task-complete`. This fallback is deterministic
+and requires no GitHub pull request.
+{% endif %}
+
+AI agents must not autonomously create human approvals.
 {% endif %}
 
 ## Task Records
@@ -252,7 +284,11 @@ but pushing and pull requests are optional unless requested.
 `pr` mode preserves the strict branch -> commit -> push -> pull request
 workflow. Agents work on a non-`main` branch, commit their own changes, push to
 `origin`, and open a ready pull request. Direct pushes to `main` are not part of
-this workflow.
+this workflow. The human GitHub merge is the normal A1 approval/completion
+boundary (and A2's completion boundary) for managed work; after the merge there
+is no required lifecycle-only cleanup commit or pull request. Name the branch
+and title the pull request with the single task id it implements
+(for example `feat/T-002-greeting` and `T-002: Add greeting`).
 {% endif %}
 
 ## Release and Post-Release

@@ -29,11 +29,11 @@ Use this repository when you want a project scaffold that already knows how to:
 | Last completed task | [T-026](project/tasks/T-026-agent-efficiency-v1.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | None |
+| Waiting | A1 approval pending: T-027 |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Start T-019. |
-| Next action command | `make task-start TASK=T-019` |
+| Recommended next action | Human A1 approval is required for T-027 before completion. |
+| Next action command | `make task-approve TASK=T-027 APPROVED_BY="<human>"` |
 <!-- project-status:end -->
 
 ## Quick Start
