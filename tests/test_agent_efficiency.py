@@ -344,7 +344,8 @@ def test_recommended_checks_are_change_aware() -> None:
 
     assert checks_for(["docs/quality.md"]) == ["make validate-template-docs"]
     assert checks_for([".agents/skills/implement-change/SKILL.md"]) == [
-        "make validate-agent-skills"
+        "make validate-agent-skills",
+        "make validate-agent-layer",
     ]
     assert checks_for(["src/example.py"]) == ["make check"]
     # A clean worktree on a feature branch still routes on the committed diff.

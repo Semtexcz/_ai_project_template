@@ -41,6 +41,11 @@ documents that the context bundle already resolves deterministically.
   followed by `make task-complete` remains the explicit offline fallback.
 - Prefer focused checks while implementing; `make agent-pre-review` runs the
   canonical `make check` full gate once at final pre-review.
+- The canonical agent layer lives in `.agents/` and `.codex/`; `template/.agents/`
+  and `template/.codex/` are deterministic mirrors. After editing canonical
+  agent-layer files, run `make sync-agent-layer`; `make validate-agent-layer`
+  (part of `make check` and `make release-check`) proves the mirrors never
+  drift.
 - Keep task files as concise durable records. Execution detail belongs in
   commit history, PR descriptions, and review discussion, not task files.
 - After project or task changes, run `make sync-project-docs` when generated

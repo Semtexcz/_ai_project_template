@@ -50,6 +50,41 @@ Generated-project-owned files should be skipped or preserved during updates:
 
 The `_skip_if_exists` entries in `copier.yml` enforce that boundary.
 
+## Change The Agent Layer
+
+The root `.agents/` tree (skills, schemas, Codex adapters) is canonical. The
+copies under `template/.agents/` and `template/.codex/` are deterministic
+derived mirrors so generated projects start from identical content. Change the
+canonical file once and propagate:
+
+```bash
+make sync-agent-layer
+make validate-agent-layer
+```
+
+`make check` and `make release-check` include `validate-agent-layer`, so a
+mirror edited by hand or a forgotten sync fails the canonical gate. Two files
+intentionally differ between root and template and are never mirrored:
+`.agents/README.md` and `.agents/context-map.yaml` describe this repository,
+while their `template/.agents/` counterparts describe generated projects.
+`template/.codex/` is a full mirror of `.codex/`.
+
+Concept -> canonical source -> derived output -> focused proof:
+
+| Concept | Canonical source | Derived/mirrored | Focused proof |
+|---|---|---|---|
+| Agent workflow | `.agents/` skills, `AGENTS.md` | `template/.agents/`, `template/.codex/` | `make validate-agent-skills`, `make validate-agent-layer`, `make test-agent`, `make test-workflow` |
+| Project lifecycle | `template/tools/project.py`, `template/project/*.jinja` | generated `project/` state and dashboards | `make validate-project`, `make test-lifecycle` |
+| Frontend scaffold | `template/frontend/**` | generated `frontend/` | `make test-frontend` |
+| Backend scaffold | `template/backend/**` | generated `backend/` | `make test-backend` |
+| Python skeleton | `template/src/**`, `template/tests/**` | generated `src/`, `tests/` | `make test-python-profiles` |
+| Documentation | `docs/`, `template/docs/*.jinja` | generated `docs/` | `make validate-template-docs` |
+
+The same routing lives machine-readably in `.agents/context-map.yaml`
+(`change_patterns` and `checks`); keep that map authoritative when changing a
+surface. Root `.agents/context-map.yaml` is not mirrored because generated
+projects need their own profile-based map.
+
 ## Change Profiles Safely
 
 When changing profile behavior, update the smallest matching set:
@@ -96,18 +131,36 @@ stale example paths.
 
 ## Update And Release Checks
 
-For a narrow template change:
-
-```bash
-make check
-```
-
 `make check` is validation-only. It must not rewrite tracked files. Use explicit
 mutating commands such as `make sync-project-docs`, generated `make format`, or
 generated `make api-generate` when files need to be rewritten.
 
-During implementation prefer the focused checks recommended by
-`make agent-context TASK=<id> SKILL=<skill>`. Run the canonical full gate once:
+During implementation the context map routes each changed surface to a narrow
+check. Run the recommended command shown by:
+
+```bash
+make agent-context TASK=<id> SKILL=<skill>
+```
+
+Focused targets used by the routing map:
+
+```bash
+make test-agent        # agent efficiency / context routing
+make test-workflow     # one-task agent workflow golden path
+make test-lifecycle    # project lifecycle and governance state
+make test-static       # static template contract
+make test-mirror       # canonical agent-layer mirror drift
+make test-backend      # backend + fullstack profile golden paths
+make test-frontend     # frontend + fullstack profile golden paths
+make test-python-profiles
+make test-release-workflow
+make validate-agent-skills
+make validate-agent-layer
+make validate-project
+make validate-template-docs
+```
+
+Run the canonical fast gate once at final pre-review:
 
 ```bash
 make check
