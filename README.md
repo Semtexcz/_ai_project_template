@@ -26,7 +26,7 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Last completed task | [T-021](project/tasks/T-021-fix-lightweight-render-matrix-ci.md) |
+| Last completed task | [T-025](project/tasks/T-025-refine-project-state-reconciliation-for-lightweight-governance.md) |
 | Active task | None |
 | Approval | None |
 | Waiting | A1 approval pending: T-023 |

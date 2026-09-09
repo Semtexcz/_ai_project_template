@@ -18,8 +18,21 @@ Governance: `{{ governance }}`. Workflow mode: `{{ workflow_mode }}`.
 
 ## Change Loop
 
+{% if governance == "managed" %}
 Understand enough -> build the smallest useful vertical slice -> run checks ->
-learn -> refine durable project knowledge.
+review -> reconcile project state -> refine durable project knowledge.
+
+Implementation can invalidate previous planning assumptions. Reconsider the
+next-task selection after evidence is produced, and treat roadmap/status
+documents as durable state descriptions, not immutable task queues.
+{% else %}
+Understand enough -> build the smallest useful vertical slice -> run checks ->
+review -> update durable docs when the change teaches something durable.
+
+If durable planning/status artifacts exist and this change affects them, keep
+them truthful with the repository state. Lightweight projects do not require
+task selection, next-task reporting, or a managed-style report footer.
+{% endif %}
 
 Use executable guardrails before process gates:
 
