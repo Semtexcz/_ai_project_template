@@ -418,6 +418,8 @@ bootstrap:
   files: [AGENTS.md]
 task:
   files: ["project/tasks/{task_id}-*.md"]
+managed:
+  files: []
 exclude: []
 project_type:
   script:

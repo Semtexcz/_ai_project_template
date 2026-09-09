@@ -722,8 +722,12 @@ def excluded(path: str, patterns: list[str]) -> bool:
     return any(path_matches(path, pattern) for pattern in patterns)
 
 
-def project_relative_path(value: str, *, label: str) -> tuple[str, Path]:
-    """Normalize a configured project-relative path and prove it stays in ROOT."""
+def project_relative_path(value: object, *, label: str) -> tuple[str, Path]:
+    """Normalize a configured project-relative path and prove it stays in ROOT.
+
+    Configuration values originate from untyped YAML, so non-string scalars are
+    rejected here with a clear error instead of crashing on ``str`` methods.
+    """
     if not isinstance(value, str) or not value.strip():
         raise AgentError(f"{label} must be a non-empty string.")
     normalized = value.replace("\\", "/").strip()

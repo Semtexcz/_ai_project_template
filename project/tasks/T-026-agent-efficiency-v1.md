@@ -111,7 +111,10 @@ harness-agnostic and must not redesign approvals, CI, or the task architecture.
 ## Verification
 
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_agent_efficiency.py -q`
-  passed: 8 focused routing/budget/diff/pre-review/generated-profile tests.
+  covers skill-aware context routing, files vs search roots, budgets, branch-aware
+  changes, focused checks, repository path-glob semantics, search-root traversal
+  safety, Codex adapter synchronization, pre-review gate de-duplication, and
+  representative generated profiles (12 focused test functions).
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_agent_one_task_workflow_golden_path.py -q`
   passed: 4 lifecycle golden-path tests.
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_template_static.py tests/test_project_state_validation_golden_path.py -q`
