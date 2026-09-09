@@ -9,9 +9,6 @@ reads:
   - AGENTS.md
   - project/brief.md
   - docs/architecture.md
-  - docs/workflow.md
-  - docs/quality.md
-  - docs/decisions/
   - .agents/context-map.yaml
 commands:
   - make validate-docs

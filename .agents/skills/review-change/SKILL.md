@@ -9,10 +9,7 @@ inputs:
 reads:
   - AGENTS.md
   - .agents/context-map.yaml
-  - project/brief.md
-  - docs/architecture.md
-  - docs/quality.md
-  - docs/workflow.md
+  - Makefile
 commands:
   - git diff --stat
   - git diff

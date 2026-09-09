@@ -68,11 +68,10 @@ The skill architecture is deliberately separated:
 - capability skills in `.agents/capabilities/skills/` render only when the
   selected profile has that specialized workflow
 
-Core skills use durable context such as `AGENTS.md`, `project/brief.md`,
-architecture, workflow, quality, and ADR docs. They must not require
-`project/state.yaml`, `project/index.md`, `project/board.md`, or active task
-files. Managed projects may enrich the same core skills with active-task
-context.
+Core skills declare narrow `reads:` that drive Tier 1 context routing. They
+must not require `project/state.yaml`, `project/index.md`, `project/board.md`,
+or active task files. Managed projects enrich the same core skills with
+active-task context through `agent-context`.
 
 Core skills currently include `orient-project`, `implement-change`,
 `verify-change`, `review-change`, `update-documentation`, `create-adr`,
@@ -85,11 +84,21 @@ The managed agent entry commands are:
 
 ```bash
 make agent-status
-make agent-context TASK=<id>
+make agent-context TASK=<id> SKILL=<skill>
+make agent-context TASK=<id> SKILL=<skill> MODE=resume
 make agent-pre-task TASK=<id>
 make agent-pre-review TASK=<id>
 make agent-post-task TASK=<id>
 ```
+
+Context loading is tiered: a minimal bootstrap (repository rules), a
+deterministic task/skill bundle bounded by the `budget` declared in
+`.agents/context-map.yaml`, and search-root-based exploration. Directories are
+never recursively loaded as context. The bundle reports included files with
+categories, omitted files with reasons, changed files considered, search roots,
+and total bytes. `MODE=resume` keeps the bundle small when an existing PR is
+being resumed or fixed. `agent-pre-review` runs the canonical `make check` full
+gate once instead of re-running the validators that gate already contains.
 
 Lightweight projects do not render those lifecycle commands, but they do render
 `make validate-agent-skills`.

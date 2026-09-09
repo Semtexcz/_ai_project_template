@@ -80,7 +80,9 @@ def complete_initial_task(root: Path) -> None:
     text = task.read_text(encoding="utf-8")
     text = text.replace("- [ ]", "- [x]")
     text = text.replace("`make validate-project`", "`make validate-project` passed")
-    text = text.replace("Project initialization pending.", "Project initialization completed.")
+    text = text.replace(
+        "Project initialization pending.", "Project initialization completed."
+    )
     task.write_text(text, encoding="utf-8")
     run(["make", "task-complete", "TASK=T-001"], root)
 
@@ -177,14 +179,23 @@ def test_script_local_a0_one_task_workflow(tmp_path: Path) -> None:
     run(["make", "agent-pre-task", "TASK=T-002"], root)
     run(["make", "task-start", "TASK=T-002"], root)
 
-    context = parse_make_json(run(["make", "agent-context", "TASK=T-002", "FORMAT=json"], root).stdout)
+    context = parse_make_json(
+        run(["make", "agent-context", "TASK=T-002", "FORMAT=json"], root).stdout
+    )
     files = set(context["files"])
     assert "AGENTS.md" in files
     assert "project/state.yaml" in files
     assert "project/tasks/T-002-agent-workflow.md" in files
-    assert any(path.startswith("src/") for path in files)
-    assert any(path.startswith("tests/") for path in files)
-    assert not any(".env" in path or ".git" in path or "dist/" in path for path in files)
+    assert "pyproject.toml" in files
+    # Directories are search roots; they are never recursively injected.
+    assert "src" in context["search_roots"]
+    assert "tests" in context["search_roots"]
+    assert not any(
+        path.startswith("src/") or path.startswith("tests/") for path in files
+    )
+    assert not any(
+        ".env" in path or ".git" in path or "dist/" in path for path in files
+    )
 
     package = next((root / "src").iterdir())
     init_path = package / "__init__.py"
@@ -235,31 +246,48 @@ def test_fullstack_context_routing(tmp_path: Path) -> None:
     complete_initial_task(root)
     write_task(root, "T-002")
     run(["make", "task-ready", "TASK=T-002"], root)
-    context = parse_make_json(run(["make", "agent-context", "TASK=T-002", "FORMAT=json"], root).stdout)
+    context = parse_make_json(
+        run(["make", "agent-context", "TASK=T-002", "FORMAT=json"], root).stdout
+    )
     files = set(context["files"])
     assert "backend/src/app/main.py" in files
     assert "frontend/package.json" in files
+    assert "backend/tests" in context["search_roots"]
     assert not any("node_modules" in path or ".env" in path for path in files)
+    assert not any(path.startswith("backend/tests/") for path in files)
 
 
 def test_agent_negative_scenarios(tmp_path: Path) -> None:
     root = copy_project(tmp_path, project_type="script")
     skill = root / ".agents" / "managed" / "skills" / "prepare-task" / "SKILL.md"
-    skill.write_text(skill.read_text(encoding="utf-8").replace("version: 1", "version: 2"), encoding="utf-8")
+    skill.write_text(
+        skill.read_text(encoding="utf-8").replace("version: 1", "version: 2"),
+        encoding="utf-8",
+    )
     result = run(["make", "validate-agent-skills"], root, expect_success=False)
     assert "version must be 1" in result.stdout
 
-    skill.write_text(skill.read_text(encoding="utf-8").replace("version: 2", "version: 1"), encoding="utf-8")
+    skill.write_text(
+        skill.read_text(encoding="utf-8").replace("version: 2", "version: 1"),
+        encoding="utf-8",
+    )
     (root / ".env").write_text("TOKEN=secret\n", encoding="utf-8")
     context_map = root / ".agents" / "context-map.yaml"
     context_map.write_text(
-        context_map.read_text(encoding="utf-8").replace("  - AGENTS.md", "  - AGENTS.md\n  - .env"),
+        context_map.read_text(encoding="utf-8").replace(
+            "    - AGENTS.md", "    - AGENTS.md\n    - .env"
+        ),
         encoding="utf-8",
     )
     result = run(["make", "agent-context", "TASK=T-001"], root, expect_success=False)
     assert "Sensitive or excluded file .env" in result.stdout
 
-    model = root / ".agents" / "skills" / "conventional-commit" / "agents" / "model.yaml"
-    model.write_text(model.read_text(encoding="utf-8").replace("gpt-5-mini", "gpt-5"), encoding="utf-8")
+    model = (
+        root / ".agents" / "skills" / "conventional-commit" / "agents" / "model.yaml"
+    )
+    model.write_text(
+        model.read_text(encoding="utf-8").replace("gpt-5-mini", "gpt-5"),
+        encoding="utf-8",
+    )
     result = run(["make", "validate-agent-skills"], root, expect_success=False)
     assert "must use a cheap model" in result.stdout

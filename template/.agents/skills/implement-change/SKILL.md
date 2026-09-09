@@ -9,11 +9,7 @@ inputs:
 reads:
   - AGENTS.md
   - .agents/context-map.yaml
-  - project/brief.md
-  - docs/architecture.md
-  - docs/workflow.md
-  - docs/quality.md
-  - docs/decisions/
+  - Makefile
 commands:
   - make validate-docs
   - make validate-agent-skills

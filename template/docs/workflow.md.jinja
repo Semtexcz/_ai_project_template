@@ -48,6 +48,52 @@ make build
 Use `make sync-project-docs` when generated project dashboards need refresh.
 {% endif %}
 
+## Agent Context
+
+Load context in three tiers instead of reading the whole project up front:
+
+1. Tier 0 bootstrap: repository rules and governance mode only (`AGENTS.md`,
+   `project/brief.md`).
+2. Tier 1 task/skill context: loaded deterministically for the actual
+   operation, including the selected task, the selected skill's `reads:`,
+   changed files, and narrowly relevant configuration.
+3. Tier 2 exploration: directories listed as `search_roots` are search
+   targets only. Open specific files when needed; never recursively load a
+   directory into context.
+
+{% if governance == "managed" %}
+The deterministic context bundle is requested through Make:
+
+```bash
+make agent-context TASK=T-001
+make agent-context TASK=T-001 SKILL=implement-change
+make agent-context TASK=T-001 SKILL=review-change MODE=resume
+```
+
+{% endif %}
+`.agents/context-map.yaml` separates explicit `files` (eagerly loaded
+candidates) from `search_roots` (never loaded automatically) and declares a
+deterministic `budget` (`max_files`, `max_bytes`). Context output reports
+included files with categories, omitted files with reasons, available search
+roots, and total bytes so regressions stay visible. Task, selected-skill, and
+bootstrap files are protected from budget truncation.
+
+New tasks use the default context mode. When resuming or fixing an existing PR,
+use `MODE=resume`: the bundle prioritizes the task acceptance criteria, the
+branch diff against the base, affected files, and the selected skill without
+reloading the project's architectural context.
+
+Prefer the focused checks recommended for the changed-file set while
+implementing. Run the canonical full gate exactly once at final pre-review:
+
+```bash
+make check
+```
+
+`make check` is validation-only and already runs the project, documentation,
+and agent-skill validators. Do not re-run the same validators separately
+through `agent-pre-review`.
+
 ## Agent Skills
 
 Skills are reusable agent capabilities, not a mandatory orchestration engine.
@@ -119,6 +165,8 @@ Use the deterministic commands instead of editing task status by hand:
 ```bash
 make agent-status
 make agent-context TASK=T-001
+make agent-context TASK=T-001 SKILL=implement-change
+make agent-context TASK=T-001 SKILL=review-change MODE=resume
 make agent-pre-task TASK=T-001
 make project-status
 make task-ready TASK=T-001
@@ -175,6 +223,21 @@ with:
 make task-approve TASK=T-001 APPROVED_BY="Human Name"
 ```
 {% endif %}
+
+## Task Records
+
+Task files are durable project records, not execution journals. Keep them
+concise and forward-looking:
+
+- `Goal`, `Context`, `Scope`, and `Out of Scope` explain why the work exists.
+- `Acceptance Criteria` and `Verification` carry durable, reproducible
+  evidence.
+- `Documentation Impact` and `Completion Notes` capture the outcome.
+
+Do not append chronological execution logs, repeated command output, failed
+intermediate attempts, CI play-by-play, or rebase history to task files. That
+transient detail belongs in the commit history, the pull request description,
+and review discussion.
 
 ## Git Workflow
 

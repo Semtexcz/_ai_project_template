@@ -28,4 +28,7 @@ stop_conditions:
 # Prepare Task
 
 Fill Goal, Context, Scope, Out of Scope, Acceptance Criteria, Verification, and
-Documentation Impact. Use `make task-ready TASK=<id>` for the transition.
+Documentation Impact. Keep the record concise and durable: state the intent,
+scope, and reproducible verification, then stop. Do not turn the task file into
+an execution journal; transient detail belongs in commits and review
+discussion. Use `make task-ready TASK=<id>` for the transition.

@@ -1,6 +1,19 @@
-schema_version: 1
+schema_version: 2
 required:
   - schema_version
-  - always
+  - bootstrap
   - task
   - exclude
+
+bootstrap:
+  required:
+    - files
+
+budget:
+  properties:
+    max_files:
+      type: integer
+      minimum: 1
+    max_bytes:
+      type: integer
+      minimum: 1

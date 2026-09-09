@@ -27,3 +27,4 @@ frontend/shared/api/generated/
 .DS_Store
 Thumbs.db
 *.log
+.fuse_hidden*

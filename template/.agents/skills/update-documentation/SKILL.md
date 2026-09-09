@@ -9,10 +9,8 @@ inputs:
 reads:
   - README.md
   - project/brief.md
-  - docs/architecture.md
-  - docs/workflow.md
-  - docs/quality.md
-  - docs/decisions/
+  - .agents/context-map.yaml
+  - docs/decisions/index.md
 commands:
   - make validate-docs
 outputs:

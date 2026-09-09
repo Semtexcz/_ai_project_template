@@ -34,7 +34,7 @@ agent-status:
 	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py status
 
 agent-context:
-	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py context --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
+	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py context --task $(TASK) $(if $(SKILL),--skill $(SKILL),) $(if $(MODE),--mode $(MODE),) $(if $(FORMAT),--format $(FORMAT),)
 
 validate-agent-skills:
 	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py validate-skills

@@ -8,11 +8,18 @@ Run or read the agent-oriented project status before changing files:
 make agent-status
 ```
 
-Respect exactly one active task. Then load only the context recommended by:
+Respect exactly one active task. Then load only the context recommended by the
+Tier 1 context command:
 
 ```bash
 make agent-context TASK=<id>
+make agent-context TASK=<id> SKILL=<skill>
+make agent-context TASK=<id> SKILL=<skill> MODE=resume
 ```
+
+Use the default mode for a new task and `MODE=resume` when resuming or fixing an
+existing PR on this branch. Do not manually re-read architecture/workflow
+documents that the context bundle already resolves deterministically.
 
 ## Project Workflow
 
@@ -24,6 +31,10 @@ make agent-context TASK=<id>
 - Do not autonomously run `make task-approve`; approval commands are only for a
   human.
 - Run `make agent-pre-review TASK=<id>` before moving a task to review.
+- Prefer focused checks while implementing; `make agent-pre-review` runs the
+  canonical `make check` full gate once at final pre-review.
+- Keep task files as concise durable records. Execution detail belongs in
+  commit history, PR descriptions, and review discussion, not task files.
 - After project or task changes, run `make sync-project-docs` when generated
   dashboards need refresh.
 - Finish by running `make validate-project`.
