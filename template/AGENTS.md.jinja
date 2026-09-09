@@ -2,28 +2,36 @@
 
 ## Required Start
 
-Start by reading the durable project context:
-
-```bash
-sed -n '1,220p' project/brief.md
-sed -n '1,220p' docs/architecture.md
-sed -n '1,220p' docs/workflow.md
-```
+Start from the small bootstrap, then load only the context the actual operation
+needs. Do not read the same documentation twice by pre-loading architecture,
+workflow, and quality documents before requesting context.
 
 {% if governance == "managed" %}
-This project uses managed governance. Run or read agent-oriented project status
-before implementation work:
+Tier 0 bootstrap identifies repository rules, governance mode, the active task,
+and how to request more context:
 
 ```bash
 make agent-status
+```
+
+Tier 1 task/skill context is loaded deterministically for the actual work:
+
+```bash
 make agent-context TASK=<id>
+make agent-context TASK=<id> SKILL=<skill>
+make agent-context TASK=<id> SKILL=<skill> MODE=resume
 ```
 
 Respect exactly one active managed task and use the generated context bundle.
+Use the default context mode for a new task; use `MODE=resume` when resuming or
+fixing an existing PR.
 {% else %}
 This project uses lightweight governance. There is no mandatory task state
-machine for ordinary implementation work. Use the brief, architecture, workflow,
-quality gates, and any relevant ADRs as the durable context.
+machine for ordinary implementation work. Tier 0 bootstrap is `AGENTS.md` and
+`project/brief.md`. Tier 1 context is the files directly relevant to the
+operation and any selected skill's declared reads. Tier 2 exploration opens
+specific files under `docs/`, `project/`, and the source tree on demand; never
+recursively load a directory into context.
 {% endif %}
 
 ## Architecture Rules

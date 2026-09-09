@@ -143,11 +143,14 @@ commits, and learning capture. `.codex/` contains thin Codex adapters that
 delegate to those canonical skills.
 
 {% if governance == "managed" %}
-Use one active task at a time:
+Use one active task at a time and load context in tiers instead of reading
+project documentation twice:
 
 ```bash
 make agent-status
 make agent-context TASK=<id>
+make agent-context TASK=<id> SKILL=<skill>
+make agent-context TASK=<id> SKILL=<skill> MODE=resume
 make task-start TASK=<id>
 make task-review TASK=<id>
 make validate-agent-skills
@@ -155,21 +158,22 @@ make validate-project
 make validate-docs
 ```
 
+`agent-context` is bounded by the context-map `budget` and reports included and
+omitted files. Use `MODE=resume` when resuming or fixing an existing PR.
+
 A1 and A2 approvals are human gates. Agents may prepare work and move it to
 review, but must not approve it. Managed lifecycle skills live under
 `.agents/managed/skills/` and compose the reusable core skills where useful.
 {% else %}
-Start with enough context to work safely:
+Start with a small bootstrap, then load only what the actual operation needs:
 
 ```bash
-sed -n '1,220p' project/brief.md
-sed -n '1,220p' docs/architecture.md
+sed -n '1,120p' project/brief.md
 make validate-agent-skills
-make check
 ```
 
-Build the smallest useful vertical slice, learn from it, then refine the brief,
-architecture notes, or ADRs when the learning is durable.
+Directories are exploration roots, not context dumps: open specific files under
+`docs/` and the source tree only when needed, then run focused checks.
 {% endif %}
 
 {% if project_type == "fullstack" %}

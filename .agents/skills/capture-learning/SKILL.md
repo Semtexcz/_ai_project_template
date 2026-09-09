@@ -8,11 +8,8 @@ inputs:
     - observed_problem
 reads:
   - AGENTS.md
-  - docs/architecture.md
-  - docs/workflow.md
-  - docs/quality.md
-  - docs/decisions/
   - Makefile
+  - .agents/context-map.yaml
 commands:
   - make validate-docs
   - make check

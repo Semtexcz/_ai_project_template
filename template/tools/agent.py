@@ -88,6 +88,19 @@ BUILD_ARTIFACT_PATTERNS = [
 ]
 ALLOWED_REASONING_EFFORTS = {"low", "medium", "high"}
 CHEAP_MODELS = {"gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"}
+CONTEXT_SCHEMA_VERSION = 2
+DEFAULT_CONTEXT_BUDGET = {"max_files": 20, "max_bytes": 120000}
+# Context loading order. Task and selected-skill material are protected from
+# budget truncation; exploratory profile files are loaded last.
+CONTEXT_CATEGORY_PRIORITY = {
+    "task": 0,
+    "skill": 1,
+    "bootstrap": 2,
+    "changed": 3,
+    "managed": 4,
+    "change": 5,
+    "profile": 6,
+}
 
 
 class AgentError(Exception):
@@ -364,7 +377,14 @@ def validate_agent_skills() -> list[str]:
             errors.append(f"{rel(path)} name must match directory name {path.parent.name}.")
         if meta.get("version") != 1:
             errors.append(f"{rel(path)} version must be 1.")
-        for key in ["purpose", "triggers", "reads", "commands", "outputs", "stop_conditions"]:
+        for key in [
+            "purpose",
+            "triggers",
+            "reads",
+            "commands",
+            "outputs",
+            "stop_conditions",
+        ]:
             value = meta.get(key)
             if not value:
                 errors.append(f"{rel(path)} metadata field {key} must not be empty.")
@@ -410,24 +430,87 @@ def validate_context_map() -> list[str]:
         data = read_yaml(path)
     except AgentError as exc:
         return [str(exc)]
-    if data.get("schema_version") != 1:
-        errors.append(".agents/context-map.yaml schema_version must be 1.")
-    always = data.get("always")
-    if not isinstance(always, list) or not always:
-        errors.append(".agents/context-map.yaml always must be a non-empty list.")
-    for required in always or []:
-        if not isinstance(required, str):
-            errors.append(".agents/context-map.yaml always entries must be strings.")
-            continue
-        if any(token in required for token in ["..", "~"]):
-            errors.append(f"Context path {required} cannot traverse outside the project.")
-            continue
-        if not context_source_exists(required):
-            errors.append(f"Required context file {required} does not exist.")
-    if not isinstance(data.get("task"), dict):
-        errors.append(".agents/context-map.yaml task must be a mapping.")
+    if data.get("schema_version") != CONTEXT_SCHEMA_VERSION:
+        errors.append(
+            f".agents/context-map.yaml schema_version must be {CONTEXT_SCHEMA_VERSION}. "
+            "Schema v2 separates explicit files from search_roots and adds a budget."
+        )
     if not isinstance(data.get("exclude"), list):
         errors.append(".agents/context-map.yaml exclude must be a list.")
+
+    def validate_file_entries(section: str, entries: Any, *, required: bool) -> None:
+        if not isinstance(entries, list):
+            errors.append(f".agents/context-map.yaml {section} must be a list.")
+            return
+        if required and not entries:
+            errors.append(f".agents/context-map.yaml {section} must be a non-empty list.")
+        for entry in entries:
+            if not isinstance(entry, str):
+                errors.append(f".agents/context-map.yaml {section} entries must be strings.")
+                continue
+            if any(token in entry for token in ["..", "~"]):
+                errors.append(f"Context path {entry} cannot traverse outside the project.")
+                continue
+            if any(ch in entry for ch in "*?["):
+                continue  # wildcard entries are expanded deterministically later
+            base = ROOT / entry
+            if base.is_dir():
+                errors.append(
+                    f"Context path {entry} is a directory; directories belong under "
+                    "search_roots and are never recursively loaded."
+                )
+                continue
+            if required and not context_source_exists(entry):
+                errors.append(f"Required context file {entry} does not exist.")
+
+    bootstrap = data.get("bootstrap")
+    if not isinstance(bootstrap, dict) or not isinstance(bootstrap.get("files"), list):
+        errors.append(".agents/context-map.yaml bootstrap.files must be a list.")
+    else:
+        validate_file_entries("bootstrap.files", bootstrap.get("files"), required=True)
+    if not isinstance(data.get("task"), dict):
+        errors.append(".agents/context-map.yaml task must be a mapping.")
+    else:
+        validate_file_entries("task.files", data["task"].get("files"), required=True)
+    managed = data.get("managed") or {}
+    if isinstance(managed, dict):
+        validate_file_entries("managed.files", managed.get("files"), required=False)
+    budget = data.get("budget") or {}
+    if isinstance(budget, dict):
+        for key in ["max_files", "max_bytes"]:
+            value = budget.get(key)
+            if value is not None and (not isinstance(value, int) or value < 1):
+                errors.append(f".agents/context-map.yaml budget.{key} must be a positive integer.")
+    project_type = data.get("project_type") or {}
+    if isinstance(project_type, dict):
+        for profile, entry in project_type.items():
+            if not isinstance(entry, dict):
+                errors.append(f".agents/context-map.yaml project_type.{profile} must be a mapping.")
+                continue
+            validate_file_entries(
+                f"project_type.{profile}.files", entry.get("files"), required=False
+            )
+    change_patterns = data.get("change_patterns") or {}
+    if isinstance(change_patterns, dict):
+        for pattern, entry in change_patterns.items():
+            if not isinstance(entry, dict):
+                errors.append(
+                    f".agents/context-map.yaml change_patterns.{pattern} must be a mapping "
+                    "with files and search_roots."
+                )
+                continue
+            validate_file_entries(
+                f"change_patterns.{pattern}.files", entry.get("files"), required=False
+            )
+    checks = data.get("checks") or {}
+    if isinstance(checks, dict):
+        for pattern, commands in checks.items():
+            if not isinstance(commands, list) or not all(
+                isinstance(command, str) for command in commands
+            ):
+                errors.append(
+                    f".agents/context-map.yaml checks.{pattern} must be a list of commands."
+                )
     return errors
 
 
@@ -614,32 +697,45 @@ def add_existing_file(files: list[str], seen: set[str], path: Path, excludes: li
         seen.add(rel_path)
 
 
-def expand_context_pattern(pattern: str, *, required: bool, excludes: list[str]) -> list[str]:
+def expand_file_pattern(pattern: str, *, required: bool, excludes: list[str]) -> list[str]:
+    """Expand one explicit context-map file entry to existing file paths.
+
+    A literal directory is never recursively expanded: directories belong under
+    ``search_roots`` and are reported as searchable instead of loaded. Wildcard
+    matches that resolve to directories are skipped for the same reason.
+    """
     if "{task_id}" in pattern:
         raise AgentError("Internal error: unresolved {task_id} in context pattern.")
     base = safe_project_path(pattern)
-    matches = sorted(ROOT.glob(pattern)) if any(ch in pattern for ch in "*?[") else [base]
-    files: list[str] = []
+    is_glob = any(ch in pattern for ch in "*?[")
+    if not is_glob:
+        if base.is_dir():
+            return []
+        if not base.exists():
+            if required:
+                raise AgentError(f"Required context file {pattern} does not exist.")
+            return []
+        files: list[str] = []
+        add_existing_file(files, set(), base, excludes)
+        return files
+    files = []
     seen: set[str] = set()
-    for match in matches:
+    for match in sorted(ROOT.glob(pattern)):
         if match.is_dir():
-            for file in sorted(p for p in match.rglob("*") if p.is_file()):
-                add_existing_file(files, seen, file, excludes)
-        elif match.exists():
+            continue
+        if match.exists():
             add_existing_file(files, seen, match, excludes)
     if required and not files:
         raise AgentError(f"Required context path {pattern} did not match an existing file.")
     return files
 
 
-def changed_files() -> list[str]:
-    return [path for _, path in changed_file_entries()]
-
-
-def changed_file_entries() -> list[tuple[str, str]]:
+def git_stdout_lines(args: list[str]) -> list[str]:
+    """Run a read-only git command and return its stdout lines, or [] on any
+    failure (including repositories without Git or without a configured remote)."""
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", *args],
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,
@@ -650,43 +746,207 @@ def changed_file_entries() -> list[tuple[str, str]]:
         return []
     if result.returncode != 0:
         return []
-    entries: list[tuple[str, str]] = []
-    for line in result.stdout.splitlines():
+    return result.stdout.splitlines()
+
+
+def git_base_commit() -> str | None:
+    """Return the merge-base commit used for branch-aware diffs.
+
+    Prefers a remote-tracking main; falls back to local main/master and then to
+    the upstream of the current branch. Returns None when no base exists so the
+    caller degrades to working-tree-only change detection.
+    """
+    for ref in ["origin/main", "origin/master", "main", "master"]:
+        if not git_stdout_lines(["rev-parse", "--verify", "--quiet", ref]):
+            continue
+        merge_base = git_stdout_lines(["merge-base", "HEAD", ref])
+        if merge_base and merge_base[0].strip():
+            return merge_base[0].strip()
+    upstream = git_stdout_lines(
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]
+    )
+    if upstream and upstream[0].strip():
+        base = git_stdout_lines(["merge-base", "HEAD", upstream[0].strip()])
+        if base and base[0].strip():
+            return base[0].strip()
+    return None
+
+
+def _parse_name_status(lines: list[str]) -> list[tuple[str, bool]]:
+    """Parse ``git diff --name-status`` output into (path, deleted) entries."""
+    entries: list[tuple[str, bool]] = []
+    for line in lines:
         if not line.strip():
             continue
-        status = line[:2]
-        path = line[3:].strip()
-        if " -> " in path:
-            path = path.rsplit(" -> ", 1)[1]
-        entries.append((status, path))
-    return sorted(entries, key=lambda item: item[1])
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        path = parts[-1].strip()
+        if path:
+            entries.append((path, parts[0].startswith("D")))
+    return entries
+
+
+def changed_file_entries() -> list[tuple[str, str]]:
+    """Return deterministic (source, path) entries for the complete branch/PR
+    change set: committed branch changes + staged + unstaged + untracked.
+
+    The union is stable after commits: a clean worktree on a feature branch
+    still reports the branch's committed changes against the base.
+    """
+    base = git_base_commit()
+    merged: dict[str, tuple[str, bool]] = {}
+
+    def add(source: str, path: str, deleted: bool) -> None:
+        if path not in merged:
+            merged[path] = (source, deleted)
+
+    if base is not None:
+        for path, deleted in _parse_name_status(
+            git_stdout_lines(["diff", "--name-status", base, "HEAD"])
+        ):
+            add("branch", path, deleted)
+    for path, deleted in _parse_name_status(
+        git_stdout_lines(["diff", "--cached", "--name-status"])
+    ):
+        add("staged", path, deleted)
+    for path, deleted in _parse_name_status(git_stdout_lines(["diff", "--name-status"])):
+        add("worktree", path, deleted)
+    for path in git_stdout_lines(["ls-files", "--others", "--exclude-standard"]):
+        if path.strip():
+            add("untracked", path.strip(), False)
+    return sorted(
+        ((source, path) for path, (source, _deleted) in merged.items()),
+        key=lambda item: item[1],
+    )
+
+
+def deleted_changed_files() -> set[str]:
+    deleted: set[str] = set()
+    base = git_base_commit()
+    if base is not None:
+        for path, is_deleted in _parse_name_status(
+            git_stdout_lines(["diff", "--name-status", base, "HEAD"])
+        ):
+            if is_deleted:
+                deleted.add(path)
+    for path, is_deleted in _parse_name_status(
+        git_stdout_lines(["diff", "--cached", "--name-status"])
+    ):
+        if is_deleted:
+            deleted.add(path)
+    for path, is_deleted in _parse_name_status(git_stdout_lines(["diff", "--name-status"])):
+        if is_deleted:
+            deleted.add(path)
+    return deleted
+
+
+def changed_files() -> list[str]:
+    return [path for _, path in changed_file_entries()]
+
+
+def _existing_make_commands(commands: list[str]) -> list[str]:
+    """Keep commands whose Make target actually exists in this repository."""
+    targets = make_targets() | template_make_targets()
+    kept: list[str] = []
+    for command in commands:
+        if not command.startswith("make "):
+            kept.append(command)
+            continue
+        parts = command.split()
+        if len(parts) > 1 and parts[1] in targets:
+            kept.append(command)
+    return kept
+
+
+def _change_categories(changes: list[str]) -> set[str]:
+    """Small deterministic classifier used only when the context-map checks
+    mapping does not match a changed path."""
+    categories: set[str] = set()
+    for path in changes:
+        normalized = path.replace("\\", "/")
+        if normalized.startswith(".agents/") or normalized.startswith(".codex/"):
+            categories.add("skills")
+        if normalized.startswith("project/"):
+            categories.add("project")
+        if (
+            normalized.startswith("docs/")
+            or normalized.endswith(".md")
+            or normalized in {"README.md", "AGENTS.md"}
+        ):
+            categories.add("docs")
+        if normalized.startswith("template/"):
+            categories.add("template")
+        if normalized.startswith("tests/"):
+            categories.add("tests")
+        if normalized.startswith("src/") or normalized.endswith(".py"):
+            categories.add("python")
+        if normalized.startswith("frontend/"):
+            categories.add("frontend")
+        if normalized.endswith("Dockerfile"):
+            categories.add("docker")
+        if normalized in {"Makefile", "copier.yml"} or normalized.startswith("tools/"):
+            categories.add("tooling")
+    return categories
+
+
+def _focused_commands(categories: set[str]) -> list[str]:
+    """Focused fallback checks; the rule set stays small on purpose."""
+    commands: list[str] = []
+    if "skills" in categories:
+        commands.append("make validate-agent-skills")
+    if categories == {"docs"}:
+        for candidate in ["make validate-template-docs", "make validate-docs"]:
+            commands.append(candidate)
+    if categories == {"project"}:
+        commands.append("make validate-project")
+    if not commands and categories:
+        commands.append("make check")
+    return commands
 
 
 def recommended_checks(config: dict[str, Any], changes: list[str]) -> list[str]:
-    checks: list[str] = []
-    seen: set[str] = set()
+    """Return focused validation commands for the actual changed-file set.
+
+    ``make check`` is the canonical final full gate; an empty change set (no
+    committed branch diff and no working-tree changes yet) simply defers to it.
+    """
+    if not changes:
+        return _existing_make_commands(["make check"])
     mapping = config.get("checks", {}) or {}
+    matched: list[str] = []
+    seen: set[str] = set()
     for changed in changes:
         for pattern, commands in mapping.items():
             if fnmatch.fnmatch(changed, pattern):
                 for command in commands or []:
                     if command not in seen:
-                        checks.append(command)
+                        matched.append(command)
                         seen.add(command)
+    categories = _change_categories(changes)
+    if not matched:
+        matched = _focused_commands(categories)
+    metadata = project_metadata()
+    required: list[str] = []
+    if "skills" in categories:
+        required.append("make validate-agent-skills")
+    if metadata.get("governance") == "managed" and "project" in categories:
+        required.append("make validate-project")
+    checks = [*matched, *[command for command in required if command not in seen]]
     if not checks:
         checks.append("make check")
-    metadata = project_metadata()
-    required_commands = ["make validate-agent-skills"]
-    if metadata.get("governance") == "managed":
-        required_commands.append("make validate-project")
-    for command in required_commands:
-        if command not in seen:
-            checks.append(command)
-            seen.add(command)
-    return checks
+    return _existing_make_commands(checks)
 
 
-def resolve_context(task_id: str | None) -> dict[str, Any]:
+def resolve_context(
+    task_id: str | None, skill: str | None = None, mode: str = "new"
+) -> dict[str, Any]:
+    """Resolve the deterministic context bundle for the selected task.
+
+    ``mode="resume"`` keeps the bundle small for review/fix work on an existing
+    PR: profile exploratory files are not eagerly loaded and the branch diff
+    carries the affected-file context.
+    """
     managed_project = require_project_module()
     task = get_task(task_id)
     config = read_yaml(AGENTS_DIR / "context-map.yaml")
@@ -694,47 +954,40 @@ def resolve_context(task_id: str | None) -> dict[str, Any]:
     if errors:
         raise AgentError(errors[0])
     excludes = list(dict.fromkeys([*DEFAULT_EXCLUDES, *(config.get("exclude") or [])]))
-    files: list[str] = []
-    seen: set[str] = set()
-    for pattern in config.get("always", []):
-        for item in expand_context_pattern(pattern, required=True, excludes=excludes):
-            if item not in seen:
-                files.append(item)
-                seen.add(item)
-    for pattern in (config.get("managed", {}) or {}).get("include", []) or []:
-        for item in expand_context_pattern(pattern, required=False, excludes=excludes):
-            if item not in seen:
-                files.append(item)
-                seen.add(item)
-    task_section = config.get("task", {}) or {}
-    for pattern in task_section.get("include", []) or []:
-        resolved_pattern = pattern.format(task_id=task.id)
-        for item in expand_context_pattern(resolved_pattern, required=True, excludes=excludes):
-            if item not in seen:
-                files.append(item)
-                seen.add(item)
+    budget = config.get("budget") or {}
+    max_files = int(budget.get("max_files", DEFAULT_CONTEXT_BUDGET["max_files"]))
+    max_bytes = int(budget.get("max_bytes", DEFAULT_CONTEXT_BUDGET["max_bytes"]))
+    selected_skill, skill_files, skill_roots = resolve_skill_context(skill)
     state = managed_project.read_state()
-    project_type = state.get("project", {}).get("type")
-    runtime_level = state.get("project", {}).get("runtime_level")
-    profile_keys = [str(project_type), f"{project_type}-{runtime_level}"]
-    project_type_map = config.get("project_type", {}) or {}
-    for key in profile_keys:
-        for pattern in project_type_map.get(key, []) or []:
-            for item in expand_context_pattern(pattern, required=False, excludes=excludes):
-                if item not in seen:
-                    files.append(item)
-                    seen.add(item)
+    project_type = str(state.get("project", {}).get("type", ""))
+    runtime_level = str(state.get("project", {}).get("runtime_level", ""))
     changes = changed_files()
-    for changed in changes:
-        for pattern, includes in (config.get("change_patterns", {}) or {}).items():
-            if fnmatch.fnmatch(changed, pattern):
-                for include in includes or []:
-                    for item in expand_context_pattern(include, required=False, excludes=excludes):
-                        if item not in seen:
-                            files.append(item)
-                            seen.add(item)
-    files = sorted(files)
+    deleted = deleted_changed_files()
+    candidates, search_roots, changed_omitted = collect_context_candidates(
+        task=task,
+        config=config,
+        excludes=excludes,
+        skill_files=skill_files,
+        skill_roots=skill_roots,
+        mode=mode,
+        changes=changes,
+        deleted=deleted,
+        project_type=project_type,
+        runtime_level=runtime_level,
+    )
+    included, omitted, total_bytes = select_budgeted(candidates, max_files, max_bytes)
+    omitted.extend(changed_omitted)
+    reason = (
+        "Tier 1 resume/fix context: task, skill, branch diff, and affected "
+        "files without full project re-orientation"
+        if mode == "resume"
+        else "Tier 1 new-task context: task, skill reads, bootstrap, changed "
+        "files, and narrow configuration"
+    )
     return {
+        "mode": mode,
+        "reason": reason,
+        "skill": selected_skill,
         "task": {
             "id": task.id,
             "title": task.title,
@@ -749,10 +1002,203 @@ def resolve_context(task_id: str | None) -> dict[str, Any]:
             "missing required approval",
             "invalid context map",
         ],
-        "files": files,
-        "recommended_checks": recommended_checks(config, changes),
+        "files": [item["path"] for item in included],
+        "files_included": included,
+        "search_roots": sorted(search_roots),
+        "changed_files": sorted(changes),
+        "deleted_files": sorted(deleted),
+        "recommended_checks": recommended_checks(config, sorted(changes)),
+        "budget": {"max_files": max_files, "max_bytes": max_bytes},
+        "total_bytes": total_bytes,
+        "omitted": omitted,
         "next_action": managed_project.recommended_next_action(state, managed_project.load_tasks()),
     }
+
+
+def resolve_skill_context(
+    skill_name: str | None,
+) -> tuple[str | None, list[str], list[str]]:
+    """Resolve a selected skill to (name, explicit read files, search roots).
+
+    The skill's ``reads:`` metadata becomes deterministic routing information.
+    Unknown skills fail clearly; missing read files degrade safely; directories
+    become search roots and are never recursively loaded.
+    """
+    if not skill_name:
+        return None, [], []
+    path = canonical_skill_path(skill_name)
+    if path is None:
+        available = sorted(path.parent.name for path in skill_paths())
+        raise AgentError(
+            f"Skill {skill_name} does not exist. Available skills: {', '.join(available)}."
+        )
+    try:
+        meta, _body = split_skill_frontmatter(path)
+    except AgentError as exc:
+        raise AgentError(f"Cannot load skill {skill_name}: {exc}") from exc
+    reads = meta.get("reads")
+    if not isinstance(reads, list):
+        raise AgentError(f"Skill {skill_name} must declare reads as a list for context routing.")
+    explicit: set[str] = set()
+    roots: set[str] = set()
+    for entry in reads:
+        if not isinstance(entry, str) or not entry.strip() or "{{" in entry:
+            continue  # templated/empty read entries cannot be resolved eagerly
+        pattern = entry.strip()
+        if any(token in pattern for token in ["..", "~"]) or Path(pattern).is_absolute():
+            raise AgentError(f"Skill read {pattern} cannot traverse outside the project.")
+        base = ROOT / pattern
+        if any(ch in pattern for ch in "*?["):
+            for match in sorted(ROOT.glob(pattern)):
+                if match.is_dir():
+                    roots.add(match.relative_to(ROOT).as_posix())
+                elif match.is_file():
+                    explicit.add(match.relative_to(ROOT).as_posix())
+        elif base.is_dir():
+            roots.add(pattern)
+        elif base.exists():
+            explicit.add(pattern)
+    return skill_name, sorted(explicit), sorted(roots)
+
+
+def collect_context_candidates(
+    *,
+    task: Any,
+    config: dict[str, Any],
+    excludes: list[str],
+    skill_files: list[str],
+    skill_roots: list[str],
+    mode: str,
+    changes: list[str],
+    deleted: set[str],
+    project_type: str,
+    runtime_level: str,
+) -> tuple[list[tuple[int, str, str, bool]], set[str], list[dict[str, str]]]:
+    """Collect deterministic (priority, category, path, protected) candidates,
+    available search roots, and changed files that were excluded from loading."""
+    candidates: list[tuple[int, str, str, bool]] = []
+    roots: set[str] = set()
+    changed_omitted: list[dict[str, str]] = []
+
+    def add_files(
+        category: str,
+        patterns: list[str],
+        *,
+        protected: bool = False,
+        required: bool = False,
+    ) -> None:
+        priority = CONTEXT_CATEGORY_PRIORITY[category]
+        for pattern in patterns or []:
+            for path in expand_file_pattern(pattern, required=required, excludes=excludes):
+                candidates.append((priority, category, path, protected))
+
+    def add_roots(patterns: list[str]) -> None:
+        for pattern in patterns or []:
+            normalized = (pattern or "").rstrip("/")
+            if normalized:
+                roots.add(normalized)
+
+    task_patterns = [
+        pattern.format(task_id=task.id)
+        for pattern in (config.get("task", {}) or {}).get("files", []) or []
+    ]
+    add_files("task", task_patterns, protected=True, required=True)
+    add_files("skill", skill_files, protected=True)
+    bootstrap = config.get("bootstrap", {}) or {}
+    add_files("bootstrap", bootstrap.get("files", []) or [], protected=True, required=True)
+    for changed in sorted(changes):
+        if changed in deleted:
+            continue
+        resolved = (ROOT / changed).resolve()
+        try:
+            rel_path = resolved.relative_to(ROOT.resolve()).as_posix()
+        except ValueError:
+            continue
+        if excluded(rel_path, excludes) or excluded(rel_path, SENSITIVE_PATTERNS):
+            changed_omitted.append({"path": rel_path, "category": "changed", "reason": "excluded"})
+            continue
+        if resolved.is_file():
+            candidates.append((CONTEXT_CATEGORY_PRIORITY["changed"], "changed", rel_path, False))
+    managed = config.get("managed") or {}
+    add_files("managed", managed.get("files", []) or [])
+    change_patterns = config.get("change_patterns", {}) or {}
+    for changed in changes:
+        for pattern, mapping in change_patterns.items():
+            if not isinstance(mapping, dict) or not fnmatch.fnmatch(changed, pattern):
+                continue
+            add_files("change", mapping.get("files", []) or [])
+            add_roots(mapping.get("search_roots", []) or [])
+    profile_map = config.get("project_type", {}) or {}
+    for key in [project_type, f"{project_type}-{runtime_level}"]:
+        entry = profile_map.get(key)
+        if not isinstance(entry, dict):
+            continue
+        if mode != "resume":
+            add_files("profile", entry.get("files", []) or [])
+        add_roots(entry.get("search_roots", []) or [])
+    add_roots(skill_roots)
+    return candidates, roots, changed_omitted
+
+
+def select_budgeted(
+    candidates: list[tuple[int, str, str, bool]], max_files: int, max_bytes: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    """Apply deterministic file/byte budgets.
+
+    Protected task/skill/bootstrap candidates are always included; if they do
+    not fit, generation fails loudly instead of silently dropping them. Every
+    other candidate is included in deterministic priority order until a budget
+    is exhausted and is then reported as omitted.
+    """
+    by_path: dict[str, tuple[int, str, bool]] = {}
+    for priority, category, path, protected in candidates:
+        if path in by_path:
+            old_priority, _old_category, old_protected = by_path[path]
+            if priority < old_priority or (protected and not old_protected):
+                by_path[path] = (priority, category, protected or old_protected)
+            continue
+        by_path[path] = (priority, category, protected)
+    ordered = sorted(by_path.items(), key=lambda item: (item[1][0], item[0]))
+    protected_paths = [
+        (path, category) for path, (_priority, category, is_protected) in ordered if is_protected
+    ]
+    if len(protected_paths) > max_files:
+        raise AgentError(
+            f"Required task/skill/bootstrap context needs {len(protected_paths)} files "
+            f"but budget.max_files is {max_files}. Raise the context budget."
+        )
+    core_bytes = sum((ROOT / path).stat().st_size for path, _category in protected_paths)
+    if core_bytes > max_bytes:
+        raise AgentError(
+            f"Required task/skill/bootstrap context needs {core_bytes} bytes "
+            f"but budget.max_bytes is {max_bytes}. Raise the context budget."
+        )
+    included: list[dict[str, Any]] = []
+    omitted: list[dict[str, Any]] = []
+    included_paths: set[str] = set()
+    total_bytes = 0
+
+    def include(path: str, category: str) -> None:
+        nonlocal total_bytes
+        size = (ROOT / path).stat().st_size
+        included.append({"path": path, "category": category, "bytes": size})
+        included_paths.add(path)
+        total_bytes += size
+
+    for path, category in protected_paths:
+        include(path, category)
+    for path, (_priority, category, is_protected) in ordered:
+        if path in included_paths or is_protected:
+            continue
+        size = (ROOT / path).stat().st_size
+        if len(included) >= max_files:
+            omitted.append({"path": path, "category": category, "reason": "file budget"})
+            continue
+        if total_bytes + size > max_bytes:
+            omitted.append({"path": path, "category": category, "reason": "byte budget"})
+            continue
+        include(path, category)
+    return included, omitted, total_bytes
 
 
 def agent_status() -> str:
@@ -762,7 +1208,11 @@ def agent_status() -> str:
     errors = managed_project.validate_all(check_drift=False)
     if errors:
         return "\n".join(
-            ["ERROR: Project state is invalid.", *errors, "Next action: make validate-project"]
+            [
+                "ERROR: Project state is invalid.",
+                *errors,
+                "Next action: make validate-project",
+            ]
         )
     active = managed_project.find_active(tasks, state)
     next_action = managed_project.recommended_next_action(state, tasks)
@@ -826,10 +1276,11 @@ def pre_task(task_id: str) -> None:
 
 def diff_safety_errors() -> list[str]:
     errors: list[str] = []
-    for status, path in changed_file_entries():
+    deleted = deleted_changed_files()
+    for _status, path in changed_file_entries():
         if excluded(path, SENSITIVE_PATTERNS):
             errors.append(f"Sensitive file appears in Git diff: {path}.")
-        if excluded(path, BUILD_ARTIFACT_PATTERNS) and "D" not in status:
+        if excluded(path, BUILD_ARTIFACT_PATTERNS) and path not in deleted:
             errors.append(f"Build artifact appears in Git diff: {path}.")
     return errors
 
@@ -847,8 +1298,7 @@ def pre_review(task_id: str) -> None:
     if task.status != "in-progress":
         raise AgentError(f"{task.id} must be in-progress before review preparation.")
     fail_if_errors(diff_safety_errors())
-    fail_if_errors(validate_agent_skills())
-    checks = [run_command("make check"), run_command("make validate-project")]
+    checks = [run_command("make check")]
     failed = [check for check in checks if check.status != "PASS"]
     if failed:
         for check in failed:
@@ -889,17 +1339,37 @@ def print_context(data: dict[str, Any], output_format: str) -> None:
         print(json.dumps(data, indent=2, sort_keys=True))
         return
     task = data["task"]
+    budget = data.get("budget", {})
+    included = data.get("files_included", [])
+    omitted = data.get("omitted", [])
+    print(f"Mode: {data.get('mode', 'new')}")
+    print(f"Reason: {data.get('reason', '')}")
     print(f"Task: {task['id']} - {task['title']}")
     print(f"Status: {task['status']}")
     print(f"Approval: {task['approval_level']} {task['approval_status']}")
-    print("Stop conditions:")
-    for item in data["stop_conditions"]:
-        print(f"- {item}")
-    print("Recommended files:")
-    for item in data["files"]:
-        print(f"- {item}")
+    print(f"Skill: {data.get('skill') or '(none)'}")
+    if data.get("changed_files"):
+        print(f"Changed files ({len(data['changed_files'])}):")
+        for item in data["changed_files"]:
+            print(f"- {item}")
+    print(
+        f"Files included ({len(included)}/{budget.get('max_files', '?')}, "
+        f"{data.get('total_bytes', 0)}/{budget.get('max_bytes', '?')} bytes):"
+    )
+    for item in included:
+        print(f"- ({item['category']}) {item['path']} ({item['bytes']} bytes)")
+    if omitted:
+        print(f"Omitted ({len(omitted)}):")
+        for item in omitted:
+            print(
+                f"- ({item['category']}) {item['path']} [reason: {item.get('reason', 'unknown')}]"
+            )
+    if data.get("search_roots"):
+        print(f"Search roots available ({len(data['search_roots'])}):")
+        for item in data["search_roots"]:
+            print(f"- {item}/")
     print("Recommended checks:")
-    for item in data["recommended_checks"]:
+    for item in data.get("recommended_checks", []):
         print(f"- {item}")
     print(f"Next action: {data['next_action']}")
 
@@ -910,6 +1380,8 @@ def main() -> None:
     sub.add_parser("status")
     context = sub.add_parser("context")
     context.add_argument("--task")
+    context.add_argument("--skill")
+    context.add_argument("--mode", choices=["new", "resume"], default="new")
     context.add_argument("--format", choices=["text", "json"], default="text")
     sub.add_parser("validate-skills")
     for name in ["pre-task", "pre-review", "post-task"]:
@@ -920,7 +1392,10 @@ def main() -> None:
         if args.command == "status":
             print(agent_status())
         elif args.command == "context":
-            print_context(resolve_context(args.task), args.format)
+            print_context(
+                resolve_context(args.task, skill=args.skill, mode=args.mode),
+                args.format,
+            )
         elif args.command == "validate-skills":
             fail_if_errors(validate_agent_skills())
             print("Agent skills are valid.")

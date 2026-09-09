@@ -1,101 +1,110 @@
-schema_version: 1
+schema_version: 2
 
-always:
-  - AGENTS.md
-  - docs/template-architecture.md
-  - docs/template-development.md
-  - docs/template-ownership.md
-  - docs/decisions/ADR-0001-use-copier.md
+# Tier 0 bootstrap: repository rules only. Startup must not duplicate this by
+# manually reading architecture/workflow documentation before agent-context.
+bootstrap:
+  files:
+    - AGENTS.md
 
+# Tier 1 task context: exactly the selected task record.
 task:
-  include:
+  files:
     - project/tasks/{task_id}-*.md
 
+# Managed governance state for this template repository. Files that do not
+# exist in the current project are skipped.
 managed:
-  include:
+  files:
     - project/state.yaml
     - project/index.md
     - project/board.md
     - project/roadmap.md
-    - project/milestones/
 
+# Explicit files are eagerly loaded candidates. Directories are search roots
+# only; a directory entry is never recursively loaded into context.
 project_type:
-  script:
-    - pyproject.toml
-    - src/
-    - tests/
-  library:
-    - pyproject.toml
-    - src/
-    - tests/
-  backend:
-    - backend/pyproject.toml
-    - backend/src/app/main.py
-    - backend/tests/
-  frontend:
-    - frontend/package.json
-    - frontend/nuxt.config.ts
-    - frontend/pages/
-    - frontend/tests/
-  fullstack:
-    - backend/pyproject.toml
-    - backend/src/app/main.py
-    - backend/tests/
-    - frontend/package.json
-    - frontend/nuxt.config.ts
-    - frontend/pages/
-    - frontend/tests/
-    - artifacts/openapi.json
-    - frontend/shared/api/
-  fullstack-production:
-    - compose.yaml
-    - backend/Dockerfile
-    - frontend/Dockerfile
+  template:
+    files: []
+    search_roots:
+      - docs/
+      - project/
+      - tests/
+      - template/
+      - tools/
 
+# Deterministic context budget. Task, selected skill, and bootstrap files are
+# protected: generation fails loudly instead of silently dropping them.
+budget:
+  max_files: 20
+  max_bytes: 120000
+
+# Changed paths route to narrowly relevant explicit files and search roots.
 change_patterns:
-  "src/**/*.py":
-    - pyproject.toml
-    - tests/
-  "tests/**/*.py":
-    - pyproject.toml
-    - src/
-  "backend/**/*.py":
-    - docs/architecture.md
-    - docs/quality.md
-    - backend/tests/
-  "frontend/**/*":
-    - docs/quality.md
-    - frontend/tests/
-  "artifacts/openapi.json":
-    - backend/src/app/main.py
-    - frontend/shared/api/
-  "project/**":
-    - project/roadmap.md
-    - project/brief.md
   ".agents/**":
-    - .agents/README.md
-  "**/Dockerfile":
-    - docs/architecture.md
-
-checks:
-  "src/**/*.py":
-    - make test
-  "tests/**/*.py":
-    - make test
-  "backend/**/*.py":
-    - make test
-  "frontend/**/*":
-    - make test
-  "artifacts/openapi.json":
-    - make api-check
+    files:
+      - .agents/README.md
+    search_roots:
+      - .agents/
+  ".codex/**":
+    files: []
+    search_roots:
+      - .codex/
+  "docs/**":
+    files: []
+    search_roots:
+      - docs/
+  "template/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/
+      - tests/
+  "tests/**":
+    files: []
+    search_roots:
+      - tests/
   "project/**":
-    - make validate-docs
+    files: []
+    search_roots:
+      - project/
+  "Makefile":
+    files:
+      - Makefile
+    search_roots: []
+  "copier.yml":
+    files:
+      - copier.yml
+    search_roots: []
+
+# Focused validation recommendations per changed path. Make commands that do
+# not exist in this repository are ignored by the resolver.
+checks:
   ".agents/**":
     - make validate-agent-skills
   ".codex/**":
     - make validate-agent-skills
-  "**/Dockerfile":
-    - make image-build
+  "docs/**":
+    - make validate-template-docs
+  "AGENTS.md":
+    - make validate-template-docs
+  "README.md":
+    - make validate-template-docs
+  "CHANGELOG.md":
+    - make validate-template-docs
+  "UPGRADING.md":
+    - make validate-template-docs
+  "Makefile":
+    - make validate-agent-skills
+  "copier.yml":
+    - make validate-template-docs
+  "project/**":
+    - make validate-project
+  "template/**":
+    - make check
+  "tests/**":
+    - make check
+  "tools/**":
+    - make check
 
 exclude:
   - "**/.env"
@@ -111,3 +120,6 @@ exclude:
   - "**/.output/**"
   - "**/coverage/**"
   - "**/cache/**"
+  - "**/.pytest_cache/**"
+  - "**/.ruff_cache/**"
+  - "**/__pycache__/**"

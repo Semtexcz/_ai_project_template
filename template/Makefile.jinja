@@ -255,7 +255,7 @@ agent-status:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py status
 
 agent-context:
-	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py context --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py context --task $(TASK) $(if $(SKILL),--skill $(SKILL),) $(if $(MODE),--mode $(MODE),) $(if $(FORMAT),--format $(FORMAT),)
 
 agent-pre-task:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py pre-task --task $(TASK)

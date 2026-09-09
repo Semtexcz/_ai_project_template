@@ -9,6 +9,7 @@
 - Recorded template version metadata in generated projects through `.template-version` rendered from the Copier Git ref.
 - Current limitation: update safety is tested for the fullstack-local golden path; future structural migrations require explicit migration tests.
 - Refined generated project-state reconciliation so managed projects keep stronger reconciliation (including a `Project State Check`) while lightweight projects only keep durable planning/status artifacts truthful when present.
+- Agent efficiency v1: three-tier context loading, skill-aware `make agent-context TASK=<id> SKILL=<skill>`, `files` vs `search_roots` context-map semantics (schema v2), deterministic `budget` with omission reporting, branch-aware changed-file detection, change-aware recommended checks, one canonical full `make check` gate in `agent-pre-review`, a resume/review-fix `MODE=resume`, and concise durable task-record guidance.
 
 ## 0.1.0 - 2026-07-31
 

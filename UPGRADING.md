@@ -120,6 +120,30 @@ receive merge conflicts during `copier update`. Resolve those conflicts by
 preserving project-specific rules while incorporating the reconciliation policy
 that matches the project's governance. No file migration is required.
 
+## Agent Efficiency Note (context-map schema v2)
+
+Newer template versions make agent context loading explicit and bounded:
+
+- `.agents/context-map.yaml` uses `schema_version: 2` and separates explicit
+  `files` (eagerly loaded candidates) from `search_roots` (never loaded
+  automatically). Directories are never recursively expanded into context.
+- A deterministic `budget` (`max_files`, `max_bytes`) bounds eager loading.
+  Task, selected-skill, and bootstrap files are protected from truncation.
+- `make agent-context TASK=<id> SKILL=<skill>` routes the selected skill's
+  `reads:` into context; `MODE=resume` keeps context small when resuming or
+  fixing an existing PR.
+- Changed-file detection is branch-aware: committed branch changes, staged,
+  unstaged, and untracked files are all reported even when the worktree is
+  clean after a commit.
+- `make agent-pre-review TASK=<id>` now runs the canonical `make check` full
+  gate once instead of re-running the validators that gate already contains.
+- Task records are expected to stay concise and durable; execution journals
+  belong in commit history, PR descriptions, and review discussion.
+
+These files are template-owned, so `copier update` refreshes them. `AGENTS.md`,
+`docs/workflow.md`, and `README.md` are merge-sensitive and may require review
+when the generated project customized them.
+
 ## Migrations
 
 The governance refactor adds answers rather than silently moving product-owned

@@ -51,22 +51,42 @@ Capability skills:
 
 ## Context Map
 
-`.agents/context-map.yaml` defines the minimum files to load. Core context uses
-durable files that exist in lightweight and managed projects: `AGENTS.md`,
-`project/brief.md`, architecture, workflow, quality, and ADR documentation.
+`.agents/context-map.yaml` is the canonical context routing definition. It
+separates:
 
-Managed projects may add `project/state.yaml`, `project/index.md`,
-`project/board.md`, and active task files. Core skills must not require those
-managed files. Excludes block secrets, dependency directories, caches, and build
-artifacts. Paths cannot traverse outside the project root and symlinks outside
-the root are rejected.
+- `bootstrap.files`: Tier 0 repository rules that are always loaded (normally
+  only `AGENTS.md`).
+- `task.files`: the selected managed task record.
+- `managed.files`: governance state files that exist in managed projects.
+- `project_type.<profile>.files`: explicit narrow files for the project shape.
+- `search_roots`: directories that are searchable only; they are never
+  recursively loaded into context.
+- `change_patterns`: routing from changed paths to narrowly relevant files and
+  search roots.
+- `checks`: focused validation recommendations per changed-path pattern.
+- `budget`: deterministic `max_files` and `max_bytes`.
+
+`make agent-context TASK=<id> SKILL=<skill>` routes the selected skill's
+`reads:` metadata into context; missing skills fail clearly and missing read
+files degrade safely. Directory reads become search roots.
+
+Task, selected-skill, and bootstrap files are protected from budget truncation.
+Context output reports included files with categories, omitted files with
+reasons, available search roots, changed files considered, and the total byte
+cost. Use the default context mode for new tasks and `MODE=resume` when
+resuming or fixing an existing PR.
+
+Excludes block secrets, dependency directories, caches, and build artifacts.
+Paths cannot traverse outside the project root and symlinks outside the root
+are rejected.
 
 The recommended loop is conceptual, not mandatory orchestration:
 
 ```text
 orient when context is unclear
 implement the scoped change
-verify with deterministic checks
+verify with focused deterministic checks
+run the full `make check` gate once before review
 review the diff
 update docs or record no documentation impact
 capture learning only when repeated experience justifies a guardrail
@@ -78,8 +98,9 @@ Hooks are managed-governance guardrails. They are generated only when
 `governance=managed`.
 
 - `make agent-pre-task TASK=<id>` verifies readiness before implementation.
-- `make agent-pre-review TASK=<id>` checks diff safety, skills, project checks,
-  and review readiness.
+- `make agent-pre-review TASK=<id>` checks diff safety and lifecycle readiness,
+  then runs the canonical `make check` full gate exactly once without re-running
+  validators that gate already contains.
 - `make agent-post-task TASK=<id>` verifies a completed task and synchronized
   project state.
 

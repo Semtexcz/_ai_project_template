@@ -10,9 +10,14 @@ The root project state is authoritative. Before changing files:
 
 ```bash
 make agent-status
-make agent-context TASK=<id>
+make agent-context TASK=<id> SKILL=implement-change
 make task-start TASK=<id>
 ```
+
+Use `SKILL=<skill>` to route the selected skill's `reads:` into context, and
+`MODE=resume` when resuming or fixing an existing PR on this branch. Context is
+bounded by `.agents/context-map.yaml` `budget` values and reports included and
+omitted files.
 
 Only one task may be `in-progress`. A1 and A2 approvals must be granted by a
 human; agents can move implemented A1 work to review but must not approve it.
@@ -96,6 +101,17 @@ make check
 `make check` is validation-only. It must not rewrite tracked files. Use explicit
 mutating commands such as `make sync-project-docs`, generated `make format`, or
 generated `make api-generate` when files need to be rewritten.
+
+During implementation prefer the focused checks recommended by
+`make agent-context TASK=<id> SKILL=<skill>`. Run the canonical full gate once:
+
+```bash
+make check
+```
+
+`make agent-pre-review` performs diff-safety and review-readiness checks and
+then runs that single full gate; it does not re-run the validators that
+`make check` already contains.
 
 Before review or release-candidate signoff:
 
