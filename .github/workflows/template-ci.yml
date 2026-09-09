@@ -57,6 +57,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch authoritative base branch
+        run: git fetch --quiet origin main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -247,6 +249,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch authoritative base branch
+        run: git fetch --quiet origin main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

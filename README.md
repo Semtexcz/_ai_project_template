@@ -29,11 +29,11 @@ Use this repository when you want a project scaffold that already knows how to:
 | Last completed task | [T-026](project/tasks/T-026-agent-efficiency-v1.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | None |
+| Waiting | Awaiting human GitHub merge: T-027 |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Start T-019. |
-| Next action command | `make task-start TASK=T-019` |
+| Recommended next action | Await human GitHub merge for T-027; merge is the completion boundary. |
+| Next action command | `make project-status` (await human GitHub merge of T-027). |
 <!-- project-status:end -->
 
 ## Quick Start

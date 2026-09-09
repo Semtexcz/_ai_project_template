@@ -21,10 +21,14 @@ omitted files.
 
 Only one task may be `in-progress`. A1 and A2 approvals must be granted by a
 human; agents can move implemented A1 work to review but must not approve it.
-Agents must work on a non-`main` branch, commit their own changes, push that
-branch to `origin`, and open a ready GitHub pull request. The CI guard for
-pushes to `main` is a signal; actual push blocking requires GitHub branch
-protection or a ruleset that marks the guard as a required check.
+For generated managed projects the approval boundary follows `workflow_mode`:
+in `pr` mode A1/A2 work remains in review until the human GitHub merge of the task's pull request (merge is authoritative; no post-merge lifecycle command or cleanup pull
+request), while `local`/`branch` mode keeps the explicit human
+`make task-approve` plus `make task-complete` fallback. Agents must work on a
+non-`main` branch, commit their own changes, push that branch to `origin`, and
+open a ready GitHub pull request. The CI guard for pushes to `main` is a
+signal; actual push blocking requires GitHub branch protection or a ruleset
+that marks the guard as a required check.
 
 ## Choose The Ownership Boundary
 
@@ -275,8 +279,27 @@ make agent-pre-review TASK=<id>
 make task-review TASK=<id>
 ```
 
-For A1 or A2 tasks, stop in review with approval pending. A human can later run:
+The completion boundary after `review` depends on the project's
+`workflow_mode`; `template/docs/workflow.md.jinja` (rendered as
+`docs/workflow.md` in generated projects) is the canonical full description.
 
-```bash
-make task-approve TASK=<id> APPROVED_BY="<human>"
+`workflow_mode: pr`
+
+```text
+A1: implementation -> review -> pull request -> human GitHub merge
+A2: human pre-start approval -> implementation -> review -> pull request -> human GitHub merge
 ```
+
+The human GitHub merge is the completion boundary. A1 must not run
+`make task-approve`, A1/A2 must not use `make task-complete` as their
+completion boundary, and no post-merge `task-approve`/`task-complete`/sync or
+cleanup lifecycle work is required. A2 keeps its explicit human approval
+before work starts.
+
+`workflow_mode: local`/`branch` (offline fallback)
+
+```text
+A1/A2: review -> human task-approve -> task-complete
+```
+
+A0 tasks keep their existing local completion behavior.

@@ -35,6 +35,23 @@ jobs:
           fi
 
 {% endif %}
+{% if governance == "managed" and workflow_mode == "pr" %}
+  governed-pr-validation:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      PR_HEAD_REF: ${{ '{{' }} github.event.pull_request.head.ref {{ '}}' }}
+      PR_TITLE: ${{ '{{' }} github.event.pull_request.title {{ '}}' }}
+      PR_BODY: ${{ '{{' }} github.event.pull_request.body {{ '}}' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate governed pull request is ready for human merge
+        run: make pr-validate
+
+{% endif %}
   check:
     runs-on: ubuntu-latest
     steps:

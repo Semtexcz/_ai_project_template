@@ -144,6 +144,36 @@ These files are template-owned, so `copier update` refreshes them. `AGENTS.md`,
 `docs/workflow.md`, and `README.md` are merge-sensitive and may require review
 when the generated project customized them.
 
+## A1 GitHub Merge Lifecycle Note (approval simplification)
+
+Newer template versions simplify managed approvals for GitHub-backed projects.
+In managed projects with `workflow_mode: pr`, a task's human GitHub merge is
+the A1 approval/completion boundary (and the A2 completion boundary). Agents
+move A1/A2 work to `review`, open one pull request per task (task id `T-###`
+in the branch name or title), and stop. There is no post-merge
+`task-approve`/`task-complete`/sync step and no lifecycle-only cleanup pull
+request.
+
+For existing managed generated projects:
+
+- Historical `done` tasks that already carry `approval_status`, `approved_by`,
+  and `approved_at` metadata remain valid; no task metadata needs rewriting.
+- For `workflow_mode: local` or `branch` (offline fallback), nothing changes:
+  a human records A1/A2 approval with `make task-approve`, then
+  `make task-complete`.
+- For projects that use `workflow_mode: pr`, the deterministic interpretation
+  is: an A1/A2 task in `review` remains pending until the human GitHub merge of its
+  pull request. `approval_status: pending` on such a task is local pre-merge
+  state only and is not an authoritative approval claim. If you previously
+  completed A1 tasks locally after merge with `task-approve`/`task-complete`,
+  stop doing that; merge is sufficient. `tools/project.py` now rejects A1
+  `task-approve` and A1/A2 `task-complete` in `pr` mode so a future agent
+  cannot manufacture that local approval.
+- Generated `docs/workflow.md` and `AGENTS.md` describe the merge boundary; they
+  are merge-sensitive files, so resolve Copier conflicts by keeping the
+  project-specific guidance while adopting the merge boundary that matches the
+  project's `workflow_mode`.
+
 ## Migrations
 
 The governance refactor adds answers rather than silently moving product-owned

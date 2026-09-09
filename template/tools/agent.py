@@ -1328,6 +1328,7 @@ def run_command(command: str) -> CommandResult:
 def pre_task(task_id: str) -> None:
     managed_project = require_project_module()
     fail_if_errors(managed_project.validate_all(check_drift=True))
+    state = managed_project.read_state()
     task = get_task(task_id)
     tasks_by = managed_project.task_by_id(managed_project.load_tasks())
     if task.status not in {"ready", "in-progress"}:
@@ -1337,13 +1338,11 @@ def pre_task(task_id: str) -> None:
     missing = managed_project.definition_of_ready(task)
     if missing:
         raise AgentError(f"{task.id} Definition of Ready is incomplete: {', '.join(missing)}.")
-    if not managed_project.dependencies_done(task, tasks_by):
+    if not managed_project.dependencies_done(task, tasks_by, state=state):
         raise AgentError(f"{task.id} cannot start until all dependencies are done.")
     if task.approval_level == "A2" and task.approval_status != "approved":
         raise AgentError(f"Human A2 approval is required for {task.id} before work starts.")
-    active = managed_project.nonempty(
-        managed_project.read_state().get("work", {}).get("active_task")
-    )
+    active = managed_project.nonempty(state.get("work", {}).get("active_task"))
     if active and active != task.id:
         raise AgentError(f"Another task is active: {active}.")
     resolve_context(task.id)

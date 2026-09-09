@@ -126,7 +126,7 @@ Handled.
     (root / "project" / "tasks" / f"{task_id}-task.md").write_text(text)
 
 
-def make_project(tmp_path: Path, *, profile: str = "script") -> Path:
+def make_project(tmp_path: Path, *, profile: str = "script", workflow_mode: str = "") -> Path:
     root = tmp_path / profile
     profile_markers = {
         "script": "Python CLI package",
@@ -167,10 +167,13 @@ def make_project(tmp_path: Path, *, profile: str = "script") -> Path:
                 "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py cancel $(TASK)",
                 "task-approve:",
                 "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py approve $(TASK) --approved-by \"$(APPROVED_BY)\"",
+                "pr-validate:",
+                "\tPYTHONDONTWRITEBYTECODE=1 python tools/project.py pr-validate",
                 "",
             ]
         )
     )
+    workflow_line = f"  workflow_mode: {workflow_mode}\n" if workflow_mode else ""
     (root / "project" / "state.yaml").write_text(
         f"""schema_version: 1
 
@@ -180,7 +183,7 @@ project:
   runtime_level: local
   risk: medium
   status: active
-
+{workflow_line}
 lifecycle:
   phase: delivery
   milestone: M-01
@@ -497,3 +500,230 @@ def test_project_state_validation_negative_cases(tmp_path: Path) -> None:
             result = run([sys.executable, "tools/project.py", "validate"], root, expect_success=False)
         output = result.stdout + result.stderr
         assert expected in output, name
+def test_github_pr_a1_merge_lifecycle_needs_no_cleanup(tmp_path: Path) -> None:
+    """Review remains pending until the review-ready record lands on main."""
+    root = make_project(tmp_path / "pr-a1", workflow_mode="pr")
+    write_task(root, "T-003", depends_on="[T-002]")
+    run(["git", "init", "-b", "main"], root)
+    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "add", "-A"], root)
+    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "base"], root)
+    run(["git", "checkout", "-q", "-b", "feat/T-002-greeting"], root)
+    run(["make", "task-complete", "TASK=T-001"], root)
+    run(["make", "task-ready", "TASK=T-002"], root)
+    run(["make", "task-start", "TASK=T-002"], root)
+    run(["make", "task-review", "TASK=T-002"], root)
+
+    run(["make", "sync-project-docs"], root)
+    board = (root / "project" / "board.md").read_text()
+    review = board.split("## Review", 1)[1].split("## Blocked", 1)[0]
+    done = board.split("## Done", 1)[1].split("## Cancelled", 1)[0]
+    assert "T-002" in review and "awaiting human GitHub merge" in review
+    assert "T-002" not in done
+    status = run(["make", "project-status"], root).stdout
+    assert "Awaiting human GitHub merge: T-002" in status
+    assert "Last completed task | [T-001]" in status
+    assert "`make project-status` (await human GitHub merge of T-002)." in status
+    result = run(["make", "task-ready", "TASK=T-003"], root, expect_success=False)
+    assert "dependencies are done" in result.stdout
+    result = run(["make", "task-start", "TASK=T-003"], root, expect_success=False)
+    assert "Invalid transition" in result.stdout or "dependencies are done" in result.stdout
+
+    run_with_env(["make", "pr-validate"], root, {"PR_HEAD_REF": "feat/T-002-greeting", "PR_TITLE": "T-002: Add greeting", "PR_BODY": ""})
+    run(["git", "add", "-A"], root)
+    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "review-ready state"], root)
+    run(["git", "checkout", "-q", "main"], root)
+    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "merge", "--no-ff", "-q", "-m", "unrelated wording", "feat/T-002-greeting"], root)
+    run(["make", "sync-project-docs"], root)
+    run(["make", "validate-project"], root)
+    status = run(["make", "project-status"], root).stdout
+    assert "Last completed task | [T-002]" in status
+    assert "Awaiting human GitHub merge: T-002" not in status
+    run(["make", "task-ready", "TASK=T-003"], root)
+    control_paths = [root / item for item in ["README.md", "project/index.md", "project/board.md", "project/state.yaml", "project/tasks/T-002-task.md"]]
+    before = {item: item.read_text() for item in control_paths}
+    run(["make", "sync-project-docs"], root)
+    assert before == {item: item.read_text() for item in control_paths}
+
+
+def test_task_merge_completed_is_merge_strategy_independent(tmp_path: Path) -> None:
+    for strategy in ["merge", "squash", "fast-forward"]:
+        root = make_project(tmp_path / strategy, workflow_mode="pr")
+        run(["git", "init", "-b", "main"], root)
+        run(["git", "add", "-A"], root)
+        run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "base"], root)
+        run(["git", "checkout", "-q", "-b", "feat/T-002"], root)
+        run(["make", "task-complete", "TASK=T-001"], root)
+        run(["make", "task-ready", "TASK=T-002"], root)
+        run(["make", "task-start", "TASK=T-002"], root)
+        run(["make", "task-review", "TASK=T-002"], root)
+        run(["make", "sync-project-docs"], root)
+        run(["git", "add", "-A"], root)
+        run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "review-ready state"], root)
+        run(["git", "checkout", "-q", "main"], root)
+        if strategy == "merge":
+            run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=Test Human",
+                    "-c",
+                    "user.email=human@example.com",
+                    "merge",
+                    "--no-ff",
+                    "-q",
+                    "-m",
+                    "not parsed",
+                    "feat/T-002",
+                ],
+                root,
+            )
+        elif strategy == "squash":
+            run(["git", "merge", "--squash", "-q", "feat/T-002"], root)
+            run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "not parsed"], root)
+        else:
+            run(["git", "merge", "--ff-only", "-q", "feat/T-002"], root)
+        assert "Last completed task | [T-002]" in run(["make", "project-status"], root).stdout
+
+
+def test_github_pr_agent_cannot_manufacture_a1_approval(tmp_path: Path) -> None:
+    root = make_project(tmp_path / "pr-self-approve", workflow_mode="pr")
+    run(["make", "task-complete", "TASK=T-001"], root)
+    run(["make", "task-ready", "TASK=T-002"], root)
+    run(["make", "task-start", "TASK=T-002"], root)
+    run(["make", "task-review", "TASK=T-002"], root)
+
+    task_path = root / "project" / "tasks" / "T-002-task.md"
+    text = task_path.read_text(encoding="utf-8")
+    text = text.replace("approval_status: pending", "approval_status: approved")
+    text = text.replace(
+        "approved_by:\n", "approved_by: Test Human\napproved_at: 2026-01-01T10:00:00+00:00\n"
+    )
+    task_path.write_text(text, encoding="utf-8")
+
+    result = run(["make", "validate-project"], root, expect_success=False)
+    assert "A1 approval cannot be recorded locally in workflow_mode=pr" in result.stdout
+    result = run_with_env(
+        ["make", "pr-validate"],
+        root,
+        {
+            "PR_HEAD_REF": "feat/T-002-greeting",
+            "PR_TITLE": "T-002: Add greeting",
+            "PR_BODY": "",
+        },
+        expect_success=False,
+    )
+    assert "must not record local A1 approval" in result.stdout
+
+def test_github_pr_a2_keeps_stronger_prestart_boundary(tmp_path: Path) -> None:
+    root = make_project(tmp_path / "pr-a2", workflow_mode="pr")
+    run(["make", "task-complete", "TASK=T-001"], root)
+    write_task(
+        root,
+        "T-004",
+        depends_on="[]",
+        approval_level="A2",
+        approval_status="pending",
+    )
+    run(["make", "sync-project-docs"], root)
+    run(["make", "task-ready", "TASK=T-004"], root)
+    result = run(["make", "task-start", "TASK=T-004"], root, expect_success=False)
+    assert "Human A2 approval is required" in result.stdout
+    # A2 pre-start approval stays available even in pr mode.
+    run(["make", "task-approve", "TASK=T-004", "APPROVED_BY=Test Human"], root)
+    run(["make", "task-start", "TASK=T-004"], root)
+    run(["make", "task-review", "TASK=T-004"], root)
+    result = run(["make", "task-complete", "TASK=T-004"], root, expect_success=False)
+    assert "GitHub merge" in result.stdout
+    run_with_env(
+        ["make", "pr-validate"],
+        root,
+        {
+            "PR_HEAD_REF": "feat/T-004-audit",
+            "PR_TITLE": "T-004: Audit",
+            "PR_BODY": "T-004 implementation.",
+        },
+    )
+    run(["make", "sync-project-docs"], root)
+    board = (root / "project" / "board.md").read_text()
+    assert "T-004" in board.split("## Review", 1)[1].split("## Blocked", 1)[0]
+    run(["make", "validate-project"], root)
+
+
+def test_pr_validate_requires_deterministic_association(tmp_path: Path) -> None:
+    root = make_project(tmp_path / "pr-association", workflow_mode="pr")
+    run(["make", "task-complete", "TASK=T-001"], root)
+    run(["make", "task-ready", "TASK=T-002"], root)
+    run(["make", "task-start", "TASK=T-002"], root)
+    run(["make", "task-review", "TASK=T-002"], root)
+
+    result = run_with_env(["make", "pr-validate"], root, {}, expect_success=False)
+    assert "PR association is missing" in result.stdout
+    result = run_with_env(
+        ["make", "pr-validate"],
+        root,
+        {
+            "PR_HEAD_REF": "feat/T-002-x",
+            "PR_TITLE": "T-002 and T-003 work",
+            "PR_BODY": "",
+        },
+        expect_success=False,
+    )
+    assert "references multiple task ids" in result.stdout
+    result = run_with_env(
+        ["make", "pr-validate"],
+        root,
+        {
+            "PR_HEAD_REF": "feat/T-999-x",
+            "PR_TITLE": "T-999: Missing",
+            "PR_BODY": "",
+        },
+        expect_success=False,
+    )
+    assert "no such task exists" in result.stdout
+    result = run_with_env(
+        ["make", "pr-validate"],
+        root,
+        {
+            "PR_HEAD_REF": "feat/T-003-x",
+            "PR_TITLE": "T-003: Not reviewed",
+            "PR_BODY": "",
+        },
+        expect_success=False,
+    )
+    assert "must be in review" in result.stdout
+
+
+def test_offline_local_a1_approval_fallback_still_supported(tmp_path: Path) -> None:
+    root = make_project(tmp_path / "local-fallback")
+    run(["make", "task-complete", "TASK=T-001"], root)
+    run(["make", "task-ready", "TASK=T-002"], root)
+    run(["make", "task-start", "TASK=T-002"], root)
+    run(["make", "task-review", "TASK=T-002"], root)
+    # Local approval is still required before completion in the offline path.
+    result = run(["make", "task-complete", "TASK=T-002"], root, expect_success=False)
+    assert "Human A1 approval is required" in result.stdout
+    run(["make", "task-approve", "TASK=T-002", "APPROVED_BY=Test Human"], root)
+    run(["make", "task-complete", "TASK=T-002"], root)
+    run(["make", "validate-project"], root)
+    task_text = (root / "project" / "tasks" / "T-002-task.md").read_text()
+    assert "status: done" in task_text
+    assert "approval_status: approved" in task_text
+    assert "approved_by: Test Human" in task_text
+
+
+def test_historical_done_approval_metadata_remains_valid(tmp_path: Path) -> None:
+    for label, workflow_mode in [("local", ""), ("pr", "pr")]:
+        root = make_project(tmp_path / label, workflow_mode=workflow_mode)
+        write_task(
+            root,
+            "T-004",
+            status="done",
+            depends_on="[]",
+            approval_level="A1",
+            approval_status="approved",
+            approved_by="Project owner",
+            approved_at="2026-01-01T10:00:00+00:00",
+        )
+        run(["make", "sync-project-docs"], root)
+        run(["make", "validate-project"], root)
+

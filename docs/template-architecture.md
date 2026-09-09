@@ -51,6 +51,23 @@ It has a single project state source:
 No separate task database or board source is introduced. The markdown files are
 the project record; generated dashboard blocks are derived from them.
 
+Managed approvals have one authoritative human boundary per workflow mode:
+
+- `workflow_mode: pr` (GitHub-backed): the human GitHub merge of a task's pull
+  request is the A1 approval/completion boundary (and A2's completion
+  boundary). Agents move A1/A2 work to `review` and open one pull request per
+  task carrying the task id (`T-###`) in the branch name or title;
+  `make pr-validate` fails unless the pull request deterministically references
+  one review-ready task with no self-recorded approval. A1/A2 task records stay
+  in `review` with `approval_status: pending` (local pre-merge state only), and
+  dashboards derive the completed view, so no post-merge lifecycle commit or
+  cleanup pull request is needed. This works with merge commits, squash
+  merges, and rebase/fast-forward.
+- `workflow_mode: local`/`branch` (offline fallback): a human records A1/A2
+  approval with `make task-approve` and completes with `make task-complete`.
+  A2 additionally always requires explicit human approval before work starts.
+  Historical `done` tasks that already carry local approval metadata stay valid.
+
 Diagram: [generated-project-workflow.d2](diagrams/generated-project-workflow.d2)
 
 ## Agent Layer

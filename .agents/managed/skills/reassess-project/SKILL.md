@@ -28,3 +28,6 @@ stop_conditions:
 
 Use this only when assumptions materially changed or the project became stale.
 Do not change lifecycle scope or approvals without the required human decision.
+Project status derives pr-mode A1/A2 tasks in `review` as pending until their
+human GitHub merge, and as completed by Git provenance after that merge; do not
+plan follow-up approval or cleanup tasks for them.

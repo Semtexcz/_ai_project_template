@@ -105,4 +105,6 @@ Hooks are managed-governance guardrails. They are generated only when
   project state.
 
 Hooks may call project CLI functions, but they must not approve A1/A2 work or
-silently change task status.
+silently change task status. In `workflow_mode: pr`, A1/A2 approval and
+completion follow from the human GitHub merge of the pull request; hooks never
+record that decision.

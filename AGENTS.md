@@ -31,6 +31,14 @@ documents that the context bundle already resolves deterministically.
 - Do not autonomously run `make task-approve`; approval commands are only for a
   human.
 - Run `make agent-pre-review TASK=<id>` before moving a task to review.
+- In GitHub-backed managed projects (`workflow_mode: pr`), moving A1/A2 work to
+  review and opening its pull request is the agent boundary. The human GitHub
+  merge is the normal A1 approval/completion boundary: after the merge there is
+  no required `task-approve`, `task-complete`, sync, cleanup branch, or
+  lifecycle-only pull request. Never manufacture or record human approval
+  yourself; never merge your own governed PR.
+- In `local`/`branch` managed projects, `make task-approve` (humans only)
+  followed by `make task-complete` remains the explicit offline fallback.
 - Prefer focused checks while implementing; `make agent-pre-review` runs the
   canonical `make check` full gate once at final pre-review.
 - Keep task files as concise durable records. Execution detail belongs in
