@@ -22,6 +22,7 @@ _None_
 - [T-018](tasks/T-018-add-conventional-commit-agent-skill.md) - P1 - Add conventional commit agent skill
 - [T-022](tasks/T-022-refactor-agent-skill-architecture.md) - P1 - Refactor agent skill architecture
 - [T-027](tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) - P1 - Simplify GitHub-backed A1 approval to the human PR merge
+- [T-028](tasks/T-028-audit-and-optimize-template-authoring-for-low-change-amplification.md) - P1 - Audit and optimize template authoring for low change amplification
 - [T-029](tasks/T-029-make-pr-mode-derived-project-state-post-merge-consistent.md) - P1 - Make PR-mode derived project state post-merge consistent
 
 ## Blocked

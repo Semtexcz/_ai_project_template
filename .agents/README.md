@@ -95,6 +95,25 @@ update docs or record no documentation impact
 capture learning only when repeated experience justifies a guardrail
 ```
 
+## Canonical Agent-Layer Mirror
+
+`.agents/` and `.codex/` are canonical at the repository root. Their mirrored
+copies under `template/.agents/` and `template/.codex/` are deterministic
+derived output so generated projects start from identical skills, schemas, and
+adapters. Edit the canonical root files once, then propagate:
+
+```bash
+make sync-agent-layer
+```
+
+`make validate-agent-layer` (included in `make check` and `make release-check`)
+verifies the mirrors byte-for-byte, so canonical and derived assets cannot
+drift silently and propagation is idempotent. Two files are intentional
+divergences and are never mirrored: `.agents/README.md` and
+`.agents/context-map.yaml` describe this template repository, while their
+`template/.agents/` counterparts describe generated projects (profile routing,
+lightweight vs managed governance, template-local guidance).
+
 ## Hooks
 
 Hooks are managed-governance guardrails. They are generated only when
