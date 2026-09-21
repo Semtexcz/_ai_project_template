@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,11 +13,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-RELEASE_CHECK_STUB_OLD = (
-    "release-check: validate-project validate-template-docs validate-agent-skills\n"
-    "\tUV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest\n"
-)
-RELEASE_CHECK_STUB_NEW = "release-check:\n\t@echo release-check fixture\n"
+# Stub the real release-check recipe in copied fixture repositories. The regex
+# matches the target line and its single recipe line regardless of the
+# prerequisite list, so evolving the canonical gate (adding validators) cannot
+# silently break these fixtures.
+RELEASE_CHECK_RECIPE_RE = re.compile(r"release-check:[^\n]*\n\t[^\n]*\n")
+RELEASE_CHECK_STUB = "release-check:\n\t@echo release-check fixture\n"
 RELEASE_CHECK_FAIL_MARKER = "\t@echo release-check fixture && exit 1\n"
 
 CURRENT_VERSION = "v1.1.1"
@@ -77,7 +79,7 @@ def copy_template_repo(target: Path, *, release_check_fails: bool = False) -> No
     )
     makefile = target / "Makefile"
     text = makefile.read_text(encoding="utf-8")
-    text = text.replace(RELEASE_CHECK_STUB_OLD, RELEASE_CHECK_STUB_NEW)
+    text = RELEASE_CHECK_RECIPE_RE.sub(RELEASE_CHECK_STUB, text, count=1)
     if release_check_fails:
         text = text.replace("\t@echo release-check fixture\n", RELEASE_CHECK_FAIL_MARKER)
     makefile.write_text(text)

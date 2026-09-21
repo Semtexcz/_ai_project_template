@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import signal
 import socket
@@ -83,12 +84,16 @@ def copy_workspace_to_template_repo(target: Path) -> None:
     state_text = state_path.read_text().replace("version: v1.1.1", "version: v1.0.0")
     state_path.write_text(state_text)
     makefile = target / "Makefile"
+    # Stub out the real release-check recipe (which would otherwise run the
+    # full nested pytest gate). Match the target line regardless of its
+    # prerequisite list so adding validators to the gate does not break this
+    # fixture.
     makefile.write_text(
-        makefile.read_text().replace(
-            "release-check: validate-project validate-template-docs validate-agent-skills\n"
-            "\tUV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} UV_LINK_MODE=$${UV_LINK_MODE:-copy} uv run pytest\n",
-            "release-check:\n"
-            "\t@echo release-check fixture\n",
+        re.sub(
+            r"release-check:[^\n]*\n\t[^\n]*\n",
+            "release-check:\n\t@echo release-check fixture\n",
+            makefile.read_text(),
+            count=1,
         )
     )
 
