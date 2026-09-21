@@ -694,18 +694,12 @@ def validate_readme_dashboard(state: dict[str, Any], tasks: list[Task]) -> list[
                 )
     else:
         command_line = next(
-            (
-                line
-                for line in dashboard.splitlines()
-                if line.startswith("| Next action command |")
-            ),
+            (line for line in dashboard.splitlines() if line.startswith("| Next action command |")),
             "",
         )
         commands = MAKE_COMMAND_RE.findall(command_line)
         if len(commands) != 1:
-            errors.append(
-                "README.md dashboard must contain exactly one next action make command."
-            )
+            errors.append("README.md dashboard must contain exactly one next action make command.")
     return errors
 
 
@@ -1286,9 +1280,7 @@ def status_rows(state: dict[str, Any], tasks: list[Task]) -> list[tuple[str, str
     ]
 
 
-def persisted_rows(
-    state: dict[str, Any], rows: list[tuple[str, str]]
-) -> list[tuple[str, str]]:
+def persisted_rows(state: dict[str, Any], rows: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Drop Git-relative rows when completion is derived from a GitHub merge."""
     if not is_github_pr_mode(state):
         return rows
