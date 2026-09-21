@@ -78,23 +78,23 @@ its ownership model.
 
 ## Acceptance Criteria
 
-- [ ] `project.py` is a thin CLI/composition layer (about 200-250 logical LOC)
-      that still works when executed as `python tools/project.py ...`.
-- [ ] `task_merge_completed()` semantics, `effective_status()`, PR-mode
+- [x] `project.py` is a thin CLI/composition layer (147 lines) that still works
+      when executed as `python tools/project.py ...`.
+- [x] `task_merge_completed()` semantics, `effective_status()`, PR-mode
       merge-derived completion, A2 pre-start approval, local/branch persisted
       completion, deterministic persisted dashboards, and live merge-aware
       `make project-status` are unchanged.
-- [ ] No circular imports, no generic utility dumping ground, no new monolithic
+- [x] No circular imports, no generic utility dumping ground, no new monolithic
       replacement module, and one canonical implementation per behavior.
-- [ ] Extracted modules use precise typing without copying the monolith's
+- [x] Extracted modules use precise typing without copying the monolith's
       file-wide Pyright/Ruff suppressions.
-- [ ] All commands, arguments, output messages, and exit semantics remain
+- [x] All commands, arguments, output messages, and exit semantics remain
       compatible, and existing importlib consumers of `project.py` keep working.
-- [ ] Context routing reflects the new module ownership, and
+- [x] Context routing reflects the new module ownership, and
       `docs/template-development.md` documents the ownership map.
-- [ ] Focused tests pass, `make check` passes, `make release-check` passes, and
+- [x] Focused tests pass, `make check` passes, `make release-check` passes, and
       generated local/branch/pr projects work through their Make targets.
-- [ ] Task remains `review` / `pending`; the agent does not merge the PR.
+- [x] Task remains `review` / `pending`; the agent does not merge the PR.
 
 ## Verification
 
@@ -119,4 +119,19 @@ its ownership model.
 
 ## Completion Notes
 
-Pending implementation.
+`template/tools/project.py` went from 1837 lines to a 147-line CLI over
+`template/tools/project_tool/` (`model` 134, `storage` 265, `git` 83,
+`lifecycle` 226, `rendering` 390, `docs` 289, `validation` 408, `mutations` 166,
+`commands` 216). Imports stay one-directional with no cycles, no generic utility
+module, and no new monolith; `project.py` keeps only the compatibility exports
+that `tools/agent.py` and `tools/template_release.py` load by path.
+
+Behavioral evidence: 92 focused tests passed (lifecycle, static, workflow,
+agent efficiency, mirror, routing, new module seams), `make agent-pre-review`
+ran the canonical `make check` gate green, ruff and pyright strict are clean
+without the monolith's file-wide suppressions, and rendered lightweight/local,
+managed/branch, and managed/pr projects passed `python tools/project.py
+status|validate|sync` plus their Make targets, transition guards, and Definition
+of Done enforcement. T-029 ownership is untouched: merge provenance,
+effective-status derivation, deterministic persisted blocks, and the live
+merge-aware status view behave exactly as before.
