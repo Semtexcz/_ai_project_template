@@ -44,7 +44,11 @@ documents that the context bundle already resolves deterministically.
 - Keep task files as concise durable records. Execution detail belongs in
   commit history, PR descriptions, and review discussion, not task files.
 - After project or task changes, run `make sync-project-docs` when generated
-  dashboards need refresh.
+  dashboards need refresh. Those committed blocks intentionally carry only state
+  that the canonical task records already decide.
+- Read live, merge-derived task status, board, and next action with
+  `make project-status`. Never create a commit that only reconciles an
+  already-merged task.
 - Finish by running `make validate-project`.
 - For every agent-made change, commit the agent's own changes, push the branch
   to `origin`, and open a ready GitHub pull request. Do not push directly to
@@ -84,10 +88,12 @@ Because this repository uses managed governance, end agent reports with a short
 `Project State Check` stating what became complete, the next meaningful step,
 and why it follows from the current repository state.
 
-The task lifecycle, approval controls, `project/state.yaml`, and generated
-dashboards remain authoritative for managed task status. Reconciliation
-complements them by checking whether higher-level planning stays accurate; it
-never edits managed task state or generated boards directly.
+The task lifecycle, approval controls, and `project/state.yaml` remain
+authoritative for managed task state. Committed dashboards carry only the
+deterministic subset of that state, and merge-derived status is rendered at read
+time by `make project-status`. Reconciliation complements them by checking
+whether higher-level planning stays accurate; it never edits managed task state
+or generated boards directly.
 
 ## Boundaries
 

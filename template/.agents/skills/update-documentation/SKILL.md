@@ -53,6 +53,9 @@ the change materially affects them:
 This skill keeps durable documentation truthful; it is not a lifecycle engine.
 Never mutate managed task/approval state or generated boards directly. Managed
 projects change task state through lifecycle commands and refresh generated
-dashboards with `make sync-project-docs`.
+dashboards with `make sync-project-docs`. In `workflow_mode: pr` generated
+dashboards intentionally exclude merge-derived status, so read live status with
+`make project-status` and never create a commit merely to reconcile a merged
+pull request.
 
 Documentation should capture durable knowledge, not implementation noise.

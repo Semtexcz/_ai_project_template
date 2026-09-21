@@ -94,6 +94,13 @@ navigation, internal links, documented Make commands, profile relevance,
 dashboard drift, unresolved Jinja placeholders, personal absolute paths, and
 stale example paths.
 
+Managed generated projects keep two status surfaces. Committed generated blocks
+carry only content that already follows from `project/state.yaml` and
+`project/tasks/*.md`, while `make project-status` renders merge-derived status at
+read time. In `workflow_mode: pr` a human merge must therefore never require a
+synchronization commit, and drift validation stays meaningful only for the
+deterministic committed content.
+
 ## Update And Release Checks
 
 For a narrow template change:

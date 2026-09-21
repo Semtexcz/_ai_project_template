@@ -62,6 +62,30 @@ customizations.
 `local`. Select `workflow_mode=pr` to preserve the previous strict
 branch/commit/push/ready-PR instructions.
 
+## Managed Status Ownership
+
+Managed governance separates three kinds of truth:
+
+- Canonical: `project/tasks/*.md`, `project/state.yaml`, and Git history.
+- Derived at read time: effective task status, waiting state, dependency
+  completion, recommended next action, and the live board, rendered by
+  `make project-status`.
+- Committed: the generated blocks in `README.md`, `project/index.md`, and
+  `project/board.md`, which contain only content that already follows from the
+  canonical records.
+
+Projects that run `workflow_mode: pr` derive A1/A2 completion from the human
+GitHub merge of the task's pull request. Because that result cannot be committed
+before the merge exists, upgraded `pr` projects should run
+`make sync-project-docs` once: it removes the previously persisted Git-relative
+rows (last completed task, waiting, recommended next action, next action command)
+and the merge-derived board annotations. After that, a merged pull request
+requires no synchronization commit, and `make validate-project` fails only on
+genuine drift in deterministic content.
+
+`local` and `branch` projects keep the explicit human approval path and continue
+to persist the full dashboard.
+
 ## After Updating
 
 Run the profile checks:

@@ -103,6 +103,9 @@ make sync-project-docs
   A1/A2 work to review, open exactly one pull request per task, and stop.
   Do not run `make task-complete` or `make task-approve` for A1 in `pr` mode and
   do not manufacture approval evidence: the merged pull request is the evidence.
+- Committed dashboards keep only state that the task records already decide, so a
+  human merge needs no synchronization commit. Read the live, merge-aware status,
+  board, and next action with `make project-status`.
 - `make task-approve` is for humans only. AI agents must not autonomously record A1 or A2 approval.
 {% else %}
 - In `local`/`branch` mode a human records A1/A2 approval with
@@ -174,6 +177,11 @@ Managed lifecycle skills are in `.agents/managed/skills/`.
 Project-specific context is in `project/` and `docs/`. Run
 `make agent-pre-review TASK=<id>` before review, do not bypass controlled task
 transitions, and keep dashboards synchronized and valid.
+{% if workflow_mode == "pr" %}
+Committed dashboards never carry merge-derived status; read live status, board,
+and next action from `make project-status` instead of rewriting committed rows
+after a merge.
+{% endif %}
 {% else %}
 Project-specific context is in `project/brief.md`, `docs/`, and ADRs under
 `docs/decisions/`. Keep changes small, run `make check`, and update the brief or

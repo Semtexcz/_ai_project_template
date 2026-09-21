@@ -500,25 +500,75 @@ def test_project_state_validation_negative_cases(tmp_path: Path) -> None:
             result = run([sys.executable, "tools/project.py", "validate"], root, expect_success=False)
         output = result.stdout + result.stderr
         assert expected in output, name
+
+
+GIT_RELATIVE_TEXT_MARKERS = (
+    "awaiting human GitHub merge",
+    "completed by merged Git provenance",
+)
+GIT_RELATIVE_STATUS_ROWS = (
+    "Last completed task",
+    "Waiting",
+    "Recommended next action",
+    "Next action command",
+)
+
+
+def committed_block_text(root: Path) -> str:
+    return "\n".join(
+        (root / path).read_text()
+        for path in ["README.md", "project/index.md", "project/board.md"]
+    )
+
+
+def git_commit(root: Path, message: str) -> None:
+    run(["git", "add", "-A"], root)
+    run(
+        [
+            "git",
+            "-c",
+            "user.name=Test Human",
+            "-c",
+            "user.email=human@example.com",
+            "commit",
+            "-q",
+            "-m",
+            message,
+        ],
+        root,
+    )
+
+
+def git_porcelain(root: Path) -> str:
+    return run(["git", "status", "--porcelain"], root).stdout
+
+
 def test_github_pr_a1_merge_lifecycle_needs_no_cleanup(tmp_path: Path) -> None:
-    """Review remains pending until the review-ready record lands on main."""
+    """A merged review record completes with no file mutation anywhere."""
     root = make_project(tmp_path / "pr-a1", workflow_mode="pr")
     write_task(root, "T-003", depends_on="[T-002]")
     run(["git", "init", "-b", "main"], root)
-    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "add", "-A"], root)
-    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "base"], root)
+    git_commit(root, "base")
     run(["git", "checkout", "-q", "-b", "feat/T-002-greeting"], root)
     run(["make", "task-complete", "TASK=T-001"], root)
     run(["make", "task-ready", "TASK=T-002"], root)
     run(["make", "task-start", "TASK=T-002"], root)
     run(["make", "task-review", "TASK=T-002"], root)
 
-    run(["make", "sync-project-docs"], root)
+    # Before the merge the committed view is deterministic: it lists persisted
+    # records and never claims a merge outcome that does not exist yet.
     board = (root / "project" / "board.md").read_text()
     review = board.split("## Review", 1)[1].split("## Blocked", 1)[0]
     done = board.split("## Done", 1)[1].split("## Cancelled", 1)[0]
-    assert "T-002" in review and "awaiting human GitHub merge" in review
+    assert "T-002" in review
     assert "T-002" not in done
+    committed = committed_block_text(root)
+    for marker in GIT_RELATIVE_TEXT_MARKERS:
+        assert marker not in committed
+    for row in GIT_RELATIVE_STATUS_ROWS:
+        assert f"| {row} |" not in readme_dashboard(root)
+
+    # The runtime view is the one that reports the merge wait.
     status = run(["make", "project-status"], root).stdout
     assert "Awaiting human GitHub merge: T-002" in status
     assert "Last completed task | [T-001]" in status
@@ -526,23 +576,69 @@ def test_github_pr_a1_merge_lifecycle_needs_no_cleanup(tmp_path: Path) -> None:
     result = run(["make", "task-ready", "TASK=T-003"], root, expect_success=False)
     assert "dependencies are done" in result.stdout
     result = run(["make", "task-start", "TASK=T-003"], root, expect_success=False)
-    assert "Invalid transition" in result.stdout or "dependencies are done" in result.stdout
+    assert "Invalid transition" in result.stdout
 
-    run_with_env(["make", "pr-validate"], root, {"PR_HEAD_REF": "feat/T-002-greeting", "PR_TITLE": "T-002: Add greeting", "PR_BODY": ""})
-    run(["git", "add", "-A"], root)
-    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "review-ready state"], root)
+    run_with_env(
+        ["make", "pr-validate"],
+        root,
+        {"PR_HEAD_REF": "feat/T-002-greeting", "PR_TITLE": "T-002: Add greeting", "PR_BODY": ""},
+    )
+    git_commit(root, "review-ready state")
+    merged_record = (root / "project" / "tasks" / "T-002-task.md").read_bytes()
     run(["git", "checkout", "-q", "main"], root)
-    run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "merge", "--no-ff", "-q", "-m", "unrelated wording", "feat/T-002-greeting"], root)
-    run(["make", "sync-project-docs"], root)
+    run(
+        [
+            "git",
+            "-c",
+            "user.name=Test Human",
+            "-c",
+            "user.email=human@example.com",
+            "merge",
+            "--no-ff",
+            "-q",
+            "-m",
+            "unrelated wording",
+            "feat/T-002-greeting",
+        ],
+        root,
+    )
+
+    # After the merge nothing is reconciled: no tracked file changes and
+    # validation and synchronization stay clean and idempotent.
+    assert git_porcelain(root) == ""
     run(["make", "validate-project"], root)
+    run(["make", "sync-project-docs"], root)
+    assert git_porcelain(root) == ""
+    assert committed_block_text(root) == committed
+    assert (root / "project" / "tasks" / "T-002-task.md").read_bytes() == merged_record
+    assert "status: review" in (root / "project" / "tasks" / "T-002-task.md").read_text()
+
+    # Runtime status, dependency resolution, and next-task logic are truthful.
     status = run(["make", "project-status"], root).stdout
     assert "Last completed task | [T-002]" in status
     assert "Awaiting human GitHub merge: T-002" not in status
+    assert "T-002" in status.split("## Done", 1)[1].split("## Cancelled", 1)[0]
+    assert "completed by merged Git provenance" in status
     run(["make", "task-ready", "TASK=T-003"], root)
-    control_paths = [root / item for item in ["README.md", "project/index.md", "project/board.md", "project/state.yaml", "project/tasks/T-002-task.md"]]
-    before = {item: item.read_text() for item in control_paths}
-    run(["make", "sync-project-docs"], root)
-    assert before == {item: item.read_text() for item in control_paths}
+    run(["make", "task-start", "TASK=T-003"], root)
+    run(["make", "validate-project"], root)
+
+
+def test_pr_mode_committed_blocks_stay_deterministic(tmp_path: Path) -> None:
+    """Drift is still real drift, and Git-relative rows cannot be committed."""
+    root = make_project(tmp_path / "pr-committed", workflow_mode="pr")
+    readme_path = root / "README.md"
+    original = readme_path.read_text()
+
+    readme_path.write_text(original.replace("| Phase | delivery |", "| Phase | operation |"))
+    result = run(["make", "validate-project"], root, expect_success=False)
+    assert "README.md generated block is stale" in result.stdout
+
+    readme_path.write_text(
+        original.replace("| Blocker | None |", "| Waiting | None |\n| Blocker | None |")
+    )
+    result = run(["make", "validate-project"], root, expect_success=False)
+    assert "must not persist the Git-relative row 'Waiting'" in result.stdout
 
 
 def test_task_merge_completed_is_merge_strategy_independent(tmp_path: Path) -> None:
@@ -582,7 +678,15 @@ def test_task_merge_completed_is_merge_strategy_independent(tmp_path: Path) -> N
             run(["git", "-c", "user.name=Test Human", "-c", "user.email=human@example.com", "commit", "-q", "-m", "not parsed"], root)
         else:
             run(["git", "merge", "--ff-only", "-q", "feat/T-002"], root)
-        assert "Last completed task | [T-002]" in run(["make", "project-status"], root).stdout
+        status = run(["make", "project-status"], root).stdout
+        assert "Last completed task | [T-002]" in status
+        assert "completed by merged Git provenance" in status
+        assert "Awaiting human GitHub merge: T-002" not in status
+        run(["make", "validate-project"], root)
+        assert git_porcelain(root) == ""
+        run(["make", "sync-project-docs"], root)
+        assert git_porcelain(root) == ""
+        run(["make", "task-ready", "TASK=T-003"], root)
 
 
 def test_github_pr_agent_cannot_manufacture_a1_approval(tmp_path: Path) -> None:

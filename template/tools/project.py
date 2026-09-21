@@ -30,6 +30,33 @@ INDEX_START = "<!-- project-index:start -->"
 INDEX_END = "<!-- project-index:end -->"
 KANBAN_START = "<!-- kanban:start -->"
 KANBAN_END = "<!-- kanban:end -->"
+INDEX_LINKS = "\n\nLinks: [Board](board.md) | [Roadmap](roadmap.md)"
+
+# Status rows whose truth depends on Git provenance when the project runs
+# `workflow_mode: pr`. They are rendered at read time by `make project-status`
+# and must never be committed: merge-derived completion cannot be known before
+# the human merge lands, so persisting it would make committed Markdown stale by
+# definition.
+GIT_RELATIVE_STATUS_ROWS = (
+    "Last completed task",
+    "Waiting",
+    "Recommended next action",
+    "Next action command",
+)
+PERSISTED_BLOCK_ROWS = {
+    "Project type",
+    "Runtime level",
+    "Phase",
+    "Milestone",
+    "Active task",
+    "Approval",
+    "Blocker",
+    "Next gate",
+}
+PR_BOARD_SNAPSHOT_NOTE = (
+    "_Persisted task records by status. Merge-derived completion is not persisted; "
+    "run `make project-status` for the live merge-aware board._"
+)
 
 TASK_ID_RE = re.compile(r"^T-\d{3}$")
 TASK_TOKEN_RE = re.compile(r"T-\d{3}")
@@ -644,33 +671,41 @@ def validate_doc_text_hygiene() -> list[str]:
 
 def validate_readme_dashboard(state: dict[str, Any], tasks: list[Task]) -> list[str]:
     errors: list[str] = []
-    expected_rows = {
-        "Project type",
-        "Runtime level",
-        "Phase",
-        "Milestone",
-        "Last completed task",
-        "Active task",
-        "Waiting",
-        "Blocker",
-        "Next gate",
-        "Recommended next action",
-        "Next action command",
-    }
+    pr_mode = is_github_pr_mode(state)
+    expected_rows = set(PERSISTED_BLOCK_ROWS)
+    if not pr_mode:
+        expected_rows.update(GIT_RELATIVE_STATUS_ROWS)
     try:
         dashboard = extract_block(ROOT / "README.md", STATE_START, STATE_END)
     except ProjectError as exc:
         return [str(exc)]
-    for row in expected_rows:
+    for row in sorted(expected_rows):
         if f"| {row} |" not in dashboard:
             errors.append(f"README.md dashboard is missing '{row}'. Run: make sync-project-docs")
-    command_line = next(
-        (line for line in dashboard.splitlines() if line.startswith("| Next action command |")),
-        "",
-    )
-    commands = MAKE_COMMAND_RE.findall(command_line)
-    if len(commands) != 1:
-        errors.append("README.md dashboard must contain exactly one next action make command.")
+    if pr_mode:
+        # Committed status must stay a deterministic function of canonical state.
+        # Merge-derived rows cannot be committed before the human merge lands.
+        for row in GIT_RELATIVE_STATUS_ROWS:
+            if f"| {row} |" in dashboard:
+                errors.append(
+                    f"README.md dashboard must not persist the Git-relative row '{row}' in "
+                    "workflow_mode=pr. Run: make sync-project-docs; live merge-aware status is "
+                    "rendered by make project-status."
+                )
+    else:
+        command_line = next(
+            (
+                line
+                for line in dashboard.splitlines()
+                if line.startswith("| Next action command |")
+            ),
+            "",
+        )
+        commands = MAKE_COMMAND_RE.findall(command_line)
+        if len(commands) != 1:
+            errors.append(
+                "README.md dashboard must contain exactly one next action make command."
+            )
     return errors
 
 
@@ -709,7 +744,7 @@ def validate_profile_documentation(state: dict[str, Any]) -> list[str]:
 
 def validate_doc_drift(state: dict[str, Any], tasks: list[Task]) -> list[str]:
     expected = {
-        ROOT / "README.md": (STATE_START, STATE_END, dashboard_block(state, tasks)),
+        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state, tasks)),
     }
     errors: list[str] = []
     for path, (start, end, content) in expected.items():
@@ -981,14 +1016,21 @@ def validate_active_task(
 
 def validate_drift(state: dict[str, Any], tasks: list[Task]) -> list[str]:
     errors: list[str] = []
+    # Only content that is a deterministic function of canonical files is
+    # persisted, so drift here always means real drift. Git-relative status is
+    # rendered at read time by `make project-status` and is never committed.
     expected = {
-        ROOT / "README.md": (STATE_START, STATE_END, dashboard_block(state, tasks)),
+        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state, tasks)),
         ROOT / "project" / "index.md": (
             INDEX_START,
             INDEX_END,
             project_index_block(state, tasks),
         ),
-        ROOT / "project" / "board.md": (KANBAN_START, KANBAN_END, kanban_block(tasks, state)),
+        ROOT / "project" / "board.md": (
+            KANBAN_START,
+            KANBAN_END,
+            persisted_board_block(tasks, state),
+        ),
     }
     for path, (start, end, content) in expected.items():
         try:
@@ -1216,56 +1258,112 @@ def recommended_next_command(
     return "`make task-ready TASK=<new-task-id>`"
 
 
-def dashboard_block(state: dict[str, Any], tasks: list[Task]) -> str:
+def markdown_table(rows: list[tuple[str, str]]) -> str:
+    lines = ["| Item | Value |", "|---|---|"]
+    lines.extend(f"| {key} | {value} |" for key, value in rows)
+    return "\n".join(lines)
+
+
+def status_rows(state: dict[str, Any], tasks: list[Task]) -> list[tuple[str, str]]:
+    """All status rows, including the Git-relative ones."""
     project = state["project"]
     lifecycle = state["lifecycle"]
     active = find_active(tasks, state)
     active_value = task_link(active, ROOT) if active else "None"
-    return "\n".join(
-        [
-            "| Item | Value |",
-            "|---|---|",
-            f"| Project type | {project['type']} |",
-            f"| Runtime level | {project['runtime_level']} |",
-            f"| Phase | {lifecycle['phase']} |",
-            f"| Milestone | {lifecycle['milestone']} |",
-            f"| Last completed task | {last_completed_task(tasks, ROOT, state)} |",
-            f"| Active task | {active_value} |",
-            f"| Approval | {approval_text(active)} |",
-            f"| Waiting | {waiting_text(tasks, state)} |",
-            f"| Blocker | {blocker_text(tasks)} |",
-            f"| Next gate | {lifecycle['next_gate']} |",
-            f"| Recommended next action | {recommended_next_action(state, tasks)} |",
-            f"| Next action command | {recommended_next_command(state, tasks)} |",
-        ]
-    )
+    return [
+        ("Project type", str(project["type"])),
+        ("Runtime level", str(project["runtime_level"])),
+        ("Phase", str(lifecycle["phase"])),
+        ("Milestone", str(lifecycle["milestone"])),
+        ("Last completed task", last_completed_task(tasks, ROOT, state)),
+        ("Active task", active_value),
+        ("Approval", approval_text(active)),
+        ("Waiting", waiting_text(tasks, state)),
+        ("Blocker", blocker_text(tasks)),
+        ("Next gate", str(lifecycle["next_gate"])),
+        ("Recommended next action", recommended_next_action(state, tasks)),
+        ("Next action command", recommended_next_command(state, tasks)),
+    ]
+
+
+def persisted_rows(
+    state: dict[str, Any], rows: list[tuple[str, str]]
+) -> list[tuple[str, str]]:
+    """Drop Git-relative rows when completion is derived from a GitHub merge."""
+    if not is_github_pr_mode(state):
+        return rows
+    return [(key, value) for key, value in rows if key not in GIT_RELATIVE_STATUS_ROWS]
+
+
+def runtime_status_block(state: dict[str, Any], tasks: list[Task]) -> str:
+    """Merge-aware status table rendered at read time by `make project-status`."""
+    return markdown_table(status_rows(state, tasks))
+
+
+def persisted_status_block(state: dict[str, Any], tasks: list[Task]) -> str:
+    """Status rows that are deterministic functions of the canonical records.
+
+    In `workflow_mode: pr` the Git-relative rows are omitted, so committed
+    Markdown never encodes a lifecycle result that only the human merge decides
+    and never needs a post-merge reconciliation commit.
+    """
+    return markdown_table(persisted_rows(state, status_rows(state, tasks)))
 
 
 def project_index_block(state: dict[str, Any], tasks: list[Task]) -> str:
+    """Persisted project index rows; commit-safe in every workflow mode."""
     project = state["project"]
     lifecycle = state["lifecycle"]
     active = find_active(tasks, state)
     blocker = active.blocked_reason if active and active.blocked_reason else "None"
     active_value = task_link(active, ROOT / "project") if active else "None"
-    return "\n".join(
-        [
-            "| Item | Value |",
-            "|---|---|",
-            f"| Project | {project.get('name', project.get('type', 'project'))} |",
-            f"| Phase | {lifecycle['phase']} |",
-            f"| Milestone | {lifecycle['milestone']} |",
-            f"| Next gate | {lifecycle['next_gate']} |",
-            f"| Active task | {active_value} |",
-            f"| Approval | {approval_text(active)} |",
-            f"| Blocker | {blocker} |",
-            f"| Recommended next action | {recommended_next_action(state, tasks)} |",
-            "",
-            "Links: [Board](board.md) | [Roadmap](roadmap.md)",
-        ]
-    )
+    rows = [
+        ("Project", str(project.get("name", project.get("type", "project")))),
+        ("Phase", str(lifecycle["phase"])),
+        ("Milestone", str(lifecycle["milestone"])),
+        ("Next gate", str(lifecycle["next_gate"])),
+        ("Active task", active_value),
+        ("Approval", approval_text(active)),
+        ("Blocker", blocker),
+        ("Recommended next action", recommended_next_action(state, tasks)),
+    ]
+    return markdown_table(persisted_rows(state, rows)) + INDEX_LINKS
 
 
-def kanban_block(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
+def persisted_board_block(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
+    """Commit-safe Kanban block built only from persisted task records.
+
+    In `workflow_mode: pr` the columns follow persisted statuses and the block
+    points at the merge-aware runtime board, because a merged review record
+    cannot be committed as Done before the merge exists.
+    """
+    pr_mode = state is not None and is_github_pr_mode(state)
+    lines: list[str] = []
+    if pr_mode:
+        lines.extend([PR_BOARD_SNAPSHOT_NOTE, ""])
+    for title, status in COLUMNS:
+        lines.extend([f"## {title}", ""])
+        matching = sorted(
+            (task for task in tasks if task.status == status),
+            key=task_sort_key,
+        )
+        if matching:
+            for task in matching:
+                rel = relative(task.path, ROOT / "project")
+                if status == "blocked" and task.blocked_reason:
+                    suffix = f" - blocked: {task.blocked_reason}"
+                else:
+                    suffix = ""
+                lines.append(f"- [{task.id}]({rel}) - P{task.priority} - {task.title}{suffix}")
+        else:
+            lines.append("_None_")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def runtime_board_block(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
+    """Merge-aware Kanban block rendered at read time by `make project-status`."""
+    pr_mode = state is not None and is_github_pr_mode(state)
     lines: list[str] = []
     for title, status in COLUMNS:
         lines.extend([f"## {title}", ""])
@@ -1281,7 +1379,7 @@ def kanban_block(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
                 elif task_merge_completed(state, task):
                     suffix = " - completed by merged Git provenance"
                 elif (
-                    is_github_pr_mode(state)
+                    pr_mode
                     and task.status == "review"
                     and task.approval_level in GITHUB_MERGE_LEVELS
                 ):
@@ -1310,16 +1408,21 @@ def write_if_changed(path: Path, content: str) -> None:
 
 
 def rendered_dashboard_texts(state: dict[str, Any], tasks: list[Task]) -> dict[Path, str]:
+    """Committed Markdown blocks: deterministic content only."""
     if os.environ.get("PROJECT_TOOL_FAIL_RENDER") == "1":
         raise ProjectError("Injected dashboard rendering failure.")
     replacements = {
-        ROOT / "README.md": (STATE_START, STATE_END, dashboard_block(state, tasks)),
+        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state, tasks)),
         ROOT / "project" / "index.md": (
             INDEX_START,
             INDEX_END,
             project_index_block(state, tasks),
         ),
-        ROOT / "project" / "board.md": (KANBAN_START, KANBAN_END, kanban_block(tasks, state)),
+        ROOT / "project" / "board.md": (
+            KANBAN_START,
+            KANBAN_END,
+            persisted_board_block(tasks, state),
+        ),
     }
     rendered: dict[Path, str] = {}
     for path, (start, end, content) in replacements.items():
@@ -1330,6 +1433,11 @@ def rendered_dashboard_texts(state: dict[str, Any], tasks: list[Task]) -> dict[P
 
 
 def sync() -> None:
+    """Refresh committed Markdown with deterministic content only.
+
+    In `workflow_mode: pr` this intentionally does not write merge-derived status,
+    so a merged pull request never requires a synchronization commit.
+    """
     state = read_state()
     tasks = load_tasks()
     errors = validate_all(check_drift=False)
@@ -1465,10 +1573,17 @@ def validate_docs_command() -> None:
 
 
 def status() -> None:
+    """Render the live, merge-aware project view at read time.
+
+    This is the authoritative presentation of Git-derived status; committed
+    Markdown only carries the deterministic subset produced by `sync`.
+    """
     state = read_state()
     tasks = load_tasks()
     errors = validate_all(check_drift=False)
-    print(dashboard_block(state, tasks))
+    print(runtime_status_block(state, tasks))
+    print()
+    print(runtime_board_block(tasks, state))
     print()
     print(f"Next action: {recommended_next_action(state, tasks, invalid=bool(errors))}")
     if errors:

@@ -404,6 +404,62 @@ def test_capability_skills_render_only_for_matching_profiles(tmp_path: Path) -> 
     subprocess.run(["make", "validate-agent-skills"], cwd=production_managed, env=env, check=True)
 
 
+def test_pr_mode_generated_project_commits_deterministic_status_only(tmp_path: Path) -> None:
+    generated = copy_project(tmp_path, governance="managed", workflow_mode="pr")
+    env = {**os.environ, "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
+
+    block = (
+        (generated / "README.md")
+        .read_text(encoding="utf-8")
+        .split("<!-- project-status:start -->", 1)[1]
+        .split("<!-- project-status:end -->", 1)[0]
+    )
+    for row in [
+        "Project type",
+        "Runtime level",
+        "Phase",
+        "Milestone",
+        "Active task",
+        "Approval",
+        "Blocker",
+        "Next gate",
+    ]:
+        assert f"| {row} |" in block, row
+    for row in ["Last completed task", "Waiting", "Recommended next action", "Next action command"]:
+        assert f"| {row} |" not in block, row
+    assert "Recommended next action" not in (generated / "project" / "index.md").read_text(
+        encoding="utf-8"
+    )
+    board = (generated / "project" / "board.md").read_text(encoding="utf-8")
+    assert "Merge-derived completion is not persisted" in board
+    assert "awaiting human GitHub merge" not in board
+
+    def make(target: str) -> str:
+        result = subprocess.run(
+            ["make", target],
+            cwd=generated,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        return result.stdout
+
+    # A freshly rendered project is already consistent: no synchronization step
+    # is required, and synchronizing is a no-op.
+    make("validate-project")
+    assert "Complete T-001" in make("project-status")
+    committed = {
+        name: (generated / name).read_text(encoding="utf-8")
+        for name in ["README.md", "project/index.md", "project/board.md"]
+    }
+    make("sync-project-docs")
+    assert {
+        name: (generated / name).read_text(encoding="utf-8") for name in committed
+    } == committed
+
+
 def test_workflow_modes_render_expected_agent_policy(tmp_path: Path) -> None:
     local = copy_project(tmp_path, workflow_mode="local")
     branch = copy_project(tmp_path, workflow_mode="branch")
@@ -651,6 +707,40 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     maintainer_state = yaml.safe_load((ROOT / "project" / "state.yaml").read_text(encoding="utf-8"))
     assert maintainer_state["project"]["workflow_mode"] == "pr"
     assert "task_merge_completed" in project_tool
+
+    # Merge-derived status is rendered at read time instead of being committed.
+    assert "GIT_RELATIVE_STATUS_ROWS" in project_tool
+    assert "def persisted_status_block" in project_tool
+    assert "def runtime_status_block" in project_tool
+    assert "def persisted_board_block" in project_tool
+    assert "def runtime_board_block" in project_tool
+    assert "Merge-derived completion is not persisted" in project_tool
+    assert "must not persist the Git-relative row" in project_tool
+    assert "### Status Ownership" in workflow
+    assert "because a merge result cannot be committed before the merge exists" in workflow
+    assert "live merge-derived status comes from `make project-status`" in workflow
+    assert "After a human merge no synchronization commit is required." in readme
+    assert "Committed dashboards never carry merge-derived status" in agents
+    assert "Committed dashboards carry only the deterministic subset" in root_agents
+
+    # This maintainer repository must not persist Git-relative status either.
+    status_block = (
+        (ROOT / "README.md")
+        .read_text(encoding="utf-8")
+        .split("<!-- project-status:start -->", 1)[1]
+        .split("<!-- project-status:end -->", 1)[0]
+    )
+    for row in [
+        "Last completed task",
+        "Waiting",
+        "Recommended next action",
+        "Next action command",
+    ]:
+        assert f"| {row} |" not in status_block, row
+    board = (ROOT / "project" / "board.md").read_text(encoding="utf-8")
+    assert "awaiting human GitHub merge" not in board
+    assert "completed by merged Git provenance" not in board
+    assert "make project-status" in board
 
     # The pr-mode machinery stays conditional; lightweight defaults are untouched.
     assert '{% if governance == "managed" and workflow_mode == "pr" %}' in ci
