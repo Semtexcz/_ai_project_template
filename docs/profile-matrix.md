@@ -75,7 +75,9 @@ Capability skills are generated only when relevant:
 
 Managed governance additionally includes:
 
-- `README.md` dashboard with one next action command
+- `README.md` dashboard with one next action command (`local`/`branch`); in
+  `workflow_mode: pr` the committed dashboard keeps only canonical-derived rows
+  and `make project-status` renders the live merge-aware status
 - `project/state.yaml`, `project/index.md`, `project/board.md`, `project/roadmap.md`
 - `project/tasks/T-001-initialize-project.md`
 - `tools/project.py` plus Make targets for status, sync, validation, and task transitions

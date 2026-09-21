@@ -45,11 +45,17 @@ It has a single project state source:
   blocked flag.
 - `project/tasks/*.md` stores task state, dependencies, approval level, and
   completion evidence.
-- `tools/project.py` validates state and synchronizes generated dashboard
-  blocks in README, project index, and board.
+- `tools/project.py` validates state and synchronizes the deterministic parts of
+  the generated dashboard blocks in README, project index, and board.
 
 No separate task database or board source is introduced. The markdown files are
 the project record; generated dashboard blocks are derived from them.
+
+Status in a managed project has two surfaces. Committed generated blocks carry
+only content that already follows from `project/state.yaml` and
+`project/tasks/*.md`. Merge-derived status (effective completion, waiting state,
+dependency completion, recommended next action, and the merge-aware board) is
+rendered at read time by `make project-status`.
 
 Managed approvals have one authoritative human boundary per workflow mode:
 
@@ -60,9 +66,9 @@ Managed approvals have one authoritative human boundary per workflow mode:
   `make pr-validate` fails unless the pull request deterministically references
   one review-ready task with no self-recorded approval. A1/A2 task records stay
   in `review` with `approval_status: pending` (local pre-merge state only), and
-  dashboards derive the completed view, so no post-merge lifecycle commit or
-  cleanup pull request is needed. This works with merge commits, squash
-  merges, and rebase/fast-forward.
+  the runtime view derives the completed result, so no post-merge lifecycle
+  commit or cleanup pull request is needed. This works with merge commits,
+  squash merges, and rebase/fast-forward.
 - `workflow_mode: local`/`branch` (offline fallback): a human records A1/A2
   approval with `make task-approve` and completes with `make task-complete`.
   A2 additionally always requires explicit human approval before work starts.
