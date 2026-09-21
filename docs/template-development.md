@@ -74,7 +74,7 @@ Concept -> canonical source -> derived output -> focused proof:
 | Concept | Canonical source | Derived/mirrored | Focused proof |
 |---|---|---|---|
 | Agent workflow | `.agents/` skills, `AGENTS.md` | `template/.agents/`, `template/.codex/` | `make validate-agent-skills`, `make validate-agent-layer`, `make test-agent`, `make test-workflow` |
-| Project lifecycle | `template/tools/project.py`, `template/project/*.jinja` | generated `project/` state and dashboards | `make validate-project`, `make test-lifecycle` |
+| Project lifecycle | `template/tools/project.py`, `template/project/*.jinja` | generated `project/` state; committed dashboards are deterministic persisted views and merge-derived status is runtime-only | `make validate-project`, `make test-lifecycle` |
 | Frontend scaffold | `template/frontend/**` | generated `frontend/` | `make test-frontend` |
 | Backend scaffold | `template/backend/**` | generated `backend/` | `make test-backend` |
 | Python skeleton | `template/src/**`, `template/tests/**` | generated `src/`, `tests/` | `make test-python-profiles` |
@@ -84,6 +84,12 @@ The same routing lives machine-readably in `.agents/context-map.yaml`
 (`change_patterns` and `checks`); keep that map authoritative when changing a
 surface. Root `.agents/context-map.yaml` is not mirrored because generated
 projects need their own profile-based map.
+
+Mirroring is deliberately limited to the agent layer. Other root/template pairs
+(`AGENTS.md` vs `template/AGENTS.md.jinja`, root docs vs `template/docs/*.jinja`,
+and committed dashboards vs generated ones) are intentional representations or
+deterministic persisted views rather than byte mirrors, so they stay
+hand-authored.
 
 ## Change Profiles Safely
 

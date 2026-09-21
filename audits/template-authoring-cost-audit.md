@@ -38,6 +38,13 @@ Change made: `tools/agent_layer.py` (`check`/`sync`), `make sync-agent-layer`,
 `make validate-agent-layer` wired into `make check` and `make release-check`,
 plus focused drift/idempotence/protection tests.
 
+Mirror-scope verification after the PR #21 lifecycle remediation: the mirrored
+set is still exact. PR #21 changed `.agents/skills/update-documentation/SKILL.md`
+and its `template/.agents/` counterpart in lockstep, `make validate-agent-layer`
+reports no drift, and the exclusion list is still limited to the two intentional
+representations (`.agents/README.md`, `.agents/context-map.yaml`). Mirroring was
+not broadened to cover lifecycle dumps or dashboards.
+
 ### 2. Context routing treated every template change as one big neighborhood
 
 Before this task the root `.agents/context-map.yaml` routed every change under
@@ -75,6 +82,12 @@ duplicated authority rather than real spread:
 - `docs/template-architecture.md` / `docs/template-development.md` (root docs)
   and `template/docs/workflow.md.jinja` (generated docs) are intentionally
   different audiences; the docs validator already guards drift between them.
+- Committed dashboards (`README.md`, `project/index.md`, `project/board.md`) no
+  longer persist Git-relative lifecycle state: the PR #21 remediation made
+  merge-derived status runtime-only, rendered by `make project-status`. A
+  lifecycle decision therefore no longer forces a matching committed-dashboard
+  edit or a post-merge synchronization commit, which removes part of the
+  amplification recorded here.
 
 Classification: `AGENTS.md` vs `template/AGENTS.md.jinja` and root docs vs
 generated docs are intentionally different representations with partially
