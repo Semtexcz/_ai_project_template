@@ -36,6 +36,16 @@ def test_generated_project_has_single_state_source_and_dashboard_tools() -> None
     required = [
         "template/project/state.yaml.jinja",
         "template/tools/project.py",
+        "template/tools/project_tool/__init__.py",
+        "template/tools/project_tool/commands.py",
+        "template/tools/project_tool/docs.py",
+        "template/tools/project_tool/git.py",
+        "template/tools/project_tool/lifecycle.py",
+        "template/tools/project_tool/model.py",
+        "template/tools/project_tool/mutations.py",
+        "template/tools/project_tool/rendering.py",
+        "template/tools/project_tool/storage.py",
+        "template/tools/project_tool/validation.py",
         "template/README.md.jinja",
         "template/project/index.md.jinja",
         "template/project/board.md.jinja",
@@ -157,12 +167,15 @@ def test_release_hygiene_gitignore_and_gate_are_declared() -> None:
 def test_documentation_validation_targets_are_declared() -> None:
     makefile = (ROOT / "Makefile").read_text()
     generated_makefile = (ROOT / "template" / "Makefile.jinja").read_text()
-    project_tool = (ROOT / "template" / "tools" / "project.py").read_text()
+    project_cli = (ROOT / "template" / "tools" / "project.py").read_text()
+    docs_module = (ROOT / "template" / "tools" / "project_tool" / "docs.py").read_text()
 
     assert "validate-template-docs:" in makefile
     assert "validate-docs:" in generated_makefile
-    assert "validate-docs" in project_tool
-    assert "validate_docs" in project_tool
+    # The CLI keeps routing the command; documentation validation has one owner.
+    assert "validate-docs" in project_cli
+    assert "validate_docs" in project_cli
+    assert "def validate_docs" in docs_module
 
 
 def test_generated_frontend_commands_bootstrap_pnpm_with_corepack() -> None:
@@ -302,6 +315,7 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
         ".agents/hooks",
         ".codex/skills/assess-project-state",
         "tools/project.py",
+        "tools/project_tool",
         "project/state.yaml",
         "project/tasks",
         "project/board.md",
@@ -685,9 +699,14 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     ci = (ROOT / "template" / ".github" / "workflows" / "ci.yml.jinja").read_text(
         encoding="utf-8"
     )
-    project_tool = (ROOT / "template" / "tools" / "project.py").read_text(
-        encoding="utf-8"
-    )
+    project_cli = (ROOT / "template" / "tools" / "project.py").read_text(encoding="utf-8")
+    tool_package = ROOT / "template" / "tools" / "project_tool"
+    commands_module = (tool_package / "commands.py").read_text(encoding="utf-8")
+    lifecycle_module = (tool_package / "lifecycle.py").read_text(encoding="utf-8")
+    rendering_module = (tool_package / "rendering.py").read_text(encoding="utf-8")
+    validation_module = (tool_package / "validation.py").read_text(encoding="utf-8")
+    docs_module = (tool_package / "docs.py").read_text(encoding="utf-8")
+    git_module = (tool_package / "git.py").read_text(encoding="utf-8")
     root_agents = flatten((ROOT / "AGENTS.md").read_text(encoding="utf-8"))
 
     # The pr-mode merge boundary is documented and the offline fallback stays.
@@ -700,22 +719,25 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     assert "pr-validate" in makefile
     assert "governed-pr-validation" in ci
     assert "PR_HEAD_REF" in ci
-    assert "def pr_validate" in project_tool
-    assert "github_merge_completes" in project_tool
-    assert "A1 approval cannot be recorded locally in workflow_mode=pr" in project_tool
+    assert "def pr_validate" in commands_module
+    assert "github_merge_completes" in git_module
+    assert "github_merge_completes" in project_cli
+    assert "A1 approval cannot be recorded locally in workflow_mode=pr" in validation_module
     assert "human GitHub merge is the normal A1 approval/completion boundary" in root_agents
     maintainer_state = yaml.safe_load((ROOT / "project" / "state.yaml").read_text(encoding="utf-8"))
     assert maintainer_state["project"]["workflow_mode"] == "pr"
-    assert "task_merge_completed" in project_tool
+    assert "task_merge_completed" in git_module
+    assert "task_merge_completed" in project_cli
+    assert "make task-complete is not used for A1/A2 tasks in pr mode" in lifecycle_module
 
     # Merge-derived status is rendered at read time instead of being committed.
-    assert "GIT_RELATIVE_STATUS_ROWS" in project_tool
-    assert "def persisted_status_block" in project_tool
-    assert "def runtime_status_block" in project_tool
-    assert "def persisted_board_block" in project_tool
-    assert "def runtime_board_block" in project_tool
-    assert "Merge-derived completion is not persisted" in project_tool
-    assert "must not persist the Git-relative row" in project_tool
+    assert "GIT_RELATIVE_STATUS_ROWS" in rendering_module
+    assert "def persisted_status_block" in rendering_module
+    assert "def runtime_status_block" in rendering_module
+    assert "def persisted_board_block" in rendering_module
+    assert "def runtime_board_block" in rendering_module
+    assert "Merge-derived completion is not persisted" in rendering_module
+    assert "must not persist the Git-relative row" in docs_module
     assert "### Status Ownership" in workflow
     assert "because a merge result cannot be committed before the merge exists" in workflow
     assert "live merge-derived status comes from `make project-status`" in workflow

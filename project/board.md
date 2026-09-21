@@ -13,7 +13,7 @@ _None_
 
 ## In Progress
 
-_None_
+- [T-030](tasks/T-030-refactor-project-py-into-cohesive-project-governance-modules.md) - P1 - Refactor project.py into cohesive project-governance modules
 
 ## Review
 

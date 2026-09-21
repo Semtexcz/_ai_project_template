@@ -130,6 +130,12 @@ change_patterns:
     search_roots:
       - template/tools/
       - tests/
+  "template/tools/project_tool/**":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/tools/project_tool/
+      - tests/
   "template/tools/**":
     files:
       - docs/template-development.md
@@ -252,6 +258,13 @@ checks:
   "template/tools/project.py":
     - make validate-project
     - make test-lifecycle
+  # Governance package seams (T-030). The focused module tests prove the
+  # extracted boundaries quickly; lifecycle/static tests keep the end-to-end
+  # lifecycle, approval, merge-provenance, and persisted-view behavior.
+  "template/tools/project_tool/**":
+    - uv run pytest tests/test_project_tool_modules.py
+    - make validate-project
+    - make test-lifecycle
   "project/**":
     - make validate-project
 
@@ -278,6 +291,8 @@ checks:
     - uv run pytest tests/test_template_static.py
   "tests/test_agent_layer_mirror.py":
     - uv run pytest tests/test_agent_layer_mirror.py
+  "tests/test_project_tool_modules.py":
+    - uv run pytest tests/test_project_tool_modules.py
   "tests/test_agent_context_routing.py":
     - uv run pytest tests/test_agent_context_routing.py
   "tests/test_template_release_workflow.py":

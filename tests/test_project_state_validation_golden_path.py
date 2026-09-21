@@ -140,6 +140,13 @@ def make_project(tmp_path: Path, *, profile: str = "script", workflow_mode: str 
     (root / "project" / "tasks").mkdir(parents=True)
     (root / "docs").mkdir()
     shutil.copy(ROOT / "template" / "tools" / "project.py", root / "tools" / "project.py")
+    # Rendered managed projects receive the whole governance package, so the
+    # fixture mirrors the real tools/ layout instead of the CLI file alone.
+    shutil.copytree(
+        ROOT / "template" / "tools" / "project_tool",
+        root / "tools" / "project_tool",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     (root / "Makefile").write_text(
         "\n".join(
             [
