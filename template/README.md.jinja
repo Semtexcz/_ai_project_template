@@ -33,22 +33,36 @@ Governance: `{{ governance }}`. Workflow mode: `{{ workflow_mode }}`.
 | Runtime level | {{ runtime_level }} |
 | Phase | definition |
 | Milestone | M-01 |
-| Last completed task | None |
-| Active task | [T-001](project/tasks/T-001-initialize-project.md) |
+{% if workflow_mode != "pr" %}| Last completed task | None |
+{% endif %}| Active task | [T-001](project/tasks/T-001-initialize-project.md) |
 | Approval | A0 / not-required |
-| Waiting | None |
-| Blocker | None |
+{% if workflow_mode != "pr" %}| Waiting | None |
+{% endif %}| Blocker | None |
 | Next gate | ready-for-development |
-| Recommended next action | Complete T-001. |
+{% if workflow_mode != "pr" %}| Recommended next action | Complete T-001. |
 | Next action command | `make task-review TASK=T-001` |
-<!-- project-status:end -->
+{% endif %}<!-- project-status:end -->
 
+{% if workflow_mode == "pr" %}
+The rows above are generated from `project/state.yaml` and `project/tasks/*.md`
+and contain only state that those records already decide. Merge-derived status
+cannot be committed before the human merge, so the live, merge-aware status,
+board, and next action are rendered at read time:
+
+```bash
+make project-status
+```
+
+Refresh the committed rows with `make sync-project-docs`. After a human merge no
+synchronization commit is required.
+{% else %}
 The dashboard is generated from `project/state.yaml` and `project/tasks/*.md`.
 After changing task state, run:
 
 ```bash
 make sync-project-docs
 ```
+{% endif %}
 {% else %}
 ## Project Context
 

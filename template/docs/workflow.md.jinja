@@ -46,6 +46,11 @@ make build
 `make format` for formatting changes.
 {% if governance == "managed" %}
 Use `make sync-project-docs` when generated project dashboards need refresh.
+{% if workflow_mode == "pr" %}
+In `pr` mode those dashboards intentionally keep only state that the canonical
+task records already decide; live merge-derived status comes from
+`make project-status`.
+{% endif %}
 {% endif %}
 
 ## Agent Context
@@ -201,6 +206,28 @@ branch name or title so the association is deterministic; CI runs
 merge. A1 approval fields stay `pending` in the task record by design: they are
 local pre-merge state only, never the authoritative approval. `make task-complete`
 is used only for A0 local completion; A1/A2 complete at the human merge.
+{% endif %}
+
+### Status Ownership
+
+Persisted project state and merge-derived status are different kinds of truth:
+
+- Canonical: `project/tasks/*.md`, `project/state.yaml`, and Git history. Task
+  status and approvals change only through the lifecycle commands or a human
+  GitHub merge.
+- Derived at read time: effective task status, waiting state, dependency
+  completion, recommended next action, and the live board. `make project-status`
+  renders them from the current repository and Git state.
+{% if workflow_mode == "pr" %}
+- Persisted generated blocks in `README.md`, `project/index.md`, and
+  `project/board.md` keep only content that already follows from the canonical
+  records, because a merge result cannot be committed before the merge exists.
+  A completed merge therefore needs no `task-approve`, `task-complete`,
+  synchronization commit, or cleanup pull request.
+{% else %}
+- Persisted generated blocks in `README.md`, `project/index.md`, and
+  `project/board.md` mirror the canonical records; refresh them with
+  `make sync-project-docs` after a lifecycle change.
 {% endif %}
 {% endif %}
 

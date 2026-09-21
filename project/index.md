@@ -10,7 +10,6 @@
 | Active task | None |
 | Approval | None |
 | Blocker | None |
-| Recommended next action | Await human GitHub merge for T-027; merge is the completion boundary. |
 
 Links: [Board](board.md) | [Roadmap](roadmap.md)
 <!-- project-index:end -->

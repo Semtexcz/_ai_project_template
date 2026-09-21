@@ -26,15 +26,21 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Last completed task | [T-026](project/tasks/T-026-agent-efficiency-v1.md) |
 | Active task | None |
 | Approval | None |
-| Waiting | Awaiting human GitHub merge: T-027 |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
-| Recommended next action | Await human GitHub merge for T-027; merge is the completion boundary. |
-| Next action command | `make project-status` (await human GitHub merge of T-027). |
 <!-- project-status:end -->
+
+The committed block above carries only state that `project/state.yaml` and
+`project/tasks/*.md` already decide. This repository runs `workflow_mode: pr`, so
+A1/A2 completion is derived from the human GitHub merge of the task's pull
+request and cannot be committed before that merge exists. Live status, board, and
+next action are rendered at read time:
+
+```bash
+make project-status
+```
 
 ## Quick Start
 

@@ -1,7 +1,9 @@
 # Kanban Board
 
 <!-- kanban:start -->
-## Backlog
+{% if workflow_mode == "pr" %}_Persisted task records by status. Merge-derived completion is not persisted; run `make project-status` for the live merge-aware board._
+
+{% endif %}## Backlog
 
 _None_
 
