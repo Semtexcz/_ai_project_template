@@ -13,7 +13,7 @@ _None_
 
 ## In Progress
 
-- [T-030](tasks/T-030-refactor-project-py-into-cohesive-project-governance-modules.md) - P1 - Refactor project.py into cohesive project-governance modules
+_None_
 
 ## Review
 
@@ -24,6 +24,7 @@ _None_
 - [T-027](tasks/T-027-simplify-github-backed-a1-approval-to-the-human-pr-merge.md) - P1 - Simplify GitHub-backed A1 approval to the human PR merge
 - [T-028](tasks/T-028-audit-and-optimize-template-authoring-for-low-change-amplification.md) - P1 - Audit and optimize template authoring for low change amplification
 - [T-029](tasks/T-029-make-pr-mode-derived-project-state-post-merge-consistent.md) - P1 - Make PR-mode derived project state post-merge consistent
+- [T-030](tasks/T-030-refactor-project-py-into-cohesive-project-governance-modules.md) - P1 - Refactor project.py into cohesive project-governance modules
 
 ## Blocked
 

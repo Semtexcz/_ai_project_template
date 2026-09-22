@@ -26,8 +26,8 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Active task | [T-030](project/tasks/T-030-refactor-project-py-into-cohesive-project-governance-modules.md) |
-| Approval | A1 / pending |
+| Active task | None |
+| Approval | None |
 | Blocker | None |
 | Next gate | release-candidate-remediation |
 <!-- project-status:end -->

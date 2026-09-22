@@ -3,7 +3,7 @@ id: T-030
 
 title: Refactor project.py into cohesive project-governance modules
 
-status: in-progress
+status: review
 
 priority: 1
 

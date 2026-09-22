@@ -7,8 +7,8 @@
 | Phase | delivery |
 | Milestone | M-08 |
 | Next gate | release-candidate-remediation |
-| Active task | [T-030](tasks/T-030-refactor-project-py-into-cohesive-project-governance-modules.md) |
-| Approval | A1 / pending |
+| Active task | None |
+| Approval | None |
 | Blocker | None |
 
 Links: [Board](board.md) | [Roadmap](roadmap.md)
