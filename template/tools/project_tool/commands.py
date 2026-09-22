@@ -20,7 +20,7 @@ from project_tool.claims import (
     claim_dicts,
     create_claim,
     inspect_claims,
-    ownership_errors,
+    ownership_start_errors,
     read_claim,
     release_claim,
     worktree_state,
@@ -56,6 +56,7 @@ from project_tool.worktrees import (
     add_worktree,
     delete_branch,
     ensure_root_is_outside_project,
+    list_worktrees,
     remove_worktree,
     task_branch_name,
     worktree_for_task,
@@ -79,8 +80,9 @@ def status() -> None:
     print()
     print(runtime_board_block(tasks, state))
     print()
-    print(runtime_available_block(available_tasks(tasks, state)))
-    claim_errors = validate_active_claims(tasks, claim_dicts())
+    claims = claim_dicts()
+    print(runtime_available_block(claimable_tasks(tasks, state, claims)))
+    claim_errors = validate_active_claims(tasks, claims, worktrees=list_worktrees())
     rows = worktree_status_rows()
     if rows:
         print()
@@ -165,7 +167,7 @@ def controlled_transition(
     if blocker is not None:
         raise ProjectError(blocker)
     if new_status == "in-progress":
-        conflicts = ownership_errors(task_id)
+        conflicts = ownership_start_errors(task_id, tasks)
         if conflicts:
             raise ProjectError(" ".join(conflicts))
     candidate: dict[str, Any] = dict(status=new_status)
@@ -265,15 +267,34 @@ def pr_validate() -> None:
     print(f"Pull request for {task_id} is structurally valid for a human GitHub merge.")
 
 
+def claimable_tasks(
+    tasks: list[Any], state: dict[str, Any] | None, claims: list[dict[str, Any]]
+) -> list[Any]:
+    """Return lifecycle-runnable tasks that no local claim currently reserves.
+
+    ``available_tasks`` remains pure lifecycle policy. This orchestration-facing
+    filter is the local scheduler view: it avoids advertising a task that the
+    shared repository's claim store already reserves, without implying any
+    distributed ownership guarantee.
+    """
+    claimed_ids = {
+        str(claim.get("task_id", "")).strip()
+        for claim in claims
+        if str(claim.get("task_id", "")).strip()
+    }
+    return [task for task in available_tasks(tasks, state) if task.id not in claimed_ids]
+
+
 def available_command() -> None:
-    """Print every task that can start now, for humans and future schedulers."""
+    """Print every locally claimable task, for humans and future schedulers."""
     state = read_state()
-    tasks = available_tasks(load_tasks(), state)
-    if not tasks:
+    tasks = load_tasks()
+    claimable = claimable_tasks(tasks, state, claim_dicts())
+    if not claimable:
         print("No task is available to start.")
         return
     print("Available tasks:")
-    for task in tasks:
+    for task in claimable:
         print(f"- {task.id} - {task.title}")
 
 
@@ -333,7 +354,7 @@ def worktrees_command() -> None:
         print(
             f"- {claim.task_id}: {claim.branch} at {claim.worktree} (pid {claim.pid}, {liveness})"
         )
-    errors = validate_active_claims(load_tasks(), claim_dicts())
+    errors = validate_active_claims(load_tasks(), claim_dicts(), worktrees=list_worktrees())
     if errors:
         print()
         print_errors(errors)

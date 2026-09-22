@@ -408,19 +408,44 @@ def resolve_owner(cwd: Path | None = None) -> WorktreeOwner:
 
 
 def ownership_errors(task_id: str, *, owner: WorktreeOwner | None = None) -> list[str]:
-    """Return why this checkout may not act as ``task_id``.
-
-    A conflicting branch task id is always rejected. A missing claim, a branch
-    without a task id, and a detached HEAD are reported as notes by
-    :func:`resolve_owner` rather than errors, so the single-agent path stays
-    simple while genuine inconsistencies fail loudly.
-    """
+    """Return identity inconsistencies that prevent this checkout using ``task_id``."""
     resolved = owner or resolve_owner()
     errors = list(resolved.errors)
     if resolved.task_id is not None and resolved.task_id != task_id:
         errors.append(
             f"This checkout owns {resolved.task_id}, not {task_id}. "
             "One worktree owns at most one task."
+        )
+    return errors
+
+
+def ownership_start_errors(
+    task_id: str,
+    tasks: list[Any],
+    *,
+    owner: WorktreeOwner | None = None,
+) -> list[str]:
+    """Return why this checkout may not start ``task_id``.
+
+    A task-named branch is an explicit worktree identity, so it may start only
+    that task while other task worktrees proceed independently. An unowned
+    checkout keeps the simple single-agent fallback: it may have at most one
+    in-progress task, and that task must be the requested one. Lifecycle policy
+    remains separate; callers invoke this only for a start transition.
+    """
+    resolved = owner or resolve_owner()
+    errors = ownership_errors(task_id, owner=resolved)
+    if resolved.task_id is not None:
+        return errors
+    active_ids = sorted(
+        {str(task.id) for task in tasks if getattr(task, "status", None) == "in-progress"}
+    )
+    if active_ids and task_id not in active_ids:
+        active = ", ".join(active_ids)
+        errors.append(
+            f"This unowned checkout is already being used for {active}. "
+            f"Start {task_id} in a separate task worktree with "
+            f"`make agent-worktree TASK={task_id}` to work in parallel."
         )
     return errors
 

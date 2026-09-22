@@ -204,6 +204,7 @@ def test_direct_script_and_file_location_loading_both_expose_compat_names() -> N
         "validate_active_claims",
         "active_tasks",
         "available_tasks",
+        "claimable_tasks",
         "definition_of_ready",
         "definition_of_done",
         "dependencies_done",
@@ -211,6 +212,7 @@ def test_direct_script_and_file_location_loading_both_expose_compat_names() -> N
         "write_state",
         "resolve_owner",
         "ownership_errors",
+        "ownership_start_errors",
         "inspect_claims",
         "claim_dicts",
         "release_claim",
@@ -355,8 +357,9 @@ def test_available_tasks_exposes_every_runnable_task_without_a_global_next() -> 
     ]
 
 
-def test_claim_validation_rejects_two_tasks_in_one_worktree() -> None:
+def test_claim_validation_rejects_inconsistent_and_malformed_claims() -> None:
     validation = load_module("validation")
+    worktrees = load_module("worktrees")
     tasks = [make_task("T-002"), make_task("T-003")]
     shared = {
         "task_id": "T-002",
@@ -372,6 +375,35 @@ def test_claim_validation_rejects_two_tasks_in_one_worktree() -> None:
     assert any("claims multiple tasks" in error for error in errors)
     duplicate = validation.validate_active_claims(tasks, [shared, dict(shared)])
     assert any("has 2 claims" in error for error in duplicate)
+    mismatch = validation.validate_active_claims(
+        tasks, [{**shared, "branch": "task/T-999-other"}]
+    )
+    assert any("does not name T-002" in error for error in mismatch)
+    malformed = validation.validate_active_claims(tasks, [{**shared, "branch": "", "worktree": ""}])
+    assert any("empty branch" in error for error in malformed)
+    assert any("empty worktree path" in error for error in malformed)
+    registered = validation.validate_active_claims(
+        tasks,
+        [shared],
+        worktrees=[worktrees.WorktreeEntry(path="/tmp/fixture", branch="task/T-002-fixture")],
+    )
+    assert registered == []
+    unregistered = validation.validate_active_claims(
+        tasks,
+        [shared],
+        worktrees=[worktrees.WorktreeEntry(path="/tmp/elsewhere", branch="task/T-002-fixture")],
+    )
+    assert any("not registered" in error for error in unregistered)
+
+
+def test_claimable_tasks_exclude_locally_claimed_runnable_tasks() -> None:
+    commands = load_module("commands")
+    state = make_state()
+    first = make_task("T-002")
+    second = make_task("T-003")
+    claims = [{"task_id": "T-003", "branch": "task/T-003-fixture", "worktree": "/tmp/t3"}]
+
+    assert [task.id for task in commands.claimable_tasks([first, second], state, claims)] == ["T-002"]
 
 
 def test_worktree_mechanics_naming_and_claims_are_deterministic(tmp_path: Path) -> None:

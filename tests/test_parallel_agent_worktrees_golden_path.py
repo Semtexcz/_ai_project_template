@@ -160,6 +160,9 @@ def prepare(root: Path, tmp_path: Path) -> None:
     write_task(root, "T-002")
     write_task(root, "T-003")
     run(["make", "setup"], root, env=env)
+    # The generated example task begins in progress; close it so control-checkout
+    # tests begin from the intended zero-active-task single-agent fallback.
+    run(["make", "task-cancel", "TASK=T-001"], root, env=env)
     run(["make", "sync-project-docs"], root, env=env)
     git(["init", "-b", "main"], root)
     git(["add", "-A"], root)
@@ -192,6 +195,33 @@ def branch_of(stdout: str) -> str:
     raise AssertionError(f"No branch in output:\n{stdout}")
 
 
+
+def test_unowned_checkout_keeps_single_agent_start_fallback(tmp_path: Path) -> None:
+    root = copy_project(tmp_path)
+    prepare(root, tmp_path)
+    env = {**os.environ, "UV_LINK_MODE": "copy", "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
+
+    run(["make", "task-start", "TASK=T-002"], root, env=env)
+    rejected = run(["make", "task-start", "TASK=T-003"], root, env=env, expect_success=False)
+    output = rejected.stdout + rejected.stderr
+    assert "already being used for T-002" in output
+    assert "separate task worktree" in output
+    assert "make agent-worktree TASK=T-003" in output
+
+    # The original task can still follow the normal single-agent lifecycle.
+    run(["make", "task-review", "TASK=T-002"], root, env=env)
+
+
+def test_project_available_excludes_tasks_with_local_claims(tmp_path: Path) -> None:
+    root = copy_project(tmp_path)
+    prepare(root, tmp_path)
+    env = {**os.environ, "UV_LINK_MODE": "copy", "UV_CACHE_DIR": str(tmp_path / "uv-cache")}
+
+    run(["make", "agent-worktree", "TASK=T-003"], root, env=env)
+    available = run(["make", "project-available"], root, env=env).stdout
+    assert "T-002 - Parallel task T-002" in available
+    assert "T-003 - Parallel task T-003" not in available
+
 def test_two_agents_work_independent_tasks_in_isolated_worktrees(tmp_path: Path) -> None:
     root = copy_project(tmp_path)
     prepare(root, tmp_path)
@@ -214,6 +244,8 @@ def test_two_agents_work_independent_tasks_in_isolated_worktrees(tmp_path: Path)
     # Both tasks may be active at once, each in its own worktree.
     run(["make", "task-start", "TASK=T-002"], worktree_a, env=env)
     run(["make", "task-start", "TASK=T-003"], worktree_b, env=env)
+    rejected = run(["make", "task-start", "TASK=T-003"], worktree_a, env=env, expect_success=False)
+    assert "This checkout owns T-002, not T-003" in rejected.stdout + rejected.stderr
 
     status_a = run(["make", "agent-status"], worktree_a, env=env).stdout
     status_b = run(["make", "agent-status"], worktree_b, env=env).stdout

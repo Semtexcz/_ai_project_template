@@ -7,6 +7,7 @@ module validates the managed lifecycle records and their persisted views.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 from project_tool.docs import validate_docs, validate_markdown_links
@@ -56,6 +57,7 @@ from project_tool.storage import (
     normalize_block,
     read_state,
 )
+from project_tool.worktrees import WorktreeEntry, task_id_from_branch
 
 
 def validate_all(*, check_drift: bool = True) -> list[str]:
@@ -333,30 +335,53 @@ def validate_task_graph(
     return errors
 
 
-def validate_active_claims(tasks: list[Task], claims: list[dict[str, Any]]) -> list[str]:
-    """Validate locally observed worktree claims against the task records.
+def validate_active_claims(
+    tasks: list[Task],
+    claims: list[dict[str, Any]],
+    *,
+    worktrees: list[WorktreeEntry] | None = None,
+) -> list[str]:
+    """Validate locally observed worktree claims against task and worktree facts.
 
-    Claims are local Git/worktree facts, not persisted state, so they are checked
-    here as an explicit concurrency invariant:
-
-    * one worktree owns at most one task;
-    * one task has exactly one claim;
-    * a claimed task exists and is not cancelled;
-    * a claim's branch and worktree are consistent with the recorded task id.
-
-    ``claims`` is a list of plain mappings produced by
-    :func:`project_tool.worktrees.inspect_claims`, which keeps this validator
-    free of Git subprocesses and independently testable.
+    Claims are local Git/worktree facts, not persisted state. ``worktrees`` is
+    optional so this pure validator remains independently testable; runtime
+    callers may supply registered entries for stronger branch/path association.
     """
     errors: list[str] = []
     tasks_by = task_by_id(tasks)
     by_task: dict[str, list[dict[str, Any]]] = {}
     by_worktree: dict[str, list[str]] = {}
+    registered = {(entry.branch, str(Path(entry.path).resolve())) for entry in worktrees or []}
     for claim in claims:
-        task_id = str(claim.get("task_id", ""))
+        raw_task_id = claim.get("task_id")
+        task_id = str(raw_task_id or "").strip()
+        raw_branch = claim.get("branch")
+        branch = str(raw_branch or "").strip()
+        raw_worktree = claim.get("worktree")
+        worktree = str(raw_worktree or "").strip()
+        if not task_id:
+            errors.append("Claim has an empty task_id. Release the malformed claim.")
+            continue
         by_task.setdefault(task_id, []).append(claim)
-        worktree = str(claim.get("worktree", ""))
-        by_worktree.setdefault(worktree, []).append(task_id)
+        if not branch:
+            errors.append(f"Claim for {task_id} has an empty branch. Release the malformed claim.")
+        elif task_id_from_branch(branch) != task_id:
+            errors.append(
+                f"Claim for {task_id} has branch {branch}, which does not name {task_id}. "
+                "Release or repair the inconsistent claim."
+            )
+        if not worktree:
+            errors.append(
+                f"Claim for {task_id} has an empty worktree path. Release the malformed claim."
+            )
+        else:
+            resolved_worktree = str(Path(worktree).resolve())
+            by_worktree.setdefault(resolved_worktree, []).append(task_id)
+            if worktrees is not None and (branch, resolved_worktree) not in registered:
+                errors.append(
+                    f"Claim for {task_id} is not registered at {resolved_worktree} on branch "
+                    f"{branch}. Inspect or release the inconsistent claim."
+                )
         task = tasks_by.get(task_id)
         if task is None:
             errors.append(f"Claim for {task_id} has no task record. Release the stale claim.")
