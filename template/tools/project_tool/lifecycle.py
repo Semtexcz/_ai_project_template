@@ -17,6 +17,8 @@ from project_tool.model import (
     TASK_STATUSES,
     Task,
     is_github_pr_mode,
+    task_by_id,
+    task_sort_key,
 )
 
 TRANSITIONS = {
@@ -61,6 +63,27 @@ def dependencies_done(
         return effective_status(state, dependency) in {"done", "cancelled"}
 
     return all(is_complete(dep) for dep in task.depends_on if dep in tasks_by_id)
+
+
+def available_tasks(tasks: list[Task], state: dict[str, Any] | None = None) -> list[Task]:
+    """Return every task that can start right now, ordered for planning.
+
+    This is the deterministic runnable-task discovery a future scheduler can call
+    instead of scraping CLI text: a task is available when it is ``ready``, its
+    dependencies are effectively done, and any A2 pre-start approval is recorded.
+    Several tasks may be available at once; picking one is a separate decision.
+    """
+    tasks_by = task_by_id(tasks)
+    return sorted(
+        (
+            task
+            for task in tasks
+            if task.status == "ready"
+            and dependencies_done(task, tasks_by, state=state)
+            and (task.approval_level != "A2" or task.approval_status == "approved")
+        ),
+        key=task_sort_key,
+    )
 
 
 def dependency_cycle(tasks: list[Task]) -> list[str] | None:
@@ -162,9 +185,14 @@ def transition_blocker(
 
     Returns ``None`` when the transition is allowed. The checks and their order
     are the controlled lifecycle boundary: target status, allowed transition,
-    block metadata, start gate (A2 approval, single active task, Definition of
-    Ready, dependencies), ready gate, and done gate (PR-mode merge boundary,
-    A1/A2 approval, Definition of Done).
+    block metadata, start gate (A2 approval, Definition of Ready, dependencies),
+    ready gate, and done gate (PR-mode merge boundary, A1/A2 approval, Definition
+    of Done).
+
+    Concurrency is deliberately not part of this policy: several independent tasks
+    may be ``in-progress`` at once. Which worktree owns which task is a local Git
+    fact resolved by ``project_tool.worktrees``, never project-global mutable
+    state, so parallel branches do not have to rewrite shared ownership fields.
     """
     if new_status not in TASK_STATUSES:
         return f"Invalid target status {new_status}. Use a supported task status."
@@ -183,11 +211,6 @@ def transition_blocker(
     if new_status == "in-progress":
         if task.approval_level == "A2" and task.approval_status != "approved":
             return f"Human A2 approval is required for {task.id} before work starts."
-        if any(other.status == "in-progress" and other.id != task.id for other in tasks):
-            return (
-                "Another task is already in-progress. "
-                "Move it to review, blocked, done, or cancelled first."
-            )
         missing = definition_of_ready(task)
         if missing:
             return f"{task.id} is not ready: {', '.join(missing)}."

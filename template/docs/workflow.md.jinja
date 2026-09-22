@@ -124,6 +124,64 @@ Managed lifecycle skills are generated under `.agents/managed/skills/` for
 state assessment, task selection, task preparation, task completion, and project
 reassessment. They control project-management process around core engineering
 judgment.
+
+## Parallel Worktrees
+
+Single-agent mode needs no extra concepts: work in the main checkout, and
+`make agent-status` derives the task it owns from the branch name and the local
+claim.
+
+To run several agents on different independent tasks at the same time, give each
+task its own worktree. Parallelism comes from Git isolation, so one task maps to
+exactly one claim, one branch, one worktree, one agent, and one pull request:
+
+```bash
+make agent-worktree TASK=T-002
+make agent-worktree TASK=T-003
+make agent-worktrees
+```
+
+`make agent-worktree` validates the task and its dependencies, claims it
+atomically, creates `task/T-###-<slug>` from the base branch, and prints the
+worktree path. Worktrees live in a sibling directory (`<project>-worktrees/`, or
+`PROJECT_WORKTREE_ROOT`) so they never pollute the repository tree. Enter the
+printed path and run `make agent-status` there: it reports the owned task, branch,
+worktree, claim, and the context command to load.
+
+Claims are local runtime state stored in the project's Git directory. They are
+never committed and never written into task records. Two agents cannot silently
+claim the same task, one worktree owns at most one task, and several independent
+tasks may be `in-progress` at once. A claim says only "this worktree is
+implementing T-002": approvals, dependencies, and completion rules stay exactly as
+they are.
+
+Dependency behavior is unchanged and still canonical: `T-002` may start only when
+every task it depends on is effectively done, so `make agent-worktree` and
+`make task-start` both refuse a task whose dependencies are incomplete.
+`make project-status` and `make project-available` list every task that can start
+now instead of a single global next task.
+
+Cleanup and stale claims:
+
+```bash
+make agent-worktree-remove TASK=T-002
+make agent-claim-release TASK=T-002
+```
+
+Removal refuses by default when the worktree has uncommitted changes or when its
+branch still holds unique unmerged commits, and only the explicit
+`make agent-worktree-remove TASK=T-002 FORCE=1` discards work. Process lifetime is
+never a claim boundary: if an agent disappears, inspect the claim with
+`make agent-worktrees` and release it explicitly with `make agent-claim-release`.
+
+After another task merges into the base branch, update the affected worktree with
+normal Git commands (`git fetch`, then merge or rebase onto the base) and rerun
+the relevant checks there. No tooling rewrites another agent's active branch, and
+ordinary Git conflict resolution remains authoritative.
+
+Claim coordination is local to one repository. Agents on separate machines share
+no claims yet; give those agents distinct repositories or coordinate the task
+split by hand.
 {% endif %}
 
 {% if project_type == "fullstack" or runtime_level == "production" %}

@@ -31,6 +31,8 @@ OWNERSHIP = {
     "model.py": "root layout, task records, status vocabulary",
     "storage.py": "YAML codec, state/task loading, generated block text",
     "git.py": "Git merge provenance",
+    "worktrees.py": "Git worktree and branch mechanics",
+    "claims.py": "local task claims and worktree ownership resolution",
     "lifecycle.py": "effective status, readiness, dependencies, transition rules",
     "rendering.py": "persisted and runtime dashboard derivation",
     "docs.py": "documentation validation",
@@ -120,7 +122,6 @@ def make_state(*, workflow_mode: str = "local") -> dict[str, Any]:
             "status": "active",
         },
         "lifecycle": {"phase": "delivery", "milestone": "M-01", "next_gate": "fixture-gate"},
-        "work": {"active_task": None, "blocked": False},
         "template": {"version": "v1.1.0"},
     }
 
@@ -200,12 +201,24 @@ def test_direct_script_and_file_location_loading_both_expose_compat_names() -> N
         "recommended_next_action",
         "validate_all",
         "validate_candidate",
-        "find_active",
+        "validate_active_claims",
+        "active_tasks",
+        "available_tasks",
         "definition_of_ready",
         "definition_of_done",
         "dependencies_done",
         "parse_simple_yaml",
         "write_state",
+        "resolve_owner",
+        "ownership_errors",
+        "inspect_claims",
+        "claim_dicts",
+        "release_claim",
+        "worktree_states",
+        "worktrees_command",
+        "create_worktree",
+        "remove_worktree_command",
+        "release_claim_command",
     ]:
         assert hasattr(module, name), name
 
@@ -215,23 +228,35 @@ def test_persisted_and_runtime_views_stay_distinct() -> None:
     state = make_state(workflow_mode="pr")
     tasks = [make_task("T-001", status="review", approval_level="A1", approval_status="pending")]
 
-    persisted = rendering.persisted_status_block(state, tasks)
+    persisted = rendering.persisted_status_block(state)
     runtime = rendering.runtime_status_block(state, tasks)
-    for row in rendering.GIT_RELATIVE_STATUS_ROWS:
+    # Committed rows are project-global only: no task transition can change them,
+    # so parallel task branches never conflict in shared Markdown.
+    for row in rendering.PERSISTED_STATUS_ROWS:
+        assert f"| {row} |" in persisted, row
+    for row in rendering.TASK_DERIVED_STATUS_ROWS:
         assert f"| {row} |" not in persisted, row
         assert f"| {row} |" in runtime, row
-    assert "| Active task |" in persisted
-    assert "| Next gate |" in persisted
+    assert rendering.persisted_status_block(make_state()) == persisted
 
-    persisted_board = rendering.persisted_board_block(tasks, state)
+    persisted_board = rendering.persisted_board_block(state)
     runtime_board = rendering.runtime_board_block(tasks, state)
-    assert rendering.PR_BOARD_SNAPSHOT_NOTE in persisted_board
-    assert rendering.PR_BOARD_SNAPSHOT_NOTE not in runtime_board
-    assert "## Review" in persisted_board
+    assert rendering.PERSISTED_BOARD_NOTE in persisted_board
+    assert rendering.PERSISTED_BOARD_NOTE not in runtime_board
+    assert "## Review" not in persisted_board
+    assert "## Review" in runtime_board
     assert "awaiting human GitHub merge" not in persisted_board
 
     local = make_state()
-    assert "| Last completed task |" in rendering.persisted_status_block(local, tasks)
+    assert rendering.persisted_status_block(local) == persisted
+    assert rendering.runtime_worktree_table(
+        [("T-001", "task/T-001-x", "/tmp/T-001", "clean")]
+    ) == (
+        "| Task | Branch | Worktree | State |\n"
+        "|---|---|---|---|\n"
+        "| T-001 | task/T-001-x | /tmp/T-001 | clean |"
+    )
+    assert rendering.runtime_available_block([]) == "Available tasks: none."
 
 
 def test_lifecycle_transition_rules_are_explicit_and_local() -> None:
@@ -283,6 +308,97 @@ def test_lifecycle_transition_rules_are_explicit_and_local() -> None:
         state=make_state(workflow_mode="pr"),
     )
     assert "human GitHub merge of its pull request is the completion boundary" in str(pr_blocker)
+
+
+def test_multiple_independent_tasks_may_be_in_progress() -> None:
+    """Concurrency is bounded by worktree claims, not by global project state."""
+    lifecycle = load_module("lifecycle")
+    rendering = load_module("rendering")
+    state = make_state()
+    first = make_task("T-002", status="in-progress")
+    second = make_task("T-003", status="in-progress")
+    third = make_task("T-004")
+    tasks = [first, second, third]
+    tasks_by = {task.id: task for task in tasks}
+
+    # A second in-progress task is no longer a lifecycle violation.
+    assert lifecycle.transition_blocker(
+        third,
+        "in-progress",
+        tasks=tasks,
+        tasks_by=tasks_by,
+        state=state,
+    ) is None
+    assert [task.id for task in rendering.active_tasks(tasks)] == ["T-002", "T-003"]
+    assert rendering.active_task_links(tasks, ROOT) == (
+        "[T-002](project/tasks/T-002-fixture.md), [T-003](project/tasks/T-003-fixture.md)"
+    )
+
+
+def test_available_tasks_exposes_every_runnable_task_without_a_global_next() -> None:
+    lifecycle = load_module("lifecycle")
+    state = make_state()
+    ready_one = make_task("T-002")
+    ready_two = make_task("T-003")
+    waiting = make_task("T-004", status="backlog")
+    dependent = make_task("T-005", depends_on=("T-002",))
+    a2_pending = make_task("T-006", approval_level="A2", approval_status="pending")
+    tasks = [ready_one, ready_two, waiting, dependent, a2_pending]
+
+    assert [task.id for task in lifecycle.available_tasks(tasks, state)] == ["T-002", "T-003"]
+
+    a2_approved = make_task("T-006", approval_level="A2", approval_status="approved")
+    assert [task.id for task in lifecycle.available_tasks([*tasks[:-1], a2_approved], state)] == [
+        "T-002",
+        "T-003",
+        "T-006",
+    ]
+
+
+def test_claim_validation_rejects_two_tasks_in_one_worktree() -> None:
+    validation = load_module("validation")
+    tasks = [make_task("T-002"), make_task("T-003")]
+    shared = {
+        "task_id": "T-002",
+        "branch": "task/T-002-fixture",
+        "worktree": "/tmp/fixture",
+        "pid": 1,
+        "created_at": "now",
+    }
+    other = {**shared, "task_id": "T-003", "branch": "task/T-003-fixture"}
+
+    assert validation.validate_active_claims(tasks, [shared]) == []
+    errors = validation.validate_active_claims(tasks, [shared, other])
+    assert any("claims multiple tasks" in error for error in errors)
+    duplicate = validation.validate_active_claims(tasks, [shared, dict(shared)])
+    assert any("has 2 claims" in error for error in duplicate)
+
+
+def test_worktree_mechanics_naming_and_claims_are_deterministic(tmp_path: Path) -> None:
+    worktrees = load_module("worktrees")
+    claims = load_module("claims")
+
+    assert worktrees.task_branch_name("T-101", "Add the API endpoint") == (
+        "task/T-101-add-the-api-endpoint"
+    )
+    assert worktrees.task_id_from_branch("feat/T-101-api") == "T-101"
+    assert worktrees.task_id_from_branch("main") is None
+    assert worktrees.slugify("!!") == "task"
+
+    claim = claims.TaskClaim(
+        task_id="T-101",
+        branch="task/T-101-x",
+        worktree=str(tmp_path),
+        pid=1,
+        created_at="2026-01-01T00:00:00+00:00",
+    )
+    payload = claim.as_dict()
+    assert payload["task_id"] == "T-101"
+    assert claims.claim_from_payload(payload, tmp_path / "T-101.json") == claim
+
+    model = load_module("model")
+    with pytest.raises(model.ProjectError):
+        claims.claim_from_payload({"task_id": "T-101"}, tmp_path / "T-101.json")
 
 
 def test_approval_and_readiness_decisions_are_unit_testable() -> None:

@@ -58,6 +58,28 @@ files such as `project/state.yaml`, `project/tasks/`, `project/board.md`,
 project-owned docs. Copier cannot safely infer that choice from local
 customizations.
 
+## Parallel Multi-Agent Upgrade
+
+Managed projects gained task-scoped worktrees and local claims. After updating:
+
+- `project/state.yaml` no longer needs a `work` section. A legacy
+  `work.active_task`/`work.blocked` block is still read without error and is
+  simply ignored, so no migration is required, but you can delete it.
+- Committed dashboards (`README.md`, `project/index.md`, `project/board.md`) now
+  hold project-global rows only, and task status, approvals, blockers, the board,
+  and local worktree claims are rendered by `make project-status`. Run
+  `make sync-project-docs` once after the update and commit the result; task
+  transitions no longer rewrite those files.
+- Task status may now be `in-progress` for several independent tasks at once.
+  Claim and worktree paths are local runtime state and must never be committed.
+- New Make targets (`agent-worktree`, `agent-worktrees`,
+  `agent-worktree-remove`, `agent-claim-release`, `project-available`) come from
+  the updated `Makefile`. Keep local `Makefile` customizations outside the
+  generated managed block.
+
+Worktree claims are local to one repository. Agents on separate machines share no
+claims yet, so coordinate their task split by hand.
+
 `workflow_mode` is also explicit on upgrade. If omitted, the new default is
 `local`. Select `workflow_mode=pr` to preserve the previous strict
 branch/commit/push/ready-PR instructions.

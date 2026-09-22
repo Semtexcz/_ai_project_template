@@ -8,16 +8,21 @@ Module ownership (lowest layer first):
     Simple YAML codec, state/task loading, generated-block text, file writes.
 ``git``
     Read-only Git provenance for PR-mode completion.
+``worktrees``
+    Git worktree and branch mechanics for task-scoped parallel work.
+``claims``
+    Local task claims, worktree ownership resolution, claim inspection.
 ``lifecycle``
-    Effective status, readiness, dependencies, transition and approval policy.
+    Effective status, readiness, dependencies, available tasks, transition and
+    approval policy.
 ``rendering``
-    Persisted versus runtime status/board/index derivation.
+    Persisted versus runtime status/board/index/worktree derivation.
 ``docs``
     Documentation validation.
 ``validation``
     Project/task validation composition.
 ``mutations``
-    Explicit multi-file mutation and synchronization boundary.
+    Explicit mutation and synchronization boundary.
 ``commands``
     Public command implementations used by the CLI.
 

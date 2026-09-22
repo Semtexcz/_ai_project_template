@@ -22,7 +22,7 @@ from project_tool.model import (
     GITHUB_MERGE_LEVELS,
     ROOT,
     Task,
-    find_active,
+    active_tasks,
     is_github_pr_mode,
     relative,
     task_by_id,
@@ -40,30 +40,38 @@ COLUMNS = [
 ]
 INDEX_LINKS = "\n\nLinks: [Board](board.md) | [Roadmap](roadmap.md)"
 
-# Status rows whose truth depends on Git provenance when the project runs
-# `workflow_mode: pr`. They are rendered at read time by `make project-status`
-# and must never be committed: merge-derived completion cannot be known before
-# the human merge lands, so persisting it would make committed Markdown stale by
-# definition.
-GIT_RELATIVE_STATUS_ROWS = (
-    "Last completed task",
-    "Waiting",
-    "Recommended next action",
-    "Next action command",
-)
-PERSISTED_BLOCK_ROWS = {
+# Committed Markdown may contain only project-global facts (profile, phase,
+# milestone, gate). Every other status row - and every board column - is a
+# function of task state, which is task-local and changes on each transition.
+# Committing that would make parallel task branches rewrite the same shared
+# Markdown and conflict on merge, so task-derived status is rendered at read time
+# by `make project-status` in every workflow mode.
+PERSISTED_STATUS_ROWS = (
     "Project type",
     "Runtime level",
     "Phase",
     "Milestone",
+    "Next gate",
+)
+PERSISTED_INDEX_ROWS = (
+    "Project",
+    "Phase",
+    "Milestone",
+    "Next gate",
+)
+TASK_DERIVED_STATUS_ROWS = (
+    "Last completed task",
     "Active task",
     "Approval",
+    "Waiting",
     "Blocker",
-    "Next gate",
-}
-PR_BOARD_SNAPSHOT_NOTE = (
-    "_Persisted task records by status. Merge-derived completion is not persisted; "
-    "run `make project-status` for the live merge-aware board._"
+    "Recommended next action",
+    "Next action command",
+)
+PERSISTED_BOARD_NOTE = (
+    "_Task status, approvals, blockers, worktree claims, and merge-derived "
+    "completion are rendered at read time. Run `make project-status` for the live "
+    "board and for local worktree claims._"
 )
 
 
@@ -84,6 +92,29 @@ def approval_text(task: Task | None) -> str:
     if not task:
         return "None"
     return f"{task.approval_level} / {task.approval_status}"
+
+
+def active_task_links(tasks: list[Task], base: Path) -> str:
+    """Render every active task as a link; commit-safe for any task count."""
+    active = active_tasks(tasks)
+    if not active:
+        return "None"
+    return ", ".join(task_link(task, base) for task in active)
+
+
+def active_approval_text(tasks: list[Task]) -> str:
+    """Render the approval summary for the active tasks.
+
+    A single active task keeps the compact ``A1 / pending`` form so committed
+    dashboards stay byte-stable for the common single-agent case; concurrent
+    active tasks are disambiguated by task id.
+    """
+    active = active_tasks(tasks)
+    if not active:
+        return "None"
+    if len(active) == 1:
+        return approval_text(active[0])
+    return ", ".join(f"{task.id} {task.approval_level} / {task.approval_status}" for task in active)
 
 
 def last_completed_task(tasks: list[Task], base: Path, state: dict[str, Any] | None = None) -> str:
@@ -259,16 +290,14 @@ def status_rows(state: dict[str, Any], tasks: list[Task]) -> list[tuple[str, str
     """All status rows, including the Git-relative ones."""
     project = state["project"]
     lifecycle = state["lifecycle"]
-    active = find_active(tasks, state)
-    active_value = task_link(active, ROOT) if active else "None"
     return [
         ("Project type", str(project["type"])),
         ("Runtime level", str(project["runtime_level"])),
         ("Phase", str(lifecycle["phase"])),
         ("Milestone", str(lifecycle["milestone"])),
         ("Last completed task", last_completed_task(tasks, ROOT, state)),
-        ("Active task", active_value),
-        ("Approval", approval_text(active)),
+        ("Active task", active_task_links(tasks, ROOT)),
+        ("Approval", active_approval_text(tasks)),
         ("Waiting", waiting_text(tasks, state)),
         ("Blocker", blocker_text(tasks)),
         ("Next gate", str(lifecycle["next_gate"])),
@@ -277,72 +306,46 @@ def status_rows(state: dict[str, Any], tasks: list[Task]) -> list[tuple[str, str
     ]
 
 
-def persisted_rows(state: dict[str, Any], rows: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Drop Git-relative rows when completion is derived from a GitHub merge."""
-    if not is_github_pr_mode(state):
-        return rows
-    return [(key, value) for key, value in rows if key not in GIT_RELATIVE_STATUS_ROWS]
+def persisted_status_block(state: dict[str, Any]) -> str:
+    """Status rows that are project-global and therefore commit-safe.
+
+    Task-derived rows are never committed in any workflow mode, so a task
+    transition - including a merge-derived completion - never requires a
+    synchronization commit and never conflicts with a parallel branch.
+    """
+    project = state["project"]
+    lifecycle = state["lifecycle"]
+    values = {
+        "Project type": str(project.get("type", "project")),
+        "Runtime level": str(project.get("runtime_level", "")),
+        "Phase": str(lifecycle["phase"]),
+        "Milestone": str(lifecycle["milestone"]),
+        "Next gate": str(lifecycle["next_gate"]),
+    }
+    return markdown_table([(row, values[row]) for row in PERSISTED_STATUS_ROWS])
+
+
+def persisted_board_block(state: dict[str, Any] | None = None) -> str:
+    """Commit-safe board block: a pointer to the live runtime board."""
+    return PERSISTED_BOARD_NOTE
+
+
+def project_index_block(state: dict[str, Any]) -> str:
+    """Persisted project index rows; commit-safe in every workflow mode."""
+    project = state["project"]
+    lifecycle = state["lifecycle"]
+    values = {
+        "Project": str(project.get("name", project.get("type", "project"))),
+        "Phase": str(lifecycle["phase"]),
+        "Milestone": str(lifecycle["milestone"]),
+        "Next gate": str(lifecycle["next_gate"]),
+    }
+    return markdown_table([(row, values[row]) for row in PERSISTED_INDEX_ROWS]) + INDEX_LINKS
 
 
 def runtime_status_block(state: dict[str, Any], tasks: list[Task]) -> str:
     """Merge-aware status table rendered at read time by `make project-status`."""
     return markdown_table(status_rows(state, tasks))
-
-
-def persisted_status_block(state: dict[str, Any], tasks: list[Task]) -> str:
-    """Status rows that are deterministic functions of the canonical records.
-
-    In `workflow_mode: pr` the Git-relative rows are omitted, so committed
-    Markdown never encodes a lifecycle result that only the human merge decides
-    and never needs a post-merge reconciliation commit.
-    """
-    return markdown_table(persisted_rows(state, status_rows(state, tasks)))
-
-
-def project_index_block(state: dict[str, Any], tasks: list[Task]) -> str:
-    """Persisted project index rows; commit-safe in every workflow mode."""
-    project = state["project"]
-    lifecycle = state["lifecycle"]
-    active = find_active(tasks, state)
-    blocker = active.blocked_reason if active and active.blocked_reason else "None"
-    active_value = task_link(active, ROOT / "project") if active else "None"
-    rows = [
-        ("Project", str(project.get("name", project.get("type", "project")))),
-        ("Phase", str(lifecycle["phase"])),
-        ("Milestone", str(lifecycle["milestone"])),
-        ("Next gate", str(lifecycle["next_gate"])),
-        ("Active task", active_value),
-        ("Approval", approval_text(active)),
-        ("Blocker", blocker),
-        ("Recommended next action", recommended_next_action(state, tasks)),
-    ]
-    return markdown_table(persisted_rows(state, rows)) + INDEX_LINKS
-
-
-def persisted_board_block(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
-    """Commit-safe Kanban block built only from persisted task records.
-
-    In `workflow_mode: pr` the columns follow persisted statuses and the block
-    points at the merge-aware runtime board, because a merged review record
-    cannot be committed as Done before the merge exists.
-    """
-    pr_mode = state is not None and is_github_pr_mode(state)
-    lines: list[str] = []
-    if pr_mode:
-        lines.extend([PR_BOARD_SNAPSHOT_NOTE, ""])
-    for title, status in COLUMNS:
-        lines.extend([f"## {title}", ""])
-        matching = sorted(
-            (task for task in tasks if task.status == status),
-            key=task_sort_key,
-        )
-        if matching:
-            for task in matching:
-                lines.append(f"- {board_task_line(task, state=None)}")
-        else:
-            lines.append("_None_")
-        lines.append("")
-    return "\n".join(lines).rstrip()
 
 
 def runtime_board_block(tasks: list[Task], state: dict[str, Any] | None = None) -> str:
@@ -381,6 +384,30 @@ def board_task_line(
     else:
         suffix = ""
     return f"[{task.id}]({rel}) - P{task.priority} - {task.title}{suffix}"
+
+
+def runtime_available_block(tasks: list[Task]) -> str:
+    """Render every task that can start now.
+
+    Deterministic discovery for humans and for a future scheduler that should
+    call :func:`project_tool.lifecycle.available_tasks` instead of scraping text.
+    """
+    if not tasks:
+        return "Available tasks: none."
+    lines = ["Available tasks:"]
+    lines.extend(f"- {task.id} - {task.title}" for task in tasks)
+    return "\n".join(lines)
+
+
+def runtime_worktree_table(rows: list[tuple[str, str, str, str]]) -> str:
+    """Render the live local worktree/claim table for `make project-status`.
+
+    Worktree paths and claims are local runtime state, so this table is never
+    persisted into committed Markdown.
+    """
+    lines = ["| Task | Branch | Worktree | State |", "|---|---|---|---|"]
+    lines.extend("| " + " | ".join(row) + " |" for row in rows)
+    return "\n".join(lines)
 
 
 def print_errors(errors: list[str]) -> None:
