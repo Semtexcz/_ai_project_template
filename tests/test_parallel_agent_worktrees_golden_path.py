@@ -42,8 +42,17 @@ def run(
     return result
 
 
+GIT_IDENTITY = [
+    "-c",
+    "user.name=Test Human",
+    "-c",
+    "user.email=human@example.com",
+]
+
+
 def git(command: list[str], cwd: Path) -> str:
-    return run(["git", *command], cwd).stdout
+    """Run Git with an explicit identity, so CI without user config still works."""
+    return run(["git", *GIT_IDENTITY, *command], cwd).stdout
 
 
 def parse_json(stdout: str) -> dict[str, object]:
@@ -256,10 +265,6 @@ def test_two_agents_work_independent_tasks_in_isolated_worktrees(tmp_path: Path)
     git(["add", "-A"], worktree_a)
     git(
         [
-            "-c",
-            "user.name=Test Agent",
-            "-c",
-            "user.email=agent@example.com",
             "commit",
             "-q",
             "-m",
@@ -272,7 +277,7 @@ def test_two_agents_work_independent_tasks_in_isolated_worktrees(tmp_path: Path)
     assert "status: ready" in (root / "project" / "tasks" / "T-002-parallel.md").read_text()
 
     # Merging T-002 must leave T-003's worktree valid and usable.
-    run(["git", "merge", "--no-ff", "-q", "-m", "merge T-002", branch_a], root)
+    git(["merge", "--no-ff", "-q", "-m", "merge T-002", branch_a], root)
     assert "status: review" in (root / "project" / "tasks" / "T-002-parallel.md").read_text()
     run(["make", "validate-project"], worktree_b, env=env)
     assert "Owned task: T-003" in run(["make", "agent-status"], worktree_b, env=env).stdout
@@ -282,7 +287,7 @@ def test_two_agents_work_independent_tasks_in_isolated_worktrees(tmp_path: Path)
 
     # Updating the surviving worktree uses normal Git and stays conflict-free,
     # because no committed shared file encoded task status.
-    run(["git", "merge", "-q", "-m", "update from main", "main"], worktree_b)
+    git(["merge", "-q", "-m", "update from main", "main"], worktree_b)
     run(["make", "validate-project"], worktree_b, env=env)
     assert "status: review" in (worktree_b / "project" / "tasks" / "T-002-parallel.md").read_text()
     assert "status: review" in (worktree_b / "project" / "tasks" / "T-003-parallel.md").read_text()

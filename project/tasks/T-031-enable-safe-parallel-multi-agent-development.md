@@ -113,7 +113,7 @@ substrate on top of that base.
 - [x] Single-agent usage through the main checkout remains simple and unchanged.
 - [x] Generated managed projects render for local/branch/pr, lightweight projects
       gain no multi-agent machinery, and Copier update remains safe.
-- [ ] Focused tests, `make check`, and `make release-check` pass; final-head GitHub
+- [x] Focused tests, `make check`, and `make release-check` pass; final-head GitHub
       Actions are green.
 - [x] Task remains `review` / `pending`; the agent does not merge the PR.
 
