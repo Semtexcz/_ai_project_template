@@ -68,6 +68,31 @@ def test_lifecycle_tool_change_routes_to_lifecycle_neighborhood() -> None:
     assert checks == ["make validate-project", "make test-lifecycle"]
 
 
+def test_project_tool_package_change_routes_to_focused_seams() -> None:
+    agent = load_agent_tool()
+    # A governance change now has a fast module-seam neighborhood plus the
+    # canonical lifecycle/static proof instead of the whole fast gate.
+    for changed in [
+        "template/tools/project_tool/rendering.py",
+        "template/tools/project_tool/lifecycle.py",
+        "template/tools/project_tool/docs.py",
+        "template/tools/project_tool/git.py",
+        "template/tools/project_tool/mutations.py",
+    ]:
+        checks = agent.recommended_checks(root_config(), [changed])
+        assert checks == [
+            "uv run pytest tests/test_project_tool_modules.py",
+            "make validate-project",
+            "make test-lifecycle",
+        ], changed
+
+
+def test_project_tool_seam_test_change_runs_exactly_that_file() -> None:
+    agent = load_agent_tool()
+    checks = agent.recommended_checks(root_config(), ["tests/test_project_tool_modules.py"])
+    assert checks == ["uv run pytest tests/test_project_tool_modules.py"]
+
+
 def test_canonical_agent_layer_change_routes_to_drift_and_skills_validation() -> None:
     agent = load_agent_tool()
     checks = agent.recommended_checks(

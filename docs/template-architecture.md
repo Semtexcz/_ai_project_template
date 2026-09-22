@@ -45,8 +45,9 @@ It has a single project state source:
   blocked flag.
 - `project/tasks/*.md` stores task state, dependencies, approval level, and
   completion evidence.
-- `tools/project.py` validates state and synchronizes the deterministic parts of
-  the generated dashboard blocks in README, project index, and board.
+- `tools/project.py` (a thin CLI over `tools/project_tool/`) validates state and
+  synchronizes the deterministic parts of the generated dashboard blocks in
+  README, project index, and board.
 
 No separate task database or board source is introduced. The markdown files are
 the project record; generated dashboard blocks are derived from them.

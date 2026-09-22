@@ -80,7 +80,8 @@ Managed governance additionally includes:
   and `make project-status` renders the live merge-aware status
 - `project/state.yaml`, `project/index.md`, `project/board.md`, `project/roadmap.md`
 - `project/tasks/T-001-initialize-project.md`
-- `tools/project.py` plus Make targets for status, sync, validation, and task transitions
+- `tools/project.py` plus its `tools/project_tool/` package and Make targets for
+  status, sync, validation, and task transitions
 - `.agents/managed/skills/` lifecycle skills and managed hooks
 
 ## Profile-Specific Documentation

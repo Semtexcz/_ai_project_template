@@ -74,7 +74,7 @@ Concept -> canonical source -> derived output -> focused proof:
 | Concept | Canonical source | Derived/mirrored | Focused proof |
 |---|---|---|---|
 | Agent workflow | `.agents/` skills, `AGENTS.md` | `template/.agents/`, `template/.codex/` | `make validate-agent-skills`, `make validate-agent-layer`, `make test-agent`, `make test-workflow` |
-| Project lifecycle | `template/tools/project.py`, `template/project/*.jinja` | generated `project/` state; committed dashboards are deterministic persisted views and merge-derived status is runtime-only | `make validate-project`, `make test-lifecycle` |
+| Project lifecycle | `template/tools/project.py`, `template/tools/project_tool/`, `template/project/*.jinja` | generated `project/` state; committed dashboards are deterministic persisted views and merge-derived status is runtime-only | `make validate-project`, `make test-lifecycle`, `uv run pytest tests/test_project_tool_modules.py` |
 | Frontend scaffold | `template/frontend/**` | generated `frontend/` | `make test-frontend` |
 | Backend scaffold | `template/backend/**` | generated `backend/` | `make test-backend` |
 | Python skeleton | `template/src/**`, `template/tests/**` | generated `src/`, `tests/` | `make test-python-profiles` |
@@ -84,6 +84,33 @@ The same routing lives machine-readably in `.agents/context-map.yaml`
 (`change_patterns` and `checks`); keep that map authoritative when changing a
 surface. Root `.agents/context-map.yaml` is not mirrored because generated
 projects need their own profile-based map.
+
+### Project-Governance Ownership
+
+`template/tools/project.py` is a thin CLI: parser, dispatch, error handling, and
+the compatibility exports that the generated agent tool loads by path.
+Governance behavior lives in `template/tools/project_tool/`, so a localized
+change has one owner, a small neighborhood, and focused checks:
+
+| Responsibility | Owner |
+|---|---|
+| Root layout, task records, status/workflow vocabulary | `project_tool/model.py` |
+| YAML codec, state/task loading, generated blocks, file writes | `project_tool/storage.py` |
+| Git merge provenance | `project_tool/git.py` |
+| Effective status, readiness, dependencies, transition/approval rules | `project_tool/lifecycle.py` |
+| Persisted versus runtime dashboard derivation | `project_tool/rendering.py` |
+| Project and task validation | `project_tool/validation.py` |
+| Documentation validation | `project_tool/docs.py` |
+| Explicit multi-file mutation and synchronization boundary | `project_tool/mutations.py` |
+| Public command implementations | `project_tool/commands.py` |
+| CLI parser, dispatch, compatibility exports | `project.py` |
+
+Imports stay one-directional (`model` -> `storage`/`git` -> `lifecycle` ->
+`rendering` -> `docs`/`validation` -> `mutations` -> `commands` -> CLI), no
+module below the CLI parses arguments, and only `mutations.py` writes control
+files. `tests/test_project_tool_modules.py` enforces the layout, the absence of
+cycles, the thin-CLI budget, and the persisted/runtime split; the merge-provenance
+and lifecycle end-to-end behavior stays in `make test-lifecycle`.
 
 Mirroring is deliberately limited to the agent layer. Other root/template pairs
 (`AGENTS.md` vs `template/AGENTS.md.jinja`, root docs vs `template/docs/*.jinja`,

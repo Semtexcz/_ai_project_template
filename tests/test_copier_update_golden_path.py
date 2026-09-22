@@ -213,13 +213,18 @@ def customize_project(project: Path, env: Mapping[str, str]) -> dict[str, str]:
 
 
 def create_template_v2(template_repo: Path, env: Mapping[str, str]) -> str:
-    project_tool = template_repo / "template" / "tools" / "project.py"
-    project_tool.write_text(
-        project_tool.read_text().replace(
-            "STATE_PATH = ROOT / \"project\" / \"state.yaml\"\n",
-            "STATE_PATH = ROOT / \"project\" / \"state.yaml\"\n"
-            "TEMPLATE_TOOLING_REVISION = \"v1.1.0-test\"\n",
+    project_cli = template_repo / "template" / "tools" / "project.py"
+    project_cli.write_text(
+        project_cli.read_text().replace(
+            "TRANSITION_COMMANDS = [",
+            'TEMPLATE_TOOLING_REVISION = "v1.1.0-test"\n\n\nTRANSITION_COMMANDS = [',
         )
+    )
+    # Template-owned governance code now spans the project_tool package, so an
+    # update must also deliver a changed package module to existing projects.
+    package_model = template_repo / "template" / "tools" / "project_tool" / "model.py"
+    package_model.write_text(
+        package_model.read_text() + '\n\nTEMPLATE_PACKAGE_REVISION = "v1.1.0-test-package"\n'
     )
     (template_repo / "template" / "tools" / "template_update_marker.py").write_text(
         "\n".join(
@@ -372,6 +377,9 @@ def assert_updated_project(project: Path, template_repo: Path, kept: dict[str, s
     ).read_text()
 
     assert "TEMPLATE_TOOLING_REVISION = \"v1.1.0-test\"" in (project / "tools" / "project.py").read_text()
+    assert "TEMPLATE_PACKAGE_REVISION = \"v1.1.0-test-package\"" in (
+        project / "tools" / "project_tool" / "model.py"
+    ).read_text()
     assert "v1.1.0-test-new-file" in (project / "tools" / "template_update_marker.py").read_text()
     assert (project / ".template-version").read_text().strip() == "v1.1.0"
 
