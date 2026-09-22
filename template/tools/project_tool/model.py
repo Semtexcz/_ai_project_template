@@ -128,7 +128,11 @@ def task_sort_key(task: Task) -> tuple[int, int, str]:
     return (task.priority, number, task.title)
 
 
-def find_active(tasks: list[Task], state: dict[str, Any]) -> Task | None:
-    """Return the task referenced by ``work.active_task``, when it exists."""
-    active = nonempty(state.get("work", {}).get("active_task"))
-    return task_by_id(tasks).get(active) if active else None
+def active_tasks(tasks: list[Task]) -> list[Task]:
+    """Return every task whose persisted status is ``in-progress``.
+
+    Active work is task-local, not project-global: several independent tasks may
+    be in progress at once, and concurrency is bounded by Git worktree claims
+    (``project_tool.claims``) rather than by shared mutable ownership state.
+    """
+    return sorted((task for task in tasks if task.status == "in-progress"), key=task_sort_key)

@@ -7,6 +7,7 @@ module validates the managed lifecycle records and their persisted views.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 from project_tool.docs import validate_docs, validate_markdown_links
@@ -56,6 +57,7 @@ from project_tool.storage import (
     normalize_block,
     read_state,
 )
+from project_tool.worktrees import WorktreeEntry, task_id_from_branch
 
 
 def validate_all(*, check_drift: bool = True) -> list[str]:
@@ -68,10 +70,9 @@ def validate_all(*, check_drift: bool = True) -> list[str]:
         return [str(exc)]
     tasks_by = task_by_id(tasks)
 
-    errors.extend(validate_state_schema(state, tasks_by))
+    errors.extend(validate_state_schema(state))
     errors.extend(validate_tasks(tasks, state))
     errors.extend(validate_task_graph(tasks, tasks_by, state))
-    errors.extend(validate_active_task(state, tasks, tasks_by))
     if check_drift:
         errors.extend(validate_drift(state, tasks))
     errors.extend(validate_markdown_links())
@@ -83,28 +84,30 @@ def validate_candidate(state: dict[str, Any], tasks: list[Task]) -> list[str]:
     """Validate a candidate state/task set before it is persisted."""
     errors: list[str] = []
     tasks_by = task_by_id(tasks)
-    errors.extend(validate_state_schema(state, tasks_by))
+    errors.extend(validate_state_schema(state))
     errors.extend(validate_tasks(tasks, state))
     errors.extend(validate_task_graph(tasks, tasks_by, state))
-    errors.extend(validate_active_task(state, tasks, tasks_by))
     errors.extend(validate_markdown_links())
     errors.extend(validate_docs(state, tasks, check_drift=False))
     return errors
 
 
-def validate_state_schema(state: dict[str, Any], tasks_by: dict[str, Task]) -> list[str]:
-    """Validate the ``project/state.yaml`` schema and cross-references."""
+def validate_state_schema(state: dict[str, Any]) -> list[str]:
+    """Validate the ``project/state.yaml`` schema.
+
+    State is project-global only: task ownership is never persisted here, so a
+    task transition cannot conflict with a parallel branch by rewriting a shared
+    ``active_task`` field. A legacy ``work`` section is tolerated and ignored.
+    """
     errors: list[str] = []
     if state.get("schema_version") != 1:
         errors.append("project/state.yaml schema_version must be 1. Fix schema_version.")
     project = state.get("project")
     lifecycle = state.get("lifecycle")
-    work = state.get("work")
     template = state.get("template")
     for key, section in [
         ("project", project),
         ("lifecycle", lifecycle),
-        ("work", work),
         ("template", template),
     ]:
         if not isinstance(section, dict):
@@ -115,7 +118,6 @@ def validate_state_schema(state: dict[str, Any], tasks_by: dict[str, Task]) -> l
     # this validator precisely typed instead of ``Unknown``-typed.
     project = cast("dict[str, Any]", project)
     lifecycle = cast("dict[str, Any]", lifecycle)
-    work = cast("dict[str, Any]", work)
     template = cast("dict[str, Any]", template)
     if project.get("type") not in PROJECT_TYPES:
         errors.append(
@@ -139,15 +141,6 @@ def validate_state_schema(state: dict[str, Any], tasks_by: dict[str, Task]) -> l
             errors.append("Active project requires lifecycle.milestone. Set the current milestone.")
         if not nonempty(lifecycle.get("next_gate")):
             errors.append("Active project requires lifecycle.next_gate. Set the next gate.")
-    active = nonempty(work.get("active_task"))
-    if active and not TASK_ID_RE.match(active):
-        errors.append(
-            f"work.active_task '{active}' is invalid. Use format T-001 or leave it empty."
-        )
-    if active and active not in tasks_by:
-        errors.append(
-            f"work.active_task '{active}' does not exist. Create the task or clear active_task."
-        )
     if not nonempty(template.get("version")):
         errors.append("template.version is required. Set the template version.")
     return errors
@@ -342,39 +335,69 @@ def validate_task_graph(
     return errors
 
 
-def validate_active_task(
-    state: dict[str, Any], tasks: list[Task], tasks_by: dict[str, Task]
+def validate_active_claims(
+    tasks: list[Task],
+    claims: list[dict[str, Any]],
+    *,
+    worktrees: list[WorktreeEntry] | None = None,
 ) -> list[str]:
-    """Validate the single-active-task invariant and blocker flag consistency."""
+    """Validate locally observed worktree claims against task and worktree facts.
+
+    Claims are local Git/worktree facts, not persisted state. ``worktrees`` is
+    optional so this pure validator remains independently testable; runtime
+    callers may supply registered entries for stronger branch/path association.
+    """
     errors: list[str] = []
-    active = nonempty(state.get("work", {}).get("active_task"))
-    in_progress = [task for task in tasks if task.status == "in-progress"]
-    blocked_flag = bool(state.get("work", {}).get("blocked"))
-    any_blocked = any(task.status == "blocked" for task in tasks)
-    if len(in_progress) > 1:
-        errors.append(
-            "More than one task is in-progress. Finish, review, block, or cancel one task."
-        )
-    if len(in_progress) == 1 and active != in_progress[0].id:
-        errors.append(
-            f"work.active_task must be {in_progress[0].id}. "
-            "Run the controlled task transition or update state consistently."
-        )
-    if not in_progress and active:
-        errors.append(
-            "work.active_task is set but no task is in-progress. "
-            "Clear work.active_task or start the task through make task-start."
-        )
-    if active and active in tasks_by and tasks_by[active].status == "blocked":
-        errors.append(
-            f"Active task {active} is blocked. "
-            "Active task cannot be blocked; unblock it or clear active_task."
-        )
-    if blocked_flag != any_blocked:
-        errors.append(
-            "work.blocked does not match blocked tasks. "
-            "Run: make sync-project-docs after fixing blocker state."
-        )
+    tasks_by = task_by_id(tasks)
+    by_task: dict[str, list[dict[str, Any]]] = {}
+    by_worktree: dict[str, list[str]] = {}
+    registered = {(entry.branch, str(Path(entry.path).resolve())) for entry in worktrees or []}
+    for claim in claims:
+        raw_task_id = claim.get("task_id")
+        task_id = str(raw_task_id or "").strip()
+        raw_branch = claim.get("branch")
+        branch = str(raw_branch or "").strip()
+        raw_worktree = claim.get("worktree")
+        worktree = str(raw_worktree or "").strip()
+        if not task_id:
+            errors.append("Claim has an empty task_id. Release the malformed claim.")
+            continue
+        by_task.setdefault(task_id, []).append(claim)
+        if not branch:
+            errors.append(f"Claim for {task_id} has an empty branch. Release the malformed claim.")
+        elif task_id_from_branch(branch) != task_id:
+            errors.append(
+                f"Claim for {task_id} has branch {branch}, which does not name {task_id}. "
+                "Release or repair the inconsistent claim."
+            )
+        if not worktree:
+            errors.append(
+                f"Claim for {task_id} has an empty worktree path. Release the malformed claim."
+            )
+        else:
+            resolved_worktree = str(Path(worktree).resolve())
+            by_worktree.setdefault(resolved_worktree, []).append(task_id)
+            if worktrees is not None and (branch, resolved_worktree) not in registered:
+                errors.append(
+                    f"Claim for {task_id} is not registered at {resolved_worktree} on branch "
+                    f"{branch}. Inspect or release the inconsistent claim."
+                )
+        task = tasks_by.get(task_id)
+        if task is None:
+            errors.append(f"Claim for {task_id} has no task record. Release the stale claim.")
+        elif task.status == "cancelled":
+            errors.append(f"Claim for {task_id} outlives a cancelled task. Release the claim.")
+    for task_id, matching in sorted(by_task.items()):
+        if len(matching) > 1:
+            errors.append(
+                f"{task_id} has {len(matching)} claims. One task owns exactly one worktree."
+            )
+    for worktree, task_ids in sorted(by_worktree.items()):
+        if len(set(task_ids)) > 1:
+            errors.append(
+                f"Worktree {worktree} claims multiple tasks "
+                f"({', '.join(sorted(set(task_ids)))}). One worktree owns at most one task."
+            )
     return errors
 
 
@@ -385,16 +408,16 @@ def validate_drift(state: dict[str, Any], tasks: list[Task]) -> list[str]:
     # persisted, so drift here always means real drift. Git-relative status is
     # rendered at read time by `make project-status` and is never committed.
     expected = {
-        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state, tasks)),
+        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state)),
         ROOT / "project" / "index.md": (
             INDEX_START,
             INDEX_END,
-            project_index_block(state, tasks),
+            project_index_block(state),
         ),
         ROOT / "project" / "board.md": (
             KANBAN_START,
             KANBAN_END,
-            persisted_board_block(tasks, state),
+            persisted_board_block(state),
         ),
     }
     for path, (start, end, content) in expected.items():

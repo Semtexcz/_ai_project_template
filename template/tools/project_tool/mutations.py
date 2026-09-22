@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from project_tool.model import ROOT, STATE_PATH, ProjectError, Task, relative
+from project_tool.model import ROOT, ProjectError, relative
 from project_tool.rendering import (
     persisted_board_block,
     persisted_status_block,
@@ -26,9 +26,7 @@ from project_tool.storage import (
     KANBAN_START,
     STATE_END,
     STATE_START,
-    dump_simple_yaml,
     dump_task_text,
-    load_tasks,
     load_tasks_with_overrides,
     normalize_task_data,
     read_state,
@@ -84,21 +82,25 @@ def commit_files_atomically(files: dict[Path, str]) -> None:
     assert_no_tmp_files(paths)
 
 
-def rendered_dashboard_texts(state: dict[str, Any], tasks: list[Task]) -> dict[Path, str]:
-    """Committed Markdown blocks: deterministic content only."""
+def rendered_dashboard_texts(state: dict[str, Any]) -> dict[Path, str]:
+    """Committed Markdown blocks: project-global content only.
+
+    These blocks are functions of ``project/state.yaml`` alone, so a task
+    transition never rewrites a shared committed file.
+    """
     if os.environ.get("PROJECT_TOOL_FAIL_RENDER") == "1":
         raise ProjectError("Injected dashboard rendering failure.")
     replacements = {
-        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state, tasks)),
+        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state)),
         ROOT / "project" / "index.md": (
             INDEX_START,
             INDEX_END,
-            project_index_block(state, tasks),
+            project_index_block(state),
         ),
         ROOT / "project" / "board.md": (
             KANBAN_START,
             KANBAN_END,
-            persisted_board_block(tasks, state),
+            persisted_board_block(state),
         ),
     }
     rendered: dict[Path, str] = {}
@@ -110,18 +112,18 @@ def rendered_dashboard_texts(state: dict[str, Any], tasks: list[Task]) -> dict[P
 
 
 def sync() -> None:
-    """Refresh committed Markdown with deterministic content only.
+    """Refresh committed Markdown with project-global content only.
 
-    In `workflow_mode: pr` this intentionally does not write merge-derived status,
-    so a merged pull request never requires a synchronization commit.
+    Committed blocks hold no task status in any workflow mode, so a task
+    transition - and a merge-derived completion - never requires a
+    synchronization commit.
     """
     state = read_state()
-    tasks = load_tasks()
     errors = validate_all(check_drift=False)
     if errors:
         print_errors(errors)
         raise SystemExit(1)
-    for path, updated in rendered_dashboard_texts(state, tasks).items():
+    for path, updated in rendered_dashboard_texts(state).items():
         write_if_changed(path, updated)
     print("Project docs synchronized.")
 
@@ -129,9 +131,13 @@ def sync() -> None:
 def transactional_task_mutation(
     task_id: str,
     task_updates: dict[str, Any],
-    state: dict[str, Any],
 ) -> None:
-    """Apply task/state updates plus the persisted dashboards transactionally."""
+    """Apply task updates atomically.
+
+    Only the task record changes. Project-global state and the committed
+    dashboards depend on task state in no way, so a transition never rewrites a
+    shared file and cannot conflict with a parallel branch.
+    """
     path = task_path(task_id)
     data, body = split_frontmatter(path)
     data.update(task_updates)
@@ -149,18 +155,13 @@ def transactional_task_mutation(
             )
             for task in candidate_tasks
         ]
+    state = read_state()
     errors = validate_candidate(state, candidate_tasks)
     if errors:
         print_errors(errors)
         raise SystemExit(1)
-    rendered = rendered_dashboard_texts(state, candidate_tasks)
-    files = {
-        path: task_text,
-        STATE_PATH: dump_simple_yaml(state),
-        **rendered,
-    }
     try:
-        commit_files_atomically(files)
+        commit_files_atomically({path: task_text})
     except ProjectError as exc:
         print_errors([str(exc)])
         raise SystemExit(1) from exc

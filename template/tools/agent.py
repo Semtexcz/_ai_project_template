@@ -668,15 +668,34 @@ def fail_if_errors(errors: list[str]) -> None:
         raise SystemExit(1)
 
 
+def owned_task_id() -> str | None:
+    """Derive the task this checkout owns from its branch and local claim.
+
+    Returns ``None`` when the checkout legitimately owns nothing (control
+    checkout, no Git repository, detached HEAD, or a branch without a task id),
+    so single-agent usage in the main checkout keeps working. Inconsistent
+    branch/claim/worktree state fails loudly instead of being guessed.
+    """
+    owner = require_project_module().resolve_owner()
+    if owner.errors:
+        raise AgentError(" ".join(owner.errors))
+    return owner.task_id
+
+
 def get_task(task_id: str | None) -> Any:
     managed_project = require_project_module()
     tasks = managed_project.load_tasks()
     tasks_by = managed_project.task_by_id(tasks)
-    selected = task_id or managed_project.nonempty(
-        managed_project.read_state().get("work", {}).get("active_task")
-    )
+    if task_id is not None:
+        conflicts = managed_project.ownership_errors(task_id)
+        if conflicts:
+            raise AgentError(" ".join(conflicts))
+    selected = task_id or owned_task_id()
     if not selected:
-        raise AgentError("No task selected and no active task exists. Pass TASK=<id>.")
+        raise AgentError(
+            "No task selected and this checkout owns no task. Pass TASK=<id>, or create an "
+            "isolated worktree with: make agent-worktree TASK=<id>"
+        )
     task = tasks_by.get(selected)
     if task is None:
         raise AgentError(f"Task {selected} does not exist.")
@@ -1283,6 +1302,12 @@ def select_budgeted(
 
 
 def agent_status() -> str:
+    """Report the live project view plus this checkout's worktree ownership.
+
+    Inside a task worktree this answers the four questions an agent needs
+    without being told anything: which task do I own, which branch am I on, is
+    this worktree valid, and which context should I load.
+    """
     managed_project = require_project_module()
     state = managed_project.read_state()
     tasks = managed_project.load_tasks()
@@ -1295,20 +1320,37 @@ def agent_status() -> str:
                 "Next action: make validate-project",
             ]
         )
-    active = managed_project.find_active(tasks, state)
+    owner = managed_project.resolve_owner()
     next_action = managed_project.recommended_next_action(state, tasks)
+    owned = managed_project.task_by_id(tasks).get(owner.task_id) if owner.task_id else None
+    active = [task.id for task in managed_project.active_tasks(tasks)]
+    available = [task.id for task in managed_project.available_tasks(tasks, state)]
     lines = [
         f"Project: {state['project'].get('name', state['project'].get('type'))}",
         f"Phase: {state['lifecycle']['phase']}",
         f"Milestone: {state['lifecycle']['milestone']}",
-        f"Active task: {active.id + ' - ' + active.title if active else 'None'}",
-        f"Task status: {active.status if active else 'None'}",
-        f"Approval: {active.approval_level + ' ' + active.approval_status if active else 'None'}",
-        f"Blocked: {'yes' if state.get('work', {}).get('blocked') else 'no'}",
+        f"Checkout: {owner.branch or 'detached HEAD'}"
+        + (" (control checkout)" if owner.control_checkout else ""),
+        f"Worktree: {owner.worktree}",
+        f"Owned task: {owned.id + ' - ' + owned.title if owned else 'None'}",
+        f"Task status: {owned.status if owned else 'None'}",
+        f"Approval: {owned.approval_level + ' ' + owned.approval_status if owned else 'None'}",
+        f"Claim: {'yes' if owner.claim else 'none'}",
+        f"Active tasks: {', '.join(active) if active else 'None'}",
+        f"Available tasks: {', '.join(available) if available else 'None'}",
+        f"Blocked: {'yes' if any(task.status == 'blocked' for task in tasks) else 'no'}",
         f"Next action: {next_action}",
     ]
-    if active:
-        lines.append(f"Context: make agent-context TASK={active.id}")
+    for error in owner.errors:
+        lines.append(f"ERROR: {error}")
+    if not owner.valid:
+        lines.append("Next action: fix the worktree/claim state above before editing files.")
+    else:
+        for note in owner.notes:
+            lines.append(f"Note: {note}")
+        target = owner.task_id or (available[0] if available else None)
+        if target:
+            lines.append(f"Context: make agent-context TASK={target}")
     return "\n".join(lines)
 
 
@@ -1342,9 +1384,9 @@ def pre_task(task_id: str) -> None:
         raise AgentError(f"{task.id} cannot start until all dependencies are done.")
     if task.approval_level == "A2" and task.approval_status != "approved":
         raise AgentError(f"Human A2 approval is required for {task.id} before work starts.")
-    active = managed_project.nonempty(state.get("work", {}).get("active_task"))
-    if active and active != task.id:
-        raise AgentError(f"Another task is active: {active}.")
+    conflicts = managed_project.ownership_errors(task.id)
+    if conflicts:
+        raise AgentError(" ".join(conflicts))
     resolve_context(task.id)
     print(f"Task {task.id} is ready for implementation.")
     print(
@@ -1368,13 +1410,9 @@ def diff_safety_errors() -> list[str]:
 def pre_review(task_id: str) -> None:
     managed_project = require_project_module()
     task = get_task(task_id)
-    active = managed_project.nonempty(
-        managed_project.read_state().get("work", {}).get("active_task")
-    )
-    if active != task.id:
-        raise AgentError(
-            f"Pre-review requires active task {task.id}; current active task is {active or 'None'}."
-        )
+    conflicts = managed_project.ownership_errors(task.id)
+    if conflicts:
+        raise AgentError(" ".join(conflicts))
     if task.status != "in-progress":
         raise AgentError(f"{task.id} must be in-progress before review preparation.")
     fail_if_errors(diff_safety_errors())
@@ -1405,8 +1443,11 @@ def post_task(task_id: str) -> None:
         print(sync.output)
         raise SystemExit(1)
     fail_if_errors(managed_project.validate_all(check_drift=True))
-    if managed_project.nonempty(managed_project.read_state().get("work", {}).get("active_task")):
-        raise AgentError("No task may remain active after post-task.")
+    claim = managed_project.inspect_claims()
+    for entry in claim:
+        if entry.task_id == task.id:
+            managed_project.release_claim(task.id)
+            print(f"Local claim for {task.id} released.")
     print(f"Task {task.id} post-task checks passed.")
     next_action = managed_project.recommended_next_action(
         managed_project.read_state(), managed_project.load_tasks()

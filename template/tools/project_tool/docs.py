@@ -11,10 +11,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from project_tool.model import ROOT, ProjectError, Task, is_github_pr_mode, relative
+from project_tool.model import ROOT, ProjectError, Task, relative
 from project_tool.rendering import (
-    GIT_RELATIVE_STATUS_ROWS,
-    PERSISTED_BLOCK_ROWS,
+    PERSISTED_STATUS_ROWS,
+    TASK_DERIVED_STATUS_ROWS,
     persisted_status_block,
 )
 from project_tool.storage import (
@@ -215,44 +215,31 @@ def validate_profile_documentation(state: dict[str, Any]) -> list[str]:
 
 
 def validate_readme_dashboard(state: dict[str, Any], tasks: list[Task]) -> list[str]:
-    """Check that the committed README status block matches the persisted view."""
+    """Check that the committed README status block is the project-global view."""
     errors: list[str] = []
-    pr_mode = is_github_pr_mode(state)
-    expected_rows = set(PERSISTED_BLOCK_ROWS)
-    if not pr_mode:
-        expected_rows.update(GIT_RELATIVE_STATUS_ROWS)
     try:
         dashboard = extract_block(ROOT / "README.md", STATE_START, STATE_END)
     except ProjectError as exc:
         return [str(exc)]
-    for row in sorted(expected_rows):
+    for row in PERSISTED_STATUS_ROWS:
         if f"| {row} |" not in dashboard:
             errors.append(f"README.md dashboard is missing '{row}'. Run: make sync-project-docs")
-    if pr_mode:
-        # Committed status must stay a deterministic function of canonical state.
-        # Merge-derived rows cannot be committed before the human merge lands.
-        for row in GIT_RELATIVE_STATUS_ROWS:
-            if f"| {row} |" in dashboard:
-                errors.append(
-                    f"README.md dashboard must not persist the Git-relative row '{row}' in "
-                    "workflow_mode=pr. Run: make sync-project-docs; live merge-aware status is "
-                    "rendered by make project-status."
-                )
-    else:
-        command_line = next(
-            (line for line in dashboard.splitlines() if line.startswith("| Next action command |")),
-            "",
-        )
-        commands = MAKE_COMMAND_RE.findall(command_line)
-        if len(commands) != 1:
-            errors.append("README.md dashboard must contain exactly one next action make command.")
+    # Committed status may contain only project-global facts. Task-derived rows
+    # change on every transition, so committing them would make parallel task
+    # branches conflict; they are rendered at read time by `make project-status`.
+    for row in TASK_DERIVED_STATUS_ROWS:
+        if f"| {row} |" in dashboard:
+            errors.append(
+                f"README.md dashboard must not persist the task-derived row '{row}'. "
+                "Run: make sync-project-docs; live status is rendered by make project-status."
+            )
     return errors
 
 
 def validate_doc_drift(state: dict[str, Any], tasks: list[Task]) -> list[str]:
     """Check that the README persisted status block is not stale."""
     expected = {
-        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state, tasks)),
+        ROOT / "README.md": (STATE_START, STATE_END, persisted_status_block(state)),
     }
     errors: list[str] = []
     for path, (start, end, content) in expected.items():

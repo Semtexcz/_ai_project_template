@@ -105,6 +105,12 @@ change_patterns:
     files: []
     search_roots:
       - project/
+  "tools/**":
+    files:
+      - project/state.yaml
+    search_roots:
+      - project/
+      - tools/
   ".agents/**":
     files:
       - .agents/README.md
@@ -147,6 +153,9 @@ checks:
     - make validate-docs
   "Makefile":
     - make validate-docs
+    - make validate-agent-skills
+  "tools/**":
+    - make validate-project
     - make validate-agent-skills
   ".agents/**":
     - make validate-agent-skills

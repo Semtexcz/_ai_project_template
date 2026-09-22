@@ -78,13 +78,27 @@ def test_project_tool_package_change_routes_to_focused_seams() -> None:
         "template/tools/project_tool/docs.py",
         "template/tools/project_tool/git.py",
         "template/tools/project_tool/mutations.py",
+        "template/tools/project_tool/worktrees.py",
+        "template/tools/project_tool/claims.py",
     ]:
         checks = agent.recommended_checks(root_config(), [changed])
         assert checks == [
             "uv run pytest tests/test_project_tool_modules.py",
+            "uv run pytest tests/test_project_tool_worktrees.py",
             "make validate-project",
             "make test-lifecycle",
         ], changed
+
+
+def test_parallel_worktree_surfaces_route_to_their_focused_tests() -> None:
+    agent = load_agent_tool()
+    config = root_config()
+    assert agent.recommended_checks(config, ["tests/test_project_tool_worktrees.py"]) == [
+        "uv run pytest tests/test_project_tool_worktrees.py"
+    ]
+    assert agent.recommended_checks(
+        config, ["tests/test_parallel_agent_worktrees_golden_path.py"]
+    ) == ["uv run pytest tests/test_parallel_agent_worktrees_golden_path.py"]
 
 
 def test_project_tool_seam_test_change_runs_exactly_that_file() -> None:

@@ -428,24 +428,25 @@ def test_pr_mode_generated_project_commits_deterministic_status_only(tmp_path: P
         .split("<!-- project-status:start -->", 1)[1]
         .split("<!-- project-status:end -->", 1)[0]
     )
+    # Committed rows are project-global only: no task transition can change them.
+    for row in ["Project type", "Runtime level", "Phase", "Milestone", "Next gate"]:
+        assert f"| {row} |" in block, row
     for row in [
-        "Project type",
-        "Runtime level",
-        "Phase",
-        "Milestone",
+        "Last completed task",
         "Active task",
         "Approval",
+        "Waiting",
         "Blocker",
-        "Next gate",
+        "Recommended next action",
+        "Next action command",
     ]:
-        assert f"| {row} |" in block, row
-    for row in ["Last completed task", "Waiting", "Recommended next action", "Next action command"]:
         assert f"| {row} |" not in block, row
-    assert "Recommended next action" not in (generated / "project" / "index.md").read_text(
-        encoding="utf-8"
-    )
+    index = (generated / "project" / "index.md").read_text(encoding="utf-8")
+    assert "Recommended next action" not in index
+    assert "Active task" not in index
     board = (generated / "project" / "board.md").read_text(encoding="utf-8")
-    assert "Merge-derived completion is not persisted" in board
+    assert "make project-status" in board
+    assert "## Review" not in board
     assert "awaiting human GitHub merge" not in board
 
     def make(target: str) -> str:
@@ -461,9 +462,12 @@ def test_pr_mode_generated_project_commits_deterministic_status_only(tmp_path: P
         return result.stdout
 
     # A freshly rendered project is already consistent: no synchronization step
-    # is required, and synchronizing is a no-op.
+    # is required, and synchronizing is a no-op. Task status is live only.
     make("validate-project")
-    assert "Complete T-001" in make("project-status")
+    status = make("project-status")
+    assert "Complete T-001" in status
+    assert "| Active task | [T-001]" in status
+    assert "## In Progress" in status
     committed = {
         name: (generated / name).read_text(encoding="utf-8")
         for name in ["README.md", "project/index.md", "project/board.md"]
@@ -730,22 +734,23 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     assert "task_merge_completed" in project_cli
     assert "make task-complete is not used for A1/A2 tasks in pr mode" in lifecycle_module
 
-    # Merge-derived status is rendered at read time instead of being committed.
-    assert "GIT_RELATIVE_STATUS_ROWS" in rendering_module
+    # Merge-derived and task-derived status is rendered at read time, never committed.
+    assert "PERSISTED_STATUS_ROWS" in rendering_module
+    assert "TASK_DERIVED_STATUS_ROWS" in rendering_module
     assert "def persisted_status_block" in rendering_module
     assert "def runtime_status_block" in rendering_module
     assert "def persisted_board_block" in rendering_module
     assert "def runtime_board_block" in rendering_module
-    assert "Merge-derived completion is not persisted" in rendering_module
-    assert "must not persist the Git-relative row" in docs_module
+    assert "def runtime_worktree_table" in rendering_module
+    assert "rendered at read time" in rendering_module
+    assert "must not persist the task-derived row" in docs_module
     assert "### Status Ownership" in workflow
-    assert "because a merge result cannot be committed before the merge exists" in workflow
     assert "live merge-derived status comes from `make project-status`" in workflow
-    assert "After a human merge no synchronization commit is required." in readme
+    assert "make project-status" in readme
     assert "Committed dashboards never carry merge-derived status" in agents
     assert "Committed dashboards carry only the deterministic subset" in root_agents
 
-    # This maintainer repository must not persist Git-relative status either.
+    # This maintainer repository must not persist task-derived status either.
     status_block = (
         (ROOT / "README.md")
         .read_text(encoding="utf-8")
@@ -754,7 +759,10 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     )
     for row in [
         "Last completed task",
+        "Active task",
+        "Approval",
         "Waiting",
+        "Blocker",
         "Recommended next action",
         "Next action command",
     ]:
@@ -763,6 +771,29 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
     assert "awaiting human GitHub merge" not in board
     assert "completed by merged Git provenance" not in board
     assert "make project-status" in board
+
+    # Parallel worktrees: the execution substrate is rendered, documented, and
+    # wired through managed Make targets.
+    worktrees_module = (tool_package / "worktrees.py").read_text(encoding="utf-8")
+    claims_module = (tool_package / "claims.py").read_text(encoding="utf-8")
+    assert "def task_branch_name" in worktrees_module
+    assert "def add_worktree" in worktrees_module
+    assert "O_CREAT | os.O_EXCL" in claims_module
+    assert "def resolve_owner" in claims_module
+    assert "def create_task_worktree" in commands_module
+    assert "def remove_task_worktree" in commands_module
+    for target in [
+        "agent-worktree:",
+        "agent-worktrees:",
+        "agent-worktree-remove:",
+        "agent-claim-release:",
+        "project-available:",
+    ]:
+        assert target in makefile, target
+    assert "## Parallel Worktrees" in workflow
+    assert "make agent-worktree TASK=T-002" in workflow
+    assert "PROJECT_WORKTREE_ROOT" in workflow
+    assert "make agent-worktree" in agents
 
     # The pr-mode machinery stays conditional; lightweight defaults are untouched.
     assert '{% if governance == "managed" and workflow_mode == "pr" %}' in ci

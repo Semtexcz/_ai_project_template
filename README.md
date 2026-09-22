@@ -26,9 +26,6 @@ Use this repository when you want a project scaffold that already knows how to:
 | Runtime level | local |
 | Phase | delivery |
 | Milestone | M-08 |
-| Active task | None |
-| Approval | None |
-| Blocker | None |
 | Next gate | release-candidate-remediation |
 <!-- project-status:end -->
 

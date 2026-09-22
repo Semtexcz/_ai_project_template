@@ -258,11 +258,13 @@ checks:
   "template/tools/project.py":
     - make validate-project
     - make test-lifecycle
-  # Governance package seams (T-030). The focused module tests prove the
-  # extracted boundaries quickly; lifecycle/static tests keep the end-to-end
-  # lifecycle, approval, merge-provenance, and persisted-view behavior.
+  # Governance package seams (T-030) plus the parallel-worktree substrate (T-031).
+  # The focused module tests prove the extracted boundaries quickly;
+  # lifecycle/static tests keep the end-to-end lifecycle, approval,
+  # merge-provenance, and persisted-view behavior.
   "template/tools/project_tool/**":
     - uv run pytest tests/test_project_tool_modules.py
+    - uv run pytest tests/test_project_tool_worktrees.py
     - make validate-project
     - make test-lifecycle
   "project/**":
@@ -293,6 +295,10 @@ checks:
     - uv run pytest tests/test_agent_layer_mirror.py
   "tests/test_project_tool_modules.py":
     - uv run pytest tests/test_project_tool_modules.py
+  "tests/test_project_tool_worktrees.py":
+    - uv run pytest tests/test_project_tool_worktrees.py
+  "tests/test_parallel_agent_worktrees_golden_path.py":
+    - uv run pytest tests/test_parallel_agent_worktrees_golden_path.py
   "tests/test_agent_context_routing.py":
     - uv run pytest tests/test_agent_context_routing.py
   "tests/test_template_release_workflow.py":

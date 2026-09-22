@@ -115,6 +115,24 @@ make agent-pre-review TASK=<id>
 make agent-post-task TASK=<id>
 ```
 
+Parallel work uses one worktree per independent task, so several agents never
+mutate the same checkout:
+
+```bash
+make agent-worktree TASK=<id>
+make agent-worktrees
+make agent-worktree-remove TASK=<id>
+make agent-claim-release TASK=<id>
+make project-status
+make project-available
+```
+
+`agent-status` derives the owned task from the current branch and its local
+claim, which is why it needs no task argument inside a worktree. Task status is
+task-local: a transition rewrites only the task record, committed dashboards hold
+project-global rows only, and live task status, the board, and worktree claims
+are rendered by `make project-status` at read time.
+
 Context loading is tiered: a minimal bootstrap (repository rules), a
 deterministic task/skill bundle bounded by the `budget` declared in
 `.agents/context-map.yaml`, and search-root-based exploration. Directories are

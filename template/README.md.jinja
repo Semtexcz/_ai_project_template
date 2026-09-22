@@ -33,36 +33,21 @@ Governance: `{{ governance }}`. Workflow mode: `{{ workflow_mode }}`.
 | Runtime level | {{ runtime_level }} |
 | Phase | definition |
 | Milestone | M-01 |
-{% if workflow_mode != "pr" %}| Last completed task | None |
-{% endif %}| Active task | [T-001](project/tasks/T-001-initialize-project.md) |
-| Approval | A0 / not-required |
-{% if workflow_mode != "pr" %}| Waiting | None |
-{% endif %}| Blocker | None |
 | Next gate | ready-for-development |
-{% if workflow_mode != "pr" %}| Recommended next action | Complete T-001. |
-| Next action command | `make task-review TASK=T-001` |
-{% endif %}<!-- project-status:end -->
+<!-- project-status:end -->
 
-{% if workflow_mode == "pr" %}
-The rows above are generated from `project/state.yaml` and `project/tasks/*.md`
-and contain only state that those records already decide. Merge-derived status
-cannot be committed before the human merge, so the live, merge-aware status,
-board, and next action are rendered at read time:
+The rows above are project-global: they follow from `project/state.yaml` and
+`project/tasks/*.md` without encoding any task transition. Task status, active
+tasks, approvals, blockers, the board, and local worktree claims change per task,
+so they are rendered at read time and never committed - which is what keeps
+parallel task branches from conflicting in shared Markdown:
 
 ```bash
 make project-status
 ```
 
-Refresh the committed rows with `make sync-project-docs`. After a human merge no
-synchronization commit is required.
-{% else %}
-The dashboard is generated from `project/state.yaml` and `project/tasks/*.md`.
-After changing task state, run:
-
-```bash
-make sync-project-docs
-```
-{% endif %}
+Refresh the committed rows with `make sync-project-docs`; they only change when
+the project phase, milestone, or gate changes.
 {% else %}
 ## Project Context
 
@@ -157,7 +142,8 @@ commits, and learning capture. `.codex/` contains thin Codex adapters that
 delegate to those canonical skills.
 
 {% if governance == "managed" %}
-Use one active task at a time and load context in tiers instead of reading
+Every task owns exactly one worktree and branch. Use one active task per worktree
+and load context in tiers instead of reading
 project documentation twice:
 
 ```bash
@@ -165,12 +151,22 @@ make agent-status
 make agent-context TASK=<id>
 make agent-context TASK=<id> SKILL=<skill>
 make agent-context TASK=<id> SKILL=<skill> MODE=resume
+make agent-worktree TASK=<id>
+make agent-worktrees
 make task-start TASK=<id>
 make task-review TASK=<id>
 make validate-agent-skills
 make validate-project
 make validate-docs
 ```
+
+For parallel work, create one worktree per independent task
+(`make agent-worktree TASK=<id>`, inspected with `make agent-worktrees`); the
+printed path is where that agent works, and `make agent-status` derives the owned
+task there from the branch and its local claim. Cleanup
+(`make agent-worktree-remove TASK=<id>`) refuses dirty or unmerged work unless
+`FORCE=1` is passed explicitly, and `make agent-claim-release TASK=<id>` releases
+a stale claim left by a stopped agent.
 
 `agent-context` is bounded by the context-map `budget` and reports included and
 omitted files. Use `MODE=resume` when resuming or fixing an existing PR.

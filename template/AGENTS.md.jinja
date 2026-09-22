@@ -22,9 +22,25 @@ make agent-context TASK=<id> SKILL=<skill>
 make agent-context TASK=<id> SKILL=<skill> MODE=resume
 ```
 
-Respect exactly one active managed task and use the generated context bundle.
-Use the default context mode for a new task; use `MODE=resume` when resuming or
-fixing an existing PR.
+Respect exactly one owned task per worktree and use the generated context bundle.
+`make agent-status` derives the task this checkout owns from its branch and local
+claim, so a parallel worktree does not need to be told its own task. Use the
+default context mode for a new task; use `MODE=resume` when resuming or fixing an
+existing PR.
+
+Work on independent tasks in parallel by giving each one its own worktree instead
+of sharing a checkout:
+
+```bash
+make agent-worktree TASK=T-002
+make agent-worktree TASK=T-003
+make agent-worktrees
+```
+
+Each worktree owns exactly one task through a local, uncommitted claim, so two
+agents cannot silently claim the same task. `make agent-worktree-remove TASK=<id>`
+refuses to delete dirty or unmerged work unless `FORCE=1` is passed explicitly,
+and `make agent-claim-release TASK=<id>` releases a stale claim.
 {% else %}
 This project uses lightweight governance. There is no mandatory task state
 machine for ordinary implementation work. Tier 0 bootstrap is `AGENTS.md` and
@@ -72,6 +88,11 @@ make agent-pre-task TASK=T-001
 make agent-pre-review TASK=T-001
 make agent-post-task TASK=T-001
 make project-status
+make project-available
+make agent-worktree TASK=T-001
+make agent-worktrees
+make agent-worktree-remove TASK=T-001
+make agent-claim-release TASK=T-001
 make sync-project-docs
 make validate-project
 make task-ready TASK=T-001

@@ -8,16 +8,19 @@ Run or read the agent-oriented project status before changing files:
 make agent-status
 ```
 
-Respect exactly one active task. Then load only the context recommended by the
-Tier 1 context command:
+Respect exactly one owned task per worktree. Then load only the context recommended
+by the Tier 1 context command:
 
 ```bash
+make agent-status
 make agent-context TASK=<id>
 make agent-context TASK=<id> SKILL=<skill>
 make agent-context TASK=<id> SKILL=<skill> MODE=resume
 ```
 
-Use the default mode for a new task and `MODE=resume` when resuming or fixing an
+`make agent-status` derives the task this checkout owns from its branch and local
+claim, so a parallel worktree does not need to be told its own task. Use the
+default context mode for a new task and `MODE=resume` when resuming or fixing an
 existing PR on this branch. Do not manually re-read architecture/workflow
 documents that the context bundle already resolves deterministically.
 
@@ -41,6 +44,16 @@ documents that the context bundle already resolves deterministically.
   followed by `make task-complete` remains the explicit offline fallback.
 - Prefer focused checks while implementing; `make agent-pre-review` runs the
   canonical `make check` full gate once at final pre-review.
+- For parallel work, give each independent task its own worktree instead of
+  sharing one checkout: `make agent-worktree TASK=<id>` claims the task, creates
+  `task/T-###-<slug>` outside the project tree, and prints the worktree path.
+  Inspect with `make agent-worktrees`, recover a stale claim with
+  `make agent-claim-release TASK=<id>`, and clean up with
+  `make agent-worktree-remove TASK=<id>` (which refuses dirty or unmerged work
+  unless `FORCE=1` is passed explicitly).
+- Task status is task-local: only task records change on a transition. Committed
+  dashboards carry project-global rows only, and live task status, the board, and
+  local worktree claims are rendered by `make project-status`.
 - The canonical agent layer lives in `.agents/` and `.codex/`; `template/.agents/`
   and `template/.codex/` are deterministic mirrors (except the intentional
   `.agents/README.md` and `.agents/context-map.yaml` divergences). After editing
@@ -96,10 +109,11 @@ and why it follows from the current repository state.
 
 The task lifecycle, approval controls, and `project/state.yaml` remain
 authoritative for managed task state. Committed dashboards carry only the
-deterministic subset of that state, and merge-derived status is rendered at read
-time by `make project-status`. Reconciliation complements them by checking
-whether higher-level planning stays accurate; it never edits managed task state
-or generated boards directly.
+deterministic subset of that state - project-global rows - while task status,
+the board, available tasks, and local worktree claims are rendered at read time
+by `make project-status`. Reconciliation complements them by checking whether
+higher-level planning stays accurate; it never edits managed task state or
+generated boards directly.
 
 ## Boundaries
 

@@ -1,33 +1,5 @@
 # Kanban Board
 
 <!-- kanban:start -->
-{% if workflow_mode == "pr" %}_Persisted task records by status. Merge-derived completion is not persisted; run `make project-status` for the live merge-aware board._
-
-{% endif %}## Backlog
-
-_None_
-
-## Ready
-
-_None_
-
-## In Progress
-
-- [T-001](tasks/T-001-initialize-project.md) - P1 - Initialize project knowledge
-
-## Review
-
-_None_
-
-## Blocked
-
-_None_
-
-## Done
-
-_None_
-
-## Cancelled
-
-_None_
+_Task status, approvals, blockers, worktree claims, and merge-derived completion are rendered at read time. Run `make project-status` for the live board and for local worktree claims._
 <!-- kanban:end -->

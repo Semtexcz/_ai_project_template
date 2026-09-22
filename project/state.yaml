@@ -13,9 +13,5 @@ lifecycle:
   milestone: M-08
   next_gate: release-candidate-remediation
 
-work:
-  active_task: null
-  blocked: false
-
 template:
   version: v1.1.1

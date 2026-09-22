@@ -196,10 +196,6 @@ lifecycle:
   milestone: M-01
   next_gate: project-state-validation-complete
 
-work:
-  active_task: T-001
-  blocked: false
-
 template:
   version: v1.1.0
 """
@@ -341,7 +337,6 @@ def prepare_transaction_command(root: Path, name: str) -> tuple[list[str], str]:
 def test_mutating_task_commands_are_transactional_on_failure(tmp_path: Path) -> None:
     failures = {
         "validation": "PROJECT_TOOL_FAIL_VALIDATION",
-        "render": "PROJECT_TOOL_FAIL_RENDER",
         "write": "PROJECT_TOOL_FAIL_WRITE",
         "final-validation": "PROJECT_TOOL_FAIL_FINAL_VALIDATE",
     }
@@ -357,6 +352,30 @@ def test_mutating_task_commands_are_transactional_on_failure(tmp_path: Path) -> 
             assert "ERROR:" in output, (command_name, failure_name, output)
             assert_control_snapshot(root, before)
             run(["make", "validate-project"], root)
+
+
+def test_dashboard_rendering_failure_is_reported_without_partial_writes(tmp_path: Path) -> None:
+    """Rendering now belongs to synchronization, not to task transitions."""
+    root = make_project(tmp_path / "sync-render")
+    before = {path: (root / path).read_bytes() for path in CONTROL_PATHS}
+    result = run_with_env(
+        ["make", "sync-project-docs"],
+        root,
+        {"PROJECT_TOOL_FAIL_RENDER": "1"},
+        expect_success=False,
+    )
+    assert "Injected dashboard rendering failure" in result.stdout
+    for path, content in before.items():
+        assert (root / path).read_bytes() == content, path
+
+    # A task transition does not render at all, so the same injection is a no-op.
+    run(["make", "task-complete", "TASK=T-001"], root)
+    run_with_env(
+        ["make", "task-ready", "TASK=T-002"],
+        root,
+        {"PROJECT_TOOL_FAIL_RENDER": "1"},
+    )
+    assert "status: ready" in (root / "project" / "tasks" / "T-002-task.md").read_text()
 
 
 def test_failed_approval_does_not_persist_metadata(tmp_path: Path) -> None:
@@ -389,20 +408,25 @@ def readme_dashboard(root: Path) -> str:
     )[0]
 
 
-def test_readme_dashboard_next_actions_for_task_states(tmp_path: Path) -> None:
+def runtime_status(root: Path) -> str:
+    """Return the live status view: task-derived rows are rendered at read time."""
+    return run([sys.executable, "tools/project.py", "status"], root).stdout
+
+
+def test_runtime_status_next_actions_for_task_states(tmp_path: Path) -> None:
     active = make_project(tmp_path / "active")
-    dashboard = readme_dashboard(active)
-    assert "| Active task | [T-001]" in dashboard
-    assert "| Next action command | `make task-review TASK=T-001` |" in dashboard
+    status = runtime_status(active)
+    assert "| Active task | [T-001]" in status
+    assert "| Next action command | `make task-review TASK=T-001` |" in status
 
     a1_review = make_project(tmp_path / "a1-review")
     run(["make", "task-complete", "TASK=T-001"], a1_review)
     run(["make", "task-ready", "TASK=T-002"], a1_review)
     run(["make", "task-start", "TASK=T-002"], a1_review)
     run(["make", "task-review", "TASK=T-002"], a1_review)
-    dashboard = readme_dashboard(a1_review)
-    assert "| Waiting | A1 approval pending: T-002 |" in dashboard
-    assert '| Next action command | `make task-approve TASK=T-002 APPROVED_BY="<human>"` |' in dashboard
+    status = runtime_status(a1_review)
+    assert "| Waiting | A1 approval pending: T-002 |" in status
+    assert '| Next action command | `make task-approve TASK=T-002 APPROVED_BY="<human>"` |' in status
 
     a2_ready = make_project(tmp_path / "a2-ready")
     run(["make", "task-complete", "TASK=T-001"], a2_ready)
@@ -412,9 +436,9 @@ def test_readme_dashboard_next_actions_for_task_states(tmp_path: Path) -> None:
     run(["make", "task-approve", "TASK=T-002", "APPROVED_BY=Test Human"], a2_ready)
     run(["make", "task-complete", "TASK=T-002"], a2_ready)
     run(["make", "task-ready", "TASK=T-003"], a2_ready)
-    dashboard = readme_dashboard(a2_ready)
-    assert "| Waiting | A2 approval required before start: T-003 |" in dashboard
-    assert '| Next action command | `make task-approve TASK=T-003 APPROVED_BY="<human>"` |' in dashboard
+    status = runtime_status(a2_ready)
+    assert "| Waiting | A2 approval required before start: T-003 |" in status
+    assert '| Next action command | `make task-approve TASK=T-003 APPROVED_BY="<human>"` |' in status
 
     blocked = make_project(tmp_path / "blocked")
     run(
@@ -427,26 +451,23 @@ def test_readme_dashboard_next_actions_for_task_states(tmp_path: Path) -> None:
         ],
         blocked,
     )
-    dashboard = readme_dashboard(blocked)
-    assert "| Waiting | Blocked: T-001 |" in dashboard
-    assert "| Blocker | T-001: Waiting on input |" in dashboard
-    assert "| Next action command | `make task-unblock TASK=T-001` |" in dashboard
+    status = runtime_status(blocked)
+    assert "| Waiting | Blocked: T-001 |" in status
+    assert "| Blocker | T-001: Waiting on input |" in status
+    assert "| Next action command | `make task-unblock TASK=T-001` |" in status
 
     no_ready = make_project(tmp_path / "no-ready")
     run(["make", "task-complete", "TASK=T-001"], no_ready)
-    dashboard = readme_dashboard(no_ready)
-    assert "No ready task exists" in dashboard
-    assert "| Next action command | `make task-ready TASK=<new-task-id>` |" in dashboard
+    status = runtime_status(no_ready)
+    assert "No ready task exists" in status
+    assert "| Next action command | `make task-ready TASK=<new-task-id>` |" in status
 
-
-def corrupt_state_active_missing(root: Path) -> None:
-    text = (root / "project" / "state.yaml").read_text()
-    (root / "project" / "state.yaml").write_text(text.replace("active_task: T-001", "active_task: T-999"))
-
-
-def clear_state_active(root: Path) -> None:
-    text = (root / "project" / "state.yaml").read_text()
-    (root / "project" / "state.yaml").write_text(text.replace("active_task: T-001", "active_task:"))
+    # Committed Markdown carries only project-global rows and never changes with
+    # a task transition, so parallel branches cannot conflict there.
+    for root in [active, a1_review, a2_ready, blocked, no_ready]:
+        committed = readme_dashboard(root)
+        for row in TASK_DERIVED_STATUS_ROWS:
+            assert f"| {row} |" not in committed, (root, row)
 
 
 def set_task(root: Path, task_id: str, old: str, new: str) -> None:
@@ -455,10 +476,11 @@ def set_task(root: Path, task_id: str, old: str, new: str) -> None:
 
 
 NEGATIVE_CASES: list[tuple[str, Callable[[Path], None], str]] = [
-    ("missing active task", clear_state_active, "must be T-001"),
-    ("state references missing task", corrupt_state_active_missing, "does not exist"),
-    ("two in-progress tasks", lambda root: set_task(root, "T-002", "status: backlog", "status: in-progress"), "More than one task"),
-    ("active blocked task", lambda root: set_task(root, "T-001", "status: in-progress", "status: blocked"), "Active task T-001 is blocked"),
+    (
+        "blocked without metadata",
+        lambda root: set_task(root, "T-001", "status: in-progress", "status: blocked"),
+        "blocked task requires",
+    ),
     ("invalid task status", lambda root: set_task(root, "T-001", "status: in-progress", "status: flying"), "invalid status"),
     (
         "duplicate task id",
@@ -472,6 +494,7 @@ NEGATIVE_CASES: list[tuple[str, Callable[[Path], None], str]] = [
     ("direct dependency cycle", lambda root: (set_task(root, "T-001", "depends_on: []", "depends_on: [T-002]"), set_task(root, "T-002", "depends_on: [T-001]", "depends_on: [T-001]")), "Task dependency cycle detected"),
     ("indirect dependency cycle", lambda root: set_task(root, "T-001", "depends_on: []", "depends_on: [T-003]"), "Task dependency cycle detected"),
     ("ready dependency not done", lambda root: set_task(root, "T-002", "status: backlog", "status: ready"), "dependencies are not done"),
+    ("started dependent task", lambda root: set_task(root, "T-002", "status: backlog", "status: in-progress"), "dependencies are not done"),
     ("missing Definition of Ready", lambda root: write_task(root, "T-001", status="in-progress", include_ready=False), "Definition of Ready"),
     ("done unchecked criterion", lambda root: write_task(root, "T-001", status="done", checked=False), "all Acceptance Criteria"),
     ("done missing completion notes", lambda root: write_task(root, "T-001", status="done", completion_notes=""), "Completion Notes"),
@@ -479,8 +502,8 @@ NEGATIVE_CASES: list[tuple[str, Callable[[Path], None], str]] = [
     ("A2 started without approval", lambda root: write_task(root, "T-001", status="in-progress", approval_level="A2", approval_status="pending"), "A2 task cannot start"),
     ("blocked without reason", lambda root: write_task(root, "T-001", status="blocked", blocked_reason="", unblock_action=""), "blocked task requires"),
     ("stale README", lambda root: (root / "README.md").write_text((root / "README.md").read_text().replace("Project type", "Project kind")), "README.md generated block is stale"),
-    ("stale project index", lambda root: (root / "project" / "index.md").write_text((root / "project" / "index.md").read_text().replace("Recommended next action", "Next")), "project/index.md generated block is stale"),
-    ("stale board", lambda root: (root / "project" / "board.md").write_text((root / "project" / "board.md").read_text().replace("In Progress", "Doing")), "project/board.md generated block is stale"),
+    ("stale project index", lambda root: (root / "project" / "index.md").write_text((root / "project" / "index.md").read_text().replace("| Milestone |", "| Iteration |")), "project/index.md generated block is stale"),
+    ("stale board", lambda root: (root / "project" / "board.md").write_text((root / "project" / "board.md").read_text().replace("rendered at read time", "persisted")), "project/board.md generated block is stale"),
     ("broken internal link", lambda root: (root / "README.md").write_text((root / "README.md").read_text() + "\n[Broken](missing.md)\n"), "broken internal Markdown link"),
     ("documented missing command", lambda root: (root / "README.md").write_text((root / "README.md").read_text() + "\n`make missing-target`\n"), "has no Makefile target"),
     ("profile irrelevant FastAPI docs", lambda root: (root / "docs" / "architecture.md").write_text("# Architecture\n\nCurrent architecture: Python CLI package with FastAPI.\n"), "mentions FastAPI"),
@@ -509,13 +532,50 @@ def test_project_state_validation_negative_cases(tmp_path: Path) -> None:
         assert expected in output, name
 
 
+def test_two_independent_tasks_may_be_in_progress_together(tmp_path: Path) -> None:
+    """Project-global state no longer allows exactly one active task."""
+    root = make_project(tmp_path / "parallel")
+    write_task(root, "T-002", status="in-progress")
+    run(["make", "sync-project-docs"], root)
+    run([sys.executable, "tools/project.py", "validate"], root)
+
+    status = run(["make", "project-status"], root).stdout
+    in_progress = status.split("## In Progress", 1)[1].split("## Review", 1)[0]
+    assert "T-001" in in_progress and "T-002" in in_progress
+    active_row = next(line for line in status.splitlines() if line.startswith("| Active task |"))
+    assert "[T-001](project/tasks/T-001-task.md)" in active_row
+    assert "[T-002](project/tasks/T-002-task.md)" in active_row
+    state = (root / "project" / "state.yaml").read_text()
+    assert "active_task" not in state
+    assert "T-002" not in readme_dashboard(root)
+
+
+def test_legacy_work_section_in_state_is_tolerated(tmp_path: Path) -> None:
+    """State written before T-031 keeps validating; ownership lives elsewhere now."""
+    root = make_project(tmp_path / "legacy")
+    state_path = root / "project" / "state.yaml"
+    state_path.write_text(
+        state_path.read_text().replace(
+            "template:",
+            "work:\n  active_task: T-999\n  blocked: true\n\ntemplate:",
+        )
+    )
+    run([sys.executable, "tools/project.py", "validate"], root)
+    assert "make sync-project-docs" not in run(
+        [sys.executable, "tools/project.py", "validate"], root
+    ).stdout
+
+
 GIT_RELATIVE_TEXT_MARKERS = (
     "awaiting human GitHub merge",
     "completed by merged Git provenance",
 )
-GIT_RELATIVE_STATUS_ROWS = (
+TASK_DERIVED_STATUS_ROWS = (
     "Last completed task",
+    "Active task",
+    "Approval",
     "Waiting",
+    "Blocker",
     "Recommended next action",
     "Next action command",
 )
@@ -562,21 +622,20 @@ def test_github_pr_a1_merge_lifecycle_needs_no_cleanup(tmp_path: Path) -> None:
     run(["make", "task-start", "TASK=T-002"], root)
     run(["make", "task-review", "TASK=T-002"], root)
 
-    # Before the merge the committed view is deterministic: it lists persisted
-    # records and never claims a merge outcome that does not exist yet.
+    # Before the merge the committed view is deterministic and task-free: it can
+    # never claim a merge outcome that does not exist yet.
     board = (root / "project" / "board.md").read_text()
-    review = board.split("## Review", 1)[1].split("## Blocked", 1)[0]
-    done = board.split("## Done", 1)[1].split("## Cancelled", 1)[0]
-    assert "T-002" in review
-    assert "T-002" not in done
+    assert "make project-status" in board
+    assert "## Review" not in board
     committed = committed_block_text(root)
     for marker in GIT_RELATIVE_TEXT_MARKERS:
         assert marker not in committed
-    for row in GIT_RELATIVE_STATUS_ROWS:
+    for row in TASK_DERIVED_STATUS_ROWS:
         assert f"| {row} |" not in readme_dashboard(root)
 
-    # The runtime view is the one that reports the merge wait.
+    # The runtime view is the one that reports the review state and the merge wait.
     status = run(["make", "project-status"], root).stdout
+    assert "T-002" in status.split("## Review", 1)[1].split("## Blocked", 1)[0]
     assert "Awaiting human GitHub merge: T-002" in status
     assert "Last completed task | [T-001]" in status
     assert "`make project-status` (await human GitHub merge of T-002)." in status
@@ -632,7 +691,7 @@ def test_github_pr_a1_merge_lifecycle_needs_no_cleanup(tmp_path: Path) -> None:
 
 
 def test_pr_mode_committed_blocks_stay_deterministic(tmp_path: Path) -> None:
-    """Drift is still real drift, and Git-relative rows cannot be committed."""
+    """Drift is still real drift, and task-derived rows can never be committed."""
     root = make_project(tmp_path / "pr-committed", workflow_mode="pr")
     readme_path = root / "README.md"
     original = readme_path.read_text()
@@ -642,10 +701,10 @@ def test_pr_mode_committed_blocks_stay_deterministic(tmp_path: Path) -> None:
     assert "README.md generated block is stale" in result.stdout
 
     readme_path.write_text(
-        original.replace("| Blocker | None |", "| Waiting | None |\n| Blocker | None |")
+        original.replace("| Next gate |", "| Waiting | None |\n| Next gate |")
     )
     result = run(["make", "validate-project"], root, expect_success=False)
-    assert "must not persist the Git-relative row 'Waiting'" in result.stdout
+    assert "must not persist the task-derived row 'Waiting'" in result.stdout
 
 
 def test_task_merge_completed_is_merge_strategy_independent(tmp_path: Path) -> None:
@@ -755,8 +814,8 @@ def test_github_pr_a2_keeps_stronger_prestart_boundary(tmp_path: Path) -> None:
         },
     )
     run(["make", "sync-project-docs"], root)
-    board = (root / "project" / "board.md").read_text()
-    assert "T-004" in board.split("## Review", 1)[1].split("## Blocked", 1)[0]
+    status = run(["make", "project-status"], root).stdout
+    assert "T-004" in status.split("## Review", 1)[1].split("## Blocked", 1)[0]
     run(["make", "validate-project"], root)
 
 
