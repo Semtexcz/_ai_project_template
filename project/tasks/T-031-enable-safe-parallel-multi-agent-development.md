@@ -3,7 +3,7 @@ id: T-031
 
 title: Enable safe parallel multi-agent development in generated projects
 
-status: in-progress
+status: review
 
 priority: 1
 
