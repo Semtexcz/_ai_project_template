@@ -57,7 +57,10 @@ separates:
 - `bootstrap.files`: Tier 0 repository rules that are always loaded (normally
   only `AGENTS.md`).
 - `task.files`: the selected managed task record.
-- `managed.files`: governance state files that exist in managed projects.
+- `managed.files`: the managed governance baseline for an already selected task
+  (`project/state.yaml`). Planning and dashboard artifacts (`project/index.md`,
+  `project/board.md`, `project/roadmap.md`) are not eager: the task-selection,
+  planning, and reassessment skills read them through their own `reads:`.
 - `project_type.<profile>.files`: explicit narrow files for the project shape.
 - `search_roots`: directories that are searchable only; they are never
   recursively loaded into context.
@@ -75,6 +78,17 @@ Context output reports included files with categories, omitted files with
 reasons, available search roots, changed files considered, and the total byte
 cost. Use the default context mode for new tasks and `MODE=resume` when
 resuming or fixing an existing PR.
+
+## Handoff
+
+One managed task keeps one branch, worktree, claim, and pull request, but a large
+task can outlive one agent conversation. Managed projects therefore expose
+`make agent-handoff TASK=<id>` (and `FORMAT=json`) as optional resume tooling: it
+renders the task, Git, worktree, claim, changed-file, and check-routing state a
+fresh session needs, so the task persists while the conversation does not. It is
+derived, runtime-only, deterministic, bounded, and never persisted, and it holds
+no transcript, reasoning, diff, log, or command history. Lightweight projects
+have no handoff command, and the ordinary single-session flow never needs one.
 
 Excludes block secrets, dependency directories, caches, and build artifacts.
 Paths cannot traverse outside the project root and symlinks outside the root

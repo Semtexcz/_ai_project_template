@@ -13,7 +13,8 @@ Copier upgrade:
 - `.agents/` canonical skills, schemas, context map, and selected managed or
   capability skill groups
 - `tools/` files selected by project type and governance, including
-  `tools/agent.py` for skill validation
+  `tools/agent.py` for skill validation and, in managed projects,
+  `tools/agent_handoff.py` for the deterministic task handoff
 - `.gitignore`
 - `.template-version`
 - generated API client runtime scaffolding under `frontend/shared/api/`
