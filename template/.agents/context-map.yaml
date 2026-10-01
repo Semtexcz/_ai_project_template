@@ -11,14 +11,16 @@ task:
   files:
     - project/tasks/{task_id}-*.md
 
-# Managed governance state. Files that do not exist (for example in
-# lightweight projects) are skipped.
+# Managed governance baseline for an already selected implementation task: only
+# the state that governance, lifecycle, and ownership decisions need. Planning
+# and dashboard artifacts (`project/index.md`, `project/board.md`,
+# `project/roadmap.md`) are deliberately NOT eager here: task selection,
+# planning, and project reassessment load them through their own skill `reads:`,
+# so ordinary implementation does not pay for unrelated planning context. Files
+# that do not exist (for example in lightweight projects) are skipped.
 managed:
   files:
     - project/state.yaml
-    - project/index.md
-    - project/board.md
-    - project/roadmap.md
 
 # Explicit files are eagerly loaded candidates. Directories are search roots
 # only; a directory entry is never recursively loaded into context.

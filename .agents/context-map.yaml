@@ -11,14 +11,15 @@ task:
   files:
     - project/tasks/{task_id}-*.md
 
-# Managed governance state for this template repository. Files that do not
-# exist in the current project are skipped.
+# Managed governance baseline for an already selected implementation task: only
+# the state that governance, lifecycle, and ownership decisions need. Planning
+# and dashboard artifacts (`project/index.md`, `project/board.md`,
+# `project/roadmap.md`) are deliberately NOT eager here: task selection,
+# planning, and project reassessment load them through their own skill `reads:`,
+# so ordinary implementation does not pay for unrelated planning context.
 managed:
   files:
     - project/state.yaml
-    - project/index.md
-    - project/board.md
-    - project/roadmap.md
 
 # Explicit files are eagerly loaded candidates. Directories are search roots
 # only; a directory entry is never recursively loaded into context. The
@@ -119,6 +120,12 @@ change_patterns:
     search_roots:
       - template/project/
   "template/tools/agent.py":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/tools/
+      - tests/
+  "template/tools/agent_handoff.py":
     files:
       - docs/template-development.md
     search_roots:
@@ -255,6 +262,12 @@ checks:
   "template/tools/agent.py":
     - make validate-agent-skills
     - make test-agent
+  # The handoff model and its focused tests: agent-tool validation plus the
+  # deterministic handoff suite, without the whole fast gate.
+  "template/tools/agent_handoff.py":
+    - make validate-agent-skills
+    - make test-agent
+    - uv run pytest tests/test_agent_handoff.py
   "template/tools/project.py":
     - make validate-project
     - make test-lifecycle
@@ -285,6 +298,8 @@ checks:
   # Exact test-file changes run exactly that file.
   "tests/test_agent_efficiency.py":
     - uv run pytest tests/test_agent_efficiency.py
+  "tests/test_agent_handoff.py":
+    - uv run pytest tests/test_agent_handoff.py
   "tests/test_agent_one_task_workflow_golden_path.py":
     - uv run pytest tests/test_agent_one_task_workflow_golden_path.py
   "tests/test_project_state_validation_golden_path.py":
