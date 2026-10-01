@@ -9,7 +9,7 @@ priority: 1
 
 milestone: M-08
 
-depends_on: []
+depends_on: [T-032]
 
 approval_level: A1
 
@@ -146,7 +146,7 @@ task brief would either duplicate mutable acceptance criteria or drop the record
 that readiness/completion rules read, so no second representation was added; the
 large-fixture test records the resulting eager size as evidence instead.
 
-Evidence: `tests/test_agent_focused_resume.py` (19 tests) proves exact and
+Evidence: `tests/test_agent_focused_resume.py` (25 tests) proves exact and
 non-changed focus loading, every invalid-path rejection, non-resume rejection,
 complete branch visibility with a 32-file fixture, the `outside focus` reason,
 search-root continuity, check parity between full and focused resume, governance

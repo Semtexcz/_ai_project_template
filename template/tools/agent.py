@@ -799,6 +799,33 @@ def project_relative_path(value: object, *, label: str) -> tuple[str, Path]:
     return normalized, candidate
 
 
+def repository_relative_path(path: Path, *, label: str) -> str:
+    """Return the canonical repository-relative identity of a filesystem path.
+
+    The identity is always derived from the resolved target, so equivalent
+    spellings and in-repository symlinks collapse to one path. A path that
+    resolves outside the project root is rejected. This is the single seam that
+    both context loading and focus validation use for containment and identity.
+    """
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError as exc:
+        raise AgentError(f"{label} {path} resolves outside the project root.") from exc
+
+
+def canonical_project_path(value: object, *, label: str) -> tuple[str, Path]:
+    """Return a repository-contained value's canonical (relative path, target).
+
+    ``value`` is only used to locate the target: the returned repository-relative
+    identity comes from the resolved target, so ``tools/a.py``, ``./tools/a.py``,
+    and ``tools//a.py`` share one identity and an in-repository symlink inherits
+    the identity of its target instead of bypassing policy checks under its own
+    spelling.
+    """
+    _normalized, resolved = project_relative_path(value, label=label)
+    return repository_relative_path(resolved, label=label), resolved
+
+
 def safe_project_path(pattern: str) -> Path:
     _normalized, path = project_relative_path(pattern, label="Context path")
     return path
@@ -815,19 +842,9 @@ def normalize_search_root(value: str) -> str:
 
 
 def add_existing_file(files: list[str], seen: set[str], path: Path, excludes: list[str]) -> None:
-    resolved = path.resolve()
-    try:
-        rel_path = resolved.relative_to(ROOT.resolve()).as_posix()
-    except ValueError as exc:
-        raise AgentError(f"Context path {path} resolves outside the project root.") from exc
+    rel_path = repository_relative_path(path, label="Context path")
     if excluded(rel_path, excludes) or excluded(rel_path, SENSITIVE_PATTERNS):
         raise AgentError(f"Sensitive or excluded file {rel_path} cannot be included in context.")
-    if path.is_symlink():
-        target = path.resolve()
-        try:
-            target.relative_to(ROOT.resolve())
-        except ValueError as exc:
-            raise AgentError(f"Symlink {rel_path} resolves outside the project root.") from exc
     if path.is_file() and rel_path not in seen:
         files.append(rel_path)
         seen.add(rel_path)
@@ -1216,19 +1233,24 @@ def resolve_skill_context(
 
 
 def validate_focus_paths(focus: list[str], excludes: list[str]) -> list[str]:
-    """Validate explicit resume focus into deterministic repository-relative files.
+    """Validate explicit resume focus into canonical repository-relative files.
 
     Focus is an ephemeral request input: it selects the current session's eager
-    working set and is never persisted. Every entry must be an existing regular
-    file inside the repository, must not be excluded or sensitive, and must not
-    escape the repository through ``..``, an absolute path, ``~``, or a symlink.
-    Directories and missing files are rejected because focus names files. The
-    returned paths are de-duplicated and sorted so the result is deterministic.
+    working set and is never persisted. Each entry is resolved to its canonical
+    repository-relative target before any policy check, so the exclusion/sensitive
+    decision and the returned identity always describe the actual file that
+    would be loaded: equivalent spellings (``./tools/a.py``, ``tools//a.py``) and
+    in-repository symlinks cannot bypass the policy or duplicate a focus entry.
+    Every entry must be an existing regular file inside the repository, must not
+    be excluded or sensitive, and must not escape the repository through ``..``,
+    an absolute path, ``~``, or a symlink. Directories and missing files are
+    rejected because focus names files. The returned paths are de-duplicated and
+    sorted so the result is deterministic.
     """
     validated: list[str] = []
     for entry in focus:
-        normalized, path = project_relative_path(entry, label="Focus")
-        if excluded(normalized, excludes) or excluded(normalized, SENSITIVE_PATTERNS):
+        canonical, path = canonical_project_path(entry, label="Focus")
+        if excluded(canonical, excludes) or excluded(canonical, SENSITIVE_PATTERNS):
             raise AgentError(f"Focus path {entry} is sensitive or excluded and cannot be loaded.")
         if path.is_dir():
             raise AgentError(
@@ -1236,8 +1258,8 @@ def validate_focus_paths(focus: list[str], excludes: list[str]) -> list[str]:
             )
         if not path.exists():
             raise AgentError(f"Focus path {entry} does not exist in the repository.")
-        if normalized not in validated:
-            validated.append(normalized)
+        if canonical not in validated:
+            validated.append(canonical)
     return sorted(validated)
 
 

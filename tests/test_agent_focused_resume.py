@@ -337,6 +337,111 @@ def test_escaping_symlink_focus_is_rejected(
     assert "outside the project root" in output
 
 
+def test_dot_prefix_focus_cannot_bypass_exclusion(
+    managed_project: Path, tmp_path: Path
+) -> None:
+    # The user spelling "./dist/app.js" resolves to the excluded "dist/app.js";
+    # the policy must apply to the resolved target, not the raw spelling.
+    root = prepare(managed_project, tmp_path, "dot-prefix-exclusion")
+    (root / "dist").mkdir(exist_ok=True)
+    (root / "dist" / "app.js").write_text("built\n", encoding="utf-8")
+    output, _ = context_payload(
+        root, "--mode", "resume", "--focus", "./dist/app.js", expect_success=False
+    )
+    assert "sensitive or excluded" in output
+
+
+def test_dot_prefixed_focus_target_uses_canonical_default_policy(
+    managed_project: Path, tmp_path: Path
+) -> None:
+    # Seam-level regression: the resolver's own default exclusion policy must
+    # apply to the resolved target, so a dot-prefixed spelling of an excluded
+    # path cannot bypass it even when no configured pattern covers the spelling.
+    root = prepare(managed_project, tmp_path, "canonical-default-policy")
+    (root / "dist").mkdir(exist_ok=True)
+    (root / "dist" / "app.js").write_text("built\n", encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(
+        "focus_policy_under_test", root / "tools" / "agent.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    previous = os.getcwd()
+    os.chdir(root)
+    try:
+        spec.loader.exec_module(module)
+        module.ROOT = root
+        module.AGENTS_DIR = root / ".agents"
+        with pytest.raises(module.AgentError, match="sensitive or excluded"):
+            module.validate_focus_paths(["./dist/app.js"], list(module.DEFAULT_EXCLUDES))
+    finally:
+        os.chdir(previous)
+
+
+def test_in_repo_symlink_to_excluded_target_is_rejected(
+    managed_project: Path, tmp_path: Path
+) -> None:
+    root = prepare(managed_project, tmp_path, "symlink-excluded-target")
+    (root / "dist").mkdir(exist_ok=True)
+    (root / "dist" / "app.js").write_text("built\n", encoding="utf-8")
+    alias = root / "safe-alias.js"
+    try:
+        alias.symlink_to(root / "dist" / "app.js")
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    output, _ = context_payload(
+        root, "--mode", "resume", "--focus", "safe-alias.js", expect_success=False
+    )
+    assert "sensitive or excluded" in output
+
+
+def test_in_repo_symlink_to_sensitive_target_is_rejected(
+    managed_project: Path, tmp_path: Path
+) -> None:
+    root = prepare(managed_project, tmp_path, "symlink-sensitive-target")
+    (root / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    alias = root / "safe-alias"
+    try:
+        alias.symlink_to(root / ".env")
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    output, _ = context_payload(
+        root, "--mode", "resume", "--focus", "safe-alias", expect_success=False
+    )
+    assert "sensitive or excluded" in output
+
+
+def test_in_repo_symlink_to_valid_target_uses_canonical_identity(
+    managed_project: Path, tmp_path: Path
+) -> None:
+    root = prepare(
+        managed_project, tmp_path, "symlink-valid-target", change_files=("tools/a.py",)
+    )
+    alias = root / "alias.py"
+    try:
+        alias.symlink_to(root / "tools" / "a.py")
+    except OSError:
+        pytest.skip("symlinks are unavailable on this filesystem")
+    payload = resume(root, "alias.py")
+    # The alias inherits its target's canonical repository-relative identity.
+    assert payload["focused_files"] == ["tools/a.py"]
+    assert payload["files"].count("tools/a.py") == 1
+
+
+def test_equivalent_focus_spellings_deduplicate(
+    managed_project: Path, tmp_path: Path
+) -> None:
+    root = prepare(
+        managed_project, tmp_path, "canonical-dedup", change_files=("tools/a.py",)
+    )
+    payload = resume(root, "tools/a.py", "./tools/a.py", "tools//a.py")
+    assert payload["focused_files"] == ["tools/a.py"]
+    assert payload["metrics"]["focused_requested_files_count"] == 1
+    assert payload["metrics"]["focused_loaded_files_count"] == 1
+    # The canonical file consumes the eager budget exactly once.
+    assert payload["files"].count("tools/a.py") == 1
+
+
 def test_focus_is_rejected_in_non_resume_mode(
     managed_project: Path, tmp_path: Path
 ) -> None:
