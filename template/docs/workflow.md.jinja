@@ -59,12 +59,19 @@ Load context in three tiers instead of reading the whole project up front:
 
 1. Tier 0 bootstrap: repository rules and governance mode only (`AGENTS.md`,
    `project/brief.md`).
-2. Tier 1 task/skill context: loaded deterministically for the actual
-   operation, including the selected task, the selected skill's `reads:`,
-   changed files, and narrowly relevant configuration.
+2. Tier 1 operation context: the files the actual operation needs, including
+   changed files, a selected skill's `reads:`, and narrowly relevant
+   configuration. Managed projects load it deterministically from the selected
+   task's context bundle.
 3. Tier 2 exploration: directories listed as `search_roots` are search
    targets only. Open specific files when needed; never recursively load a
    directory into context.
+
+`.agents/context-map.yaml` separates explicit `files` (eagerly loaded
+candidates) from `search_roots` (never loaded automatically) and declares a
+deterministic `budget` (`max_files`, `max_bytes`). Context output reports
+included files with categories, omitted files with reasons, available search
+roots, and total bytes so regressions stay visible.
 
 {% if governance == "managed" %}
 The deterministic context bundle is requested through Make:
@@ -75,29 +82,45 @@ make agent-context TASK=T-001 SKILL=implement-change
 make agent-context TASK=T-001 SKILL=review-change MODE=resume
 ```
 
-{% endif %}
-`.agents/context-map.yaml` separates explicit `files` (eagerly loaded
-candidates) from `search_roots` (never loaded automatically) and declares a
-deterministic `budget` (`max_files`, `max_bytes`). Context output reports
-included files with categories, omitted files with reasons, available search
-roots, and total bytes so regressions stay visible. Task, selected-skill, and
-bootstrap files are protected from budget truncation.
-
+Task, selected-skill, and bootstrap files are protected from budget truncation.
 New tasks use the default context mode. When resuming or fixing an existing PR,
 use `MODE=resume`: the bundle prioritizes the task acceptance criteria, the
 branch diff against the base, affected files, and the selected skill without
 reloading the project's architectural context.
 
 Prefer the focused checks recommended for the changed-file set while
-implementing. Run the canonical full gate exactly once at final pre-review:
+implementing. The single canonical local gate at final pre-review is:
+
+```bash
+make agent-pre-review TASK=<id>
+```
+
+`make agent-pre-review` checks diff safety and runs the project's `make check`
+gate exactly once. Do not run `make check` separately right before it.
+
+{% if workflow_mode == "pr" %}
+In managed `pr` mode, move the task to review, push the same pull request, and
+end the implementation session. Required exhaustive CI runs after the push and
+is asynchronous: do not wait for or poll it. If CI fails, start a fresh session
+on the same task, branch, worktree, claim, and pull request; use the handoff and
+a focused resume, repair the failure, run focused checks, run the pre-review
+gate once, push the same pull request, and stop.
+{% else %}
+In managed `{{ workflow_mode }}` mode, after the local gate follow the
+configured local/branch lifecycle and human approval/completion boundary. A
+pull request and CI are not required by this workflow mode.
+{% endif %}
+{% else %}
+Run focused or relevant checks while iterating, then run the local validation
+command the project provides:
 
 ```bash
 make check
 ```
 
-`make check` is validation-only and already runs the project, documentation,
-and agent-skill validators. Do not re-run the same validators separately
-through `agent-pre-review`.
+Lightweight projects do not require a managed task lifecycle, handoff, focused
+resume input, pull request, or CI boundary for ordinary implementation work.
+{% endif %}
 
 ## Agent Skills
 

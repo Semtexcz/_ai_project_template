@@ -91,11 +91,18 @@ The recommended loop is conceptual, not mandatory orchestration:
 orient when context is unclear
 implement the scoped change
 verify with focused deterministic checks
-run the full `make check` gate once before review
+run `make agent-pre-review TASK=<id>` once to move to review
 review the diff
 update docs or record no documentation impact
 capture learning only when repeated experience justifies a guardrail
 ```
+
+`make agent-pre-review` owns the single local `make check` gate: do not run
+`make check` immediately before it. Exhaustive validation (`make release-check`,
+the render matrix, generated-project golden paths, and the Copier update path)
+is CI's job. It is required but asynchronous: after the task is in review and the
+branch is pushed, the implementation session ends, and it does not wait for or
+poll CI. A CI failure starts a fresh session that resumes from the handoff.
 
 ## Canonical Agent-Layer Mirror
 

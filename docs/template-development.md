@@ -248,7 +248,7 @@ read time. In `workflow_mode: pr` a human merge must therefore never require a
 synchronization commit, and drift validation stays meaningful only for the
 deterministic committed content.
 
-## Update And Release Checks
+## Validation Boundaries
 
 `make check` is validation-only. It must not rewrite tracked files. Use explicit
 mutating commands such as `make sync-project-docs`, generated `make format`, or
@@ -279,25 +279,43 @@ make validate-project
 make validate-template-docs
 ```
 
-Run the canonical fast gate once at final pre-review:
+Template authoring has three validation boundaries with different cost and
+ownership:
 
-```bash
-make check
-```
+1. **Implementation checks** - focused, change-aware, and run while iterating.
+   The commands `make agent-context` recommends for the changed surface
+   (`recommended_checks`) are the canonical Level 1 feedback loop. Do not add a
+   second router, a `recommended_checks_v2`, or another YAML check map.
 
-`make agent-pre-review` performs diff-safety and review-readiness checks and
-then runs that single full gate; it does not re-run the validators that
-`make check` already contains.
+2. **Local pre-review** - exactly one canonical local gate per review cycle:
 
-Before review or release-candidate signoff:
+   ```bash
+   make agent-pre-review TASK=<id>
+   ```
 
-```bash
-make release-check
-```
+   It performs diff-safety and review-readiness checks and runs `make check`
+   exactly once. Do not run `make check` immediately before it (that would
+   duplicate the local full gate), and do not turn it into the exhaustive release
+   gate. A repair cycle that returns a task to review gets its own single
+   pre-review; the invariant is one gate per review cycle, not one per task
+   lifetime.
 
-`make release-check` must preserve existing golden paths. It does not publish,
-tag, push images, or perform an external release.
+3. **Exhaustive CI/release confidence** - required, authoritative, and
+   asynchronous. Once the task is in review and the branch is pushed, the
+   implementation session ends. GitHub CI runs `make release-check`, the render
+   matrix, generated-project golden paths, the Copier update golden path, and
+   project-state validation on its own schedule. CI is asynchronous, not
+   optional, and the implementation session must not wait for or poll it.
 
+If CI fails, that failure is external evidence, not durable session state. Start
+a fresh session on the same task, branch, worktree, claim, and pull request, run
+`make agent-handoff TASK=<id>` and a focused resume around the failed surface,
+fix the failure, run the focused checks, run `make agent-pre-review TASK=<id>`
+once for that repair cycle, push the same pull request, and stop.
+
+`make release-check` is the exhaustive template gate; normal task implementation
+never runs it locally. Actual template release preparation still uses it - see
+the release workflow below.
 ## Template Releases (PR-only, two-phase)
 
 Template releases follow the same rule as every other change: all commits

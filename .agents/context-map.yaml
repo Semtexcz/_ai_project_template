@@ -199,7 +199,10 @@ change_patterns:
 # Focused validation recommendations per changed path. Make commands that do
 # not exist in this repository are ignored by the resolver; any command may be
 # listed (for example exact `uv run pytest <file>` invocations for test files).
-# Prefer `make check` at pre-review and `make release-check` for the full gate.
+# Routine implementation runs the focused recommendation; `make agent-pre-review`
+# owns the single local `make check` gate, and exhaustive `make release-check`
+# validation belongs to CI and to actual release preparation, not the
+# implementation loop.
 checks:
   # Canonical agent layer and its derived template mirrors. Changing a mirror by
   # hand is drift; run `make sync-agent-layer` instead.
@@ -301,6 +304,8 @@ checks:
     - uv run pytest tests/test_agent_efficiency.py
   "tests/test_agent_handoff.py":
     - uv run pytest tests/test_agent_handoff.py
+  "tests/test_agent_multi_session_workflow_golden_path.py":
+    - uv run pytest tests/test_agent_multi_session_workflow_golden_path.py
   "tests/test_agent_focused_resume.py":
     - uv run pytest tests/test_agent_focused_resume.py
   "tests/test_agent_one_task_workflow_golden_path.py":

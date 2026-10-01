@@ -63,3 +63,10 @@ Treat material planning/status drift as a readiness finding. Do not make every
 incidental documentation mismatch a blocker; only material contradictions
 between the actual repository state and durable planning/status documentation
 should affect readiness.
+
+Readiness ends at the configured workflow boundary after the diff is safe and
+local validation is complete. In managed PR workflows, that boundary is a task in
+review with its pull request pushed; exhaustive CI then runs asynchronously and
+is never a reason to poll or wait inside the implementation session. Managed
+local/branch workflows instead follow their configured approval and completion
+boundary.

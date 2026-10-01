@@ -211,7 +211,6 @@ def test_script_local_a0_one_task_workflow(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    run(["make", "check"], root)
     run(["make", "agent-pre-review", "TASK=T-002"], root)
     complete_task_notes(task_path)
     run(["make", "task-complete", "TASK=T-002"], root)

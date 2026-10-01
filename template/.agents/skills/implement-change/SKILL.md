@@ -41,12 +41,17 @@ invariants. Prefer existing patterns and helpers over new abstractions. Run
 focused checks while working, then finish with the relevant repository checks.
 Do not mutate task state from this skill.
 
-In managed projects, `make agent-handoff TASK=<id>` renders the compact,
-deterministic state of the task this worktree owns. Use it when a large task must
-continue in a fresh session: the task, branch, worktree, claim, and pull request
-persist, while the conversation does not.
+When a managed project provides `make agent-handoff TASK=<id>`, use it only
+when a large task must continue in a fresh session. Its task, branch, worktree,
+and claim state persist while the conversation does not; a pull-request
+association persists when the configured workflow uses one.
 
-When a large branch is resumed in a fresh session, `make agent-context TASK=<id>
-MODE=resume FOCUS="<path> ..."` optionally eagerly loads only that small working
-set. `FOCUS` is ephemeral request input (never persisted) and never changes the
-complete branch scope, recommended checks, ownership, or governance.
+When a managed project provides focused resume input, use it only to narrow a
+fresh session's working set; it must not change complete branch scope,
+recommended checks, ownership, or governance.
+
+Use focused checks while iterating. When the project provides a governed
+pre-review gate, use that gate once instead of manually duplicating its full
+check. After the local gate, follow the configured workflow boundary. In PR
+workflows, CI is required but asynchronous; do not wait for or poll it from the
+implementation session.

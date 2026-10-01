@@ -39,3 +39,9 @@ Choose focused checks first, then broader checks. Examples:
 - Documentation-only change: documentation validation, `make check`.
 
 Report commands run, results, and any risk that remains unverified.
+
+Start from focused checks for the changed surface. When the project provides a
+governed pre-review gate, use that gate once instead of manually duplicating its
+full check. After the local gate, follow the configured workflow boundary. In PR
+workflows, CI is required but asynchronous; do not wait for or poll it from the
+implementation session.

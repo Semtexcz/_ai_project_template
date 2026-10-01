@@ -44,6 +44,18 @@ Each worktree owns exactly one task through a local, uncommitted claim, so two
 agents cannot silently claim the same task. `make agent-worktree-remove TASK=<id>`
 refuses to delete dirty or unmerged work unless `FORCE=1` is passed explicitly,
 and `make agent-claim-release TASK=<id>` releases a stale claim.
+
+While implementing, run the focused checks the context bundle recommends. The
+single canonical local gate at review is `make agent-pre-review TASK=<id>`, which
+runs the project's `make check` once; do not run `make check` right before it.
+{% if workflow_mode == "pr" %}
+The implementation session ends once the task is in review and its pull request
+is pushed; required CI is asynchronous and is not polled from this session.
+{% else %}
+After the local gate, follow the configured local/branch lifecycle and human
+approval/completion boundary. A push, pull request, or CI boundary is not
+required by this workflow mode.
+{% endif %}
 {% else %}
 This project uses lightweight governance. There is no mandatory task state
 machine for ordinary implementation work. Tier 0 bootstrap is `AGENTS.md` and
@@ -198,13 +210,24 @@ branch is `main`, create a dedicated branch for the task first.
 {% endif %}
 
 Managed lifecycle skills are in `.agents/managed/skills/`.
-Project-specific context is in `project/` and `docs/`. Run
-`make agent-pre-review TASK=<id>` before review, do not bypass controlled task
-transitions, and keep dashboards synchronized and valid.
+Project-specific context is in `project/` and `docs/`. Use focused checks while
+iterating, then run `make agent-pre-review TASK=<id>` once before the configured
+review/completion boundary; do not run `make check` immediately before it. Do
+not bypass controlled task transitions, and keep dashboards synchronized and
+valid.
 {% if workflow_mode == "pr" %}
-Committed dashboards never carry merge-derived status; read live status, board,
-and next action from `make project-status` instead of rewriting committed rows
-after a merge.
+After the task is in review, push the same pull request and end the
+implementation session. Required exhaustive CI is asynchronous:
+do not wait for or poll it. If CI fails, resume the same task, branch,
+worktree, claim, and pull request in a fresh session; repair it, run
+focused checks, run the pre-review gate once, push the same pull request,
+and stop. Committed dashboards never carry merge-derived status; read live
+status, board, and next action from `make project-status` instead of
+rewriting committed rows after a merge.
+{% else %}
+In `{{ workflow_mode }}` mode, follow the configured local/branch approval and
+completion lifecycle after pre-review. Pull requests and CI are optional unless
+the project independently requires them.
 {% endif %}
 {% else %}
 Project-specific context is in `project/brief.md`, `docs/`, and ADRs under
