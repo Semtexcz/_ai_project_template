@@ -30,6 +30,36 @@ open a ready GitHub pull request. The CI guard for pushes to `main` is a
 signal; actual push blocking requires GitHub branch protection or a ruleset
 that marks the guard as a required check.
 
+## Continue A Large Task In A Fresh Session
+
+A large template-authoring task can outlive one agent conversation. The task stays
+durable; only the session ends:
+
+```bash
+make agent-handoff TASK=<id>              # capture the durable state
+# start a fresh agent session
+make agent-status
+make agent-handoff TASK=<id>              # derive the same state again
+make agent-context TASK=<id> MODE=resume
+```
+
+`template/tools/agent_handoff.py` owns the handoff model (the structured
+`AgentHandoff`, its JSON payload, and the concise human rendering); derivation
+lives in `template/tools/agent.py` and reuses the canonical task, ownership,
+branch-aware changed-file, lifecycle, and recommended-check seams. Nothing is
+persisted - there is no session id, no session record, and no second task file -
+so a handoff cannot drift from repository state. Normal output is bounded at
+8 kB. One changed-file collection is compacted deterministically to 28 entries,
+while total and deleted counts plus explicit omitted counts remain observable;
+each listed entry carries its source and deletion state. In `FORMAT=json`,
+`metrics.handoff_bytes` is exactly the UTF-8 byte length of the emitted JSON.
+
+Implementation sessions intentionally do not eagerly load the routing
+configuration, the Makefile, or unrelated planning and dashboard artifacts:
+`make agent-context` resolves files and checks from `.agents/context-map.yaml`
+and hands back the result, and `managed.files` keeps only `project/state.yaml`
+while the planning skills read the dashboards they actually need.
+
 ## Choose The Ownership Boundary
 
 Template-owned files can be changed when the scaffold or workflow changes:

@@ -36,6 +36,8 @@ def test_generated_project_has_single_state_source_and_dashboard_tools() -> None
     required = [
         "template/project/state.yaml.jinja",
         "template/tools/project.py",
+        "template/tools/agent.py",
+        "template/tools/agent_handoff.py",
         "template/tools/project_tool/__init__.py",
         "template/tools/project_tool/commands.py",
         "template/tools/project_tool/docs.py",
@@ -316,6 +318,7 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
         ".codex/skills/assess-project-state",
         "tools/project.py",
         "tools/project_tool",
+        "tools/agent_handoff.py",
         "project/state.yaml",
         "project/tasks",
         "project/board.md",
@@ -332,6 +335,7 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
     assert "sync-project-docs:" not in makefile
     assert "task-start:" not in makefile
     assert "validate-project:" not in makefile
+    assert "agent-handoff:" not in makefile
     assert "validate-agent-skills:" in makefile
     assert "validate-docs:" in makefile
     assert "check: validate-docs validate-agent-skills format-check lint typecheck test" in makefile
@@ -359,6 +363,7 @@ def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
         "sync-project-docs:",
         "validate-project:",
         "agent-context:",
+        "agent-handoff:",
         "task-start:",
         "task-approve:",
     ]:
@@ -788,11 +793,14 @@ def test_github_merge_approval_lifecycle_is_rendered_consistently() -> None:
         "agent-worktree-remove:",
         "agent-claim-release:",
         "project-available:",
+        "agent-handoff:",
     ]:
         assert target in makefile, target
     assert "## Parallel Worktrees" in workflow
     assert "make agent-worktree TASK=T-002" in workflow
     assert "PROJECT_WORKTREE_ROOT" in workflow
+    assert "## Handoff" in workflow
+    assert "make agent-handoff TASK=T-002" in workflow
     assert "make agent-worktree" in agents
 
     # The pr-mode machinery stays conditional; lightweight defaults are untouched.

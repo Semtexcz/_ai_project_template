@@ -168,8 +168,13 @@ def test_skill_reads_route_context_and_stay_isolated(
 
     implement = context_json(root, "--skill", "implement-change")
     implement_files = set(implement["files"])
-    assert ".agents/context-map.yaml" in implement_files
-    assert "Makefile" in implement_files
+    # Routing stays with the tooling: the model receives the resolved result
+    # (files, changed files, recommended checks), not the routing configuration.
+    assert ".agents/context-map.yaml" not in implement_files
+    assert "Makefile" not in implement_files
+    assert "AGENTS.md" in implement_files
+    assert "project/state.yaml" in implement_files
+    assert implement["recommended_checks"]
     # Unrelated skill metadata must not leak into implement-change context.
     assert not any(
         ".agents/skills/conventional-commit/" in path for path in implement_files
@@ -225,13 +230,15 @@ def test_budget_file_limit_omits_and_reports(
 ) -> None:
     root = fresh_copy(managed_script, tmp_path, "file-budget")
     map_path = root / ".agents" / "context-map.yaml"
+    # The managed baseline is now small (task, AGENTS.md, project/state.yaml,
+    # profile files), so a budget of 3 is enough pressure to force an omission.
     map_path.write_text(
-        map_path.read_text(encoding="utf-8").replace("max_files: 20", "max_files: 5"),
+        map_path.read_text(encoding="utf-8").replace("max_files: 20", "max_files: 3"),
         encoding="utf-8",
     )
     context = context_json(root)
     files = context["files"]
-    assert len(files) <= 5
+    assert len(files) <= 3
     # Protected task/bootstrap material is never dropped.
     assert "AGENTS.md" in files
     assert any("project/tasks/T-001-initialize-project.md" in path for path in files)

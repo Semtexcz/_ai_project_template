@@ -102,6 +102,15 @@ CONTEXT_CATEGORY_PRIORITY = {
     "change": 5,
     "profile": 6,
 }
+# Why an agent must stop instead of guessing. Shared by the context bundle and
+# the deterministic handoff so both surfaces stay consistent by construction.
+CONTEXT_STOP_CONDITIONS = [
+    "missing task",
+    "blocked task",
+    "unmet dependencies",
+    "missing required approval",
+    "invalid context map",
+]
 
 
 class AgentError(Exception):
@@ -152,6 +161,26 @@ def require_project_module() -> Any:
     if project is None:
         project = project_module()
     return project
+
+
+def handoff_module() -> Any:
+    """Load the optional handoff model next to this tool.
+
+    ``agent_handoff.py`` is emitted only for managed projects, so a lightweight
+    project fails with guidance instead of an import error.
+    """
+    path = Path(__file__).with_name("agent_handoff.py")
+    if path.exists():
+        spec = importlib.util.spec_from_file_location("agent_handoff", path)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            return module
+    raise AgentError(
+        "Agent handoff is available in managed projects only; this project has no "
+        "agent_handoff module. Use make agent-status and make agent-context instead."
+    )
 
 
 def rel(path: Path) -> str:
@@ -890,8 +919,8 @@ def _parse_name_status(lines: list[str]) -> list[tuple[str, bool]]:
     return entries
 
 
-def changed_file_entries() -> list[tuple[str, str]]:
-    """Return deterministic (source, path) entries for the complete branch/PR
+def changed_file_entries() -> list[tuple[str, str, bool]]:
+    """Return deterministic (source, path, deleted) entries for the complete branch/PR
     change set: committed branch changes + staged + unstaged + untracked.
 
     The union is stable after commits: a clean worktree on a feature branch
@@ -919,33 +948,19 @@ def changed_file_entries() -> list[tuple[str, str]]:
         if path.strip():
             add("untracked", path.strip(), False)
     return sorted(
-        ((source, path) for path, (source, _deleted) in merged.items()),
+        ((source, path, deleted) for path, (source, deleted) in merged.items()),
         key=lambda item: item[1],
     )
 
 
 def deleted_changed_files() -> set[str]:
-    deleted: set[str] = set()
-    base = git_base_commit()
-    if base is not None:
-        for path, is_deleted in _parse_name_status(
-            git_stdout_lines(["diff", "--name-status", base, "HEAD"])
-        ):
-            if is_deleted:
-                deleted.add(path)
-    for path, is_deleted in _parse_name_status(
-        git_stdout_lines(["diff", "--cached", "--name-status"])
-    ):
-        if is_deleted:
-            deleted.add(path)
-    for path, is_deleted in _parse_name_status(git_stdout_lines(["diff", "--name-status"])):
-        if is_deleted:
-            deleted.add(path)
-    return deleted
+    """Return deleted paths from the canonical enriched changed-file entries."""
+    return {path for _source, path, deleted in changed_file_entries() if deleted}
 
 
 def changed_files() -> list[str]:
-    return [path for _, path in changed_file_entries()]
+    """Return changed paths, preserving the existing path-only public surface."""
+    return [path for _source, path, _deleted in changed_file_entries()]
 
 
 def _existing_make_commands(commands: list[str]) -> list[str]:
@@ -1098,13 +1113,7 @@ def resolve_context(
             "approval_level": task.approval_level,
             "approval_status": task.approval_status,
         },
-        "stop_conditions": [
-            "missing task",
-            "blocked task",
-            "unmet dependencies",
-            "missing required approval",
-            "invalid context map",
-        ],
+        "stop_conditions": CONTEXT_STOP_CONDITIONS,
         "files": [item["path"] for item in included],
         "files_included": included,
         "search_roots": sorted(search_roots),
@@ -1301,6 +1310,124 @@ def select_budgeted(
     return included, omitted, total_bytes
 
 
+def recent_commits(limit: int) -> list[tuple[str, str]]:
+    """Return up to ``limit`` recent commits on this branch as (sha, subject).
+
+    Only the subject line is read: a handoff never carries a diff or a log.
+    """
+    base = git_base_commit()
+    args = ["log", "--format=%H%x09%s", "-n", str(limit)]
+    if base is not None:
+        args.append(f"{base}..HEAD")
+    commits: list[tuple[str, str]] = []
+    for line in git_stdout_lines(args):
+        sha, _separator, subject = line.partition("\t")
+        if sha.strip():
+            commits.append((sha.strip(), subject.strip()))
+    return commits
+
+
+def derive_handoff(task_id: str | None) -> Any:
+    """Derive the deterministic, runtime-only handoff for the owned task.
+
+    Every value comes from a canonical seam: task loading and readiness from
+    ``project_tool``, ownership from the worktree/claim resolver, changed files
+    from the existing branch-aware detector, checks from the context routing, and
+    the next action from the lifecycle renderer. Nothing is recomputed in a second
+    way, nothing is persisted, and no conversation state is read.
+    """
+    handoff = handoff_module()
+    managed_project = require_project_module()
+    task = get_task(task_id)
+    owner = managed_project.resolve_owner()
+    if owner.errors:
+        raise AgentError(" ".join(owner.errors))
+    if owner.task_id != task.id:
+        raise AgentError(
+            f"Handoff was requested for {task.id}, but this checkout owns "
+            f"{owner.task_id or 'no task'}. Run handoff inside the worktree that "
+            f"owns {task.id}: make agent-worktree TASK={task.id}"
+        )
+    state = managed_project.read_state()
+    tasks = managed_project.load_tasks()
+    tasks_by = managed_project.task_by_id(tasks)
+    worktree_state = next(
+        (item for item in managed_project.worktree_states() if item.task_id == task.id),
+        None,
+    )
+
+    def dependency(identifier: str) -> Any:
+        if identifier not in tasks_by:
+            return handoff.HandoffDependency(task_id=identifier, status="unknown", blocking=True)
+        status = str(managed_project.effective_status(state, tasks_by[identifier]))
+        return handoff.HandoffDependency(
+            task_id=identifier, status=status, blocking=status not in {"done", "cancelled"}
+        )
+
+    entries = changed_file_entries()
+    listed = entries[: handoff.HANDOFF_MAX_CHANGED_FILES]
+    config = read_yaml(AGENTS_DIR / "context-map.yaml")
+    unchecked = [
+        text for checked, text in managed_project.acceptance_checkboxes(task) if not checked
+    ]
+    head = git_stdout_lines(["rev-parse", "HEAD"])
+    remaining_limit = handoff.HANDOFF_MAX_REMAINING_CRITERIA
+    value = handoff.AgentHandoff(
+        task_id=task.id,
+        title=task.title,
+        status=task.status,
+        effective_status=str(managed_project.effective_status(state, task)),
+        milestone=task.milestone,
+        priority=task.priority,
+        approval_level=task.approval_level,
+        approval_status=task.approval_status,
+        blocked=task.status == "blocked",
+        blocked_reason=task.blocked_reason,
+        unblock_action=task.unblock_action,
+        dependencies=tuple(dependency(identifier) for identifier in task.depends_on),
+        worktree=handoff.HandoffWorktree(
+            branch=owner.branch,
+            head_sha=head[0].strip() if head else None,
+            path=owner.worktree,
+            control_checkout=owner.control_checkout,
+            registered=bool(worktree_state and worktree_state.registered),
+            exists=bool(worktree_state and worktree_state.exists),
+            claimed=owner.claim is not None,
+            claim_task_id=owner.claim.task_id if owner.claim else None,
+            dirty=bool(git_stdout_lines(["status", "--porcelain"])),
+            merged=bool(worktree_state and worktree_state.merged),
+            unique_commits=worktree_state.unique_commits if worktree_state else 0,
+            ownership_consistent=owner.valid,
+            errors=tuple(owner.errors),
+            notes=tuple(owner.notes),
+        ),
+        changed_files=tuple(
+            handoff.HandoffChangedFile(source=source, path=path, deleted=deleted)
+            for source, path, deleted in listed
+        ),
+        changed_files_omitted=len(entries) - len(listed),
+        deleted_files_omitted=sum(deleted for _source, _path, deleted in entries[len(listed) :]),
+        recent_commits=tuple(
+            handoff.HandoffCommit(sha=sha, subject=subject)
+            for sha, subject in recent_commits(handoff.HANDOFF_MAX_COMMITS)
+        ),
+        remaining_acceptance_criteria=tuple(unchecked[:remaining_limit]),
+        remaining_criteria_omitted=max(0, len(unchecked) - remaining_limit),
+        next_action=managed_project.recommended_next_action(state, tasks),
+        recommended_checks=tuple(
+            recommended_checks(config, sorted({path for _source, path, _deleted in entries}))
+        ),
+        resume_from_worktree=f"cd {owner.worktree}",
+        resume_commands=("make agent-status", f"make agent-context TASK={task.id} MODE=resume"),
+        stop_conditions=tuple(CONTEXT_STOP_CONDITIONS),
+    )
+    try:
+        handoff.enforce_budget(value)
+    except handoff.HandoffError as exc:
+        raise AgentError(str(exc)) from exc
+    return value
+
+
 def agent_status() -> str:
     """Report the live project view plus this checkout's worktree ownership.
 
@@ -1398,11 +1525,10 @@ def pre_task(task_id: str) -> None:
 
 def diff_safety_errors() -> list[str]:
     errors: list[str] = []
-    deleted = deleted_changed_files()
-    for _status, path in changed_file_entries():
+    for _source, path, deleted in changed_file_entries():
         if excluded(path, SENSITIVE_PATTERNS):
             errors.append(f"Sensitive file appears in Git diff: {path}.")
-        if excluded(path, BUILD_ARTIFACT_PATTERNS) and path not in deleted:
+        if excluded(path, BUILD_ARTIFACT_PATTERNS) and not deleted:
             errors.append(f"Build artifact appears in Git diff: {path}.")
     return errors
 
@@ -1495,6 +1621,15 @@ def print_context(data: dict[str, Any], output_format: str) -> None:
     print(f"Next action: {data['next_action']}")
 
 
+def print_handoff(value: Any, output_format: str) -> None:
+    """Print the derived handoff in the requested format."""
+    handoff = handoff_module()
+    if output_format == "json":
+        sys.stdout.write(handoff.render_json(value))
+        return
+    print(handoff.render_text(value))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1504,6 +1639,9 @@ def main() -> None:
     context.add_argument("--skill")
     context.add_argument("--mode", choices=["new", "resume"], default="new")
     context.add_argument("--format", choices=["text", "json"], default="text")
+    handoff = sub.add_parser("handoff")
+    handoff.add_argument("--task")
+    handoff.add_argument("--format", choices=["text", "json"], default="text")
     sub.add_parser("validate-skills")
     for name in ["pre-task", "pre-review", "post-task"]:
         command = sub.add_parser(name)
@@ -1517,6 +1655,8 @@ def main() -> None:
                 resolve_context(args.task, skill=args.skill, mode=args.mode),
                 args.format,
             )
+        elif args.command == "handoff":
+            print_handoff(derive_handoff(args.task), args.format)
         elif args.command == "validate-skills":
             fail_if_errors(validate_agent_skills())
             print("Agent skills are valid.")

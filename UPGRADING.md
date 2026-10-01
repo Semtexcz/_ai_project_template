@@ -80,6 +80,29 @@ Managed projects gained task-scoped worktrees and local claims. After updating:
 Worktree claims are local to one repository. Agents on separate machines share no
 claims yet, so coordinate their task split by hand.
 
+## Task Handoff Upgrade
+
+Managed projects gained an optional, derived handoff for continuing one task in a
+fresh agent session. After updating:
+
+- A new `tools/agent_handoff.py` and the managed `agent-handoff` Make target
+  arrive with the update, so `make agent-handoff TASK=<id>` works immediately. No
+  migration step is required, and lightweight projects do not receive either.
+- The handoff is derived at read time from existing task, Git, worktree, claim,
+  and context-map state. It is never persisted, so there is nothing to configure,
+  commit, or clean up, and no session record exists to become stale. Its one
+  bounded changed-file list includes source and deletion state; total/deleted and
+  omitted counts stay visible even for large deletion migrations. In `FORMAT=json`,
+  `metrics.handoff_bytes` exactly equals the emitted JSON UTF-8 size.
+- Ordinary implementation context got smaller: `implement-change` no longer
+  eagerly reads `.agents/context-map.yaml` or the `Makefile`, and `managed.files`
+  now carries only `project/state.yaml`. If a local context-map customization
+  relied on dashboards being loaded automatically, add them to the relevant
+  skill's `reads:` list.
+
+The update also refreshes the managed `agent-context` baseline. Since it is
+derived, no committed file changes and no lifecycle command are needed for it.
+
 `workflow_mode` is also explicit on upgrade. If omitted, the new default is
 `local`. Select `workflow_mode=pr` to preserve the previous strict
 branch/commit/push/ready-PR instructions.

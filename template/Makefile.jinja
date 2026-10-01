@@ -1,4 +1,4 @@
-.PHONY: setup dev run test format format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build image-inspect prod-up prod-status prod-smoke prod-down docs validate-docs validate-agent-skills{% if governance == "managed" %} project-status project-available sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context agent-pre-task agent-pre-review agent-post-task agent-review-report agent-worktree agent-worktrees agent-worktree-remove agent-claim-release{% endif %} down
+.PHONY: setup dev run test format format-check lint typecheck api-schema api-generate api-check e2e e2e-production check build image-build image-inspect prod-up prod-status prod-smoke prod-down docs validate-docs validate-agent-skills{% if governance == "managed" %} project-status project-available sync-project-docs validate-project task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve agent-status agent-context agent-handoff agent-pre-task agent-pre-review agent-post-task agent-review-report agent-worktree agent-worktrees agent-worktree-remove agent-claim-release{% endif %} down
 
 PROJECT_TYPE := {{ project_type }}
 RUNTIME_LEVEL := {{ runtime_level }}
@@ -271,6 +271,9 @@ agent-status:
 
 agent-context:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py context --task $(TASK) $(if $(SKILL),--skill $(SKILL),) $(if $(MODE),--mode $(MODE),) $(if $(FORMAT),--format $(FORMAT),)
+
+agent-handoff:
+	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py handoff --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
 
 agent-pre-task:
 	PYTHONDONTWRITEBYTECODE=1 python tools/agent.py pre-task --task $(TASK)

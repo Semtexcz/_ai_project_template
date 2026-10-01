@@ -47,6 +47,7 @@ from project_tool.commands import (  # noqa: E402
 from project_tool.docs import validate_docs  # noqa: E402
 from project_tool.git import github_merge_completes, task_merge_completed  # noqa: E402
 from project_tool.lifecycle import (  # noqa: E402
+    acceptance_checkboxes,
     available_tasks,
     definition_of_done,
     definition_of_ready,
@@ -78,6 +79,7 @@ from project_tool.validation import (  # noqa: E402
 # implementation from its owning module, never a second implementation.
 __all__ = [
     "approve",
+    "acceptance_checkboxes",
     "active_tasks",
     "available_command",
     "claimable_tasks",

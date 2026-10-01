@@ -57,8 +57,10 @@ separates:
 - `bootstrap.files`: Tier 0 repository rules that are always loaded (normally
   only `AGENTS.md`).
 - `task.files`: the selected managed task record.
-- `managed.files`: governance state files (`project/state.yaml`,
-  `project/index.md`, `project/board.md`, `project/roadmap.md`).
+- `managed.files`: the managed governance baseline for an already selected task
+  (`project/state.yaml`). Planning and dashboard artifacts (`project/index.md`,
+  `project/board.md`, `project/roadmap.md`) are not eager: the task-selection,
+  planning, and reassessment skills load them through their own `reads:`.
 - `project_type.<profile>.files`: explicit narrow files for the project shape
   (here the `template` profile has no eager files).
 - `search_roots`: directories that are searchable only; they are never
@@ -113,6 +115,36 @@ divergences and are never mirrored: `.agents/README.md` and
 `.agents/context-map.yaml` describe this template repository, while their
 `template/.agents/` counterparts describe generated projects (profile routing,
 lightweight vs managed governance, template-local guidance).
+
+## Handoff
+
+One managed task keeps one branch, worktree, local claim, and pull request, but a
+large template-authoring task can outlive one useful agent conversation. The
+handoff makes the durable state reconstructible without any conversation history:
+
+```text
+task persists
+session does not
+```
+
+```bash
+make agent-handoff TASK=<id>              # concise human view
+make agent-handoff TASK=<id> FORMAT=json  # machine-readable
+```
+
+The handoff is derived, runtime-only, deterministic, bounded (at most 8 kB), and
+machine-readable. It reports task identity and lifecycle, branch/HEAD/worktree/
+claim ownership and dirty state, a compact branch-aware changed-file summary, a
+bounded set of recent task commits, the remaining acceptance criteria, the
+lifecycle next action, the checks resolved by the same context routing,
+deterministic resume commands, and small metrics (`changed_files_count`,
+`recommended_checks_count`, `handoff_bytes`).
+
+It contains no transcript, no reasoning, no diff, no test log, and no command
+history, and it is never persisted: there is no session id, no session record,
+and no second task file. Requesting a handoff from the wrong task or worktree
+fails loudly. The normal one-session loop (`agent-status`, `agent-context`,
+implement, `agent-pre-review`) never needs it.
 
 ## Hooks
 
