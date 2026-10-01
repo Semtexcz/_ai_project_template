@@ -232,6 +232,17 @@ template checks, generated project golden paths, Copier update checks, agent
 workflow checks, project-state mutation checks, production runtime inspection,
 and documentation drift checks.
 
+Template authoring separates three validation boundaries by cost and ownership:
+focused, change-aware implementation checks (`recommended_checks` from
+`make agent-context`), exactly one canonical local pre-review gate per review
+cycle (`make agent-pre-review`, which runs `make check` exactly once and never
+`release-check`), and exhaustive CI/release validation (`make release-check`, the
+render matrix, golden paths, and the Copier update path) that runs
+asynchronously after a push. CI is required but is never polled from the
+implementation session, so the implementation session ends at the pushed pull
+request and a failed CI check starts a fresh repair session on the same task,
+branch, worktree, claim, and pull request.
+
 Template release is a two-phase maintainer workflow that preserves the PR-only
 `main` rule. `make template-release-prepare BUMP=<major|minor|patch>`
 (implemented in `tools/template_release.py`, outside the rendered template
