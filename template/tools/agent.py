@@ -88,7 +88,6 @@ BUILD_ARTIFACT_PATTERNS = [
     "**/*.pyc",
 ]
 ALLOWED_REASONING_EFFORTS = {"low", "medium", "high"}
-CHEAP_MODELS = {"gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"}
 CONTEXT_SCHEMA_VERSION = 2
 DEFAULT_CONTEXT_BUDGET = {"max_files": 20, "max_bytes": 120000}
 # Context loading order. Task and selected-skill material are protected from
@@ -185,6 +184,24 @@ def handoff_module() -> Any:
         "Agent handoff is available in managed projects only; this project has no "
         "agent_handoff module. Use make agent-status and make agent-context instead."
     )
+
+
+def execution_module() -> Any:
+    """Load the deterministic execution-policy engine next to this tool.
+
+    ``agent_execution.py`` is emitted for every project profile because the
+    execution policy exists everywhere; only the ``agent-route`` Make target is
+    managed-only. This module never launches a model and never persists state.
+    """
+    path = Path(__file__).with_name("agent_execution.py")
+    if path.exists():
+        spec = importlib.util.spec_from_file_location("agent_execution", path)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            return module
+    raise AgentError("Cannot find tools/agent_execution.py. Restore agent tooling first.")
 
 
 def rel(path: Path) -> str:
@@ -385,6 +402,8 @@ def validate_agent_skills() -> list[str]:
     runtime_level = metadata["runtime_level"]
     targets = make_targets() | template_make_targets()
     paths = skill_paths()
+    policy_profiles, policy_errors = validate_execution_policy()
+    errors.extend(policy_errors)
     names: list[str] = []
     required_skills = set(CORE_SKILLS)
     if governance == "managed":
@@ -442,7 +461,7 @@ def validate_agent_skills() -> list[str]:
             errors.append(f"{rel(path)} must not instruct agents to write approval metadata.")
         if "project/board.md" in lowered and "direct" in lowered and "edit" in lowered:
             errors.append(f"{rel(path)} must not recommend direct generated dashboard edits.")
-        errors.extend(validate_skill_bundle(path.parent, name))
+        errors.extend(validate_skill_bundle(path.parent, name, policy_profiles))
     if governance != "managed":
         for managed in sorted(MANAGED_SKILLS):
             if canonical_skill_path(managed) is not None:
@@ -453,7 +472,98 @@ def validate_agent_skills() -> list[str]:
     for name in duplicates:
         errors.append(f"Duplicate skill name {name}. Keep skill names unique.")
     errors.extend(validate_context_map())
+    errors.extend(validate_execution_schemas())
+    errors.extend(validate_review_contract())
     errors.extend(validate_codex_adapter())
+    return errors
+
+
+def validate_execution_policy() -> tuple[dict[str, Any], list[str]]:
+    """Validate the canonical execution policy and return its profiles.
+
+    This keeps policy validation inside the existing ``validate-agent-skills``
+    boundary instead of starting a parallel validation ecosystem. Unknown roles or
+    profiles fail clearly here.
+    """
+    errors: list[str] = []
+    execution = execution_module()
+    path = AGENTS_DIR / "execution.yaml"
+    if not path.exists():
+        errors.append("Missing canonical execution policy .agents/execution.yaml.")
+        return {}, errors
+    try:
+        policy = read_yaml(path)
+    except AgentError as exc:
+        return {}, [str(exc)]
+    errors.extend(execution.validate_policy(policy))
+    profiles = policy.get("profiles")
+    return (profiles if isinstance(profiles, dict) else {}), errors
+
+
+def validate_execution_schemas() -> list[str]:
+    """Cross-check the declarative execution schemas against the canonical code.
+
+    The Python validator is authoritative; these declarations document the
+    contract. Checking them here means the schema files can never silently drift
+    from the enums the resolver actually enforces.
+    """
+    errors: list[str] = []
+    execution = execution_module()
+    policy_path = AGENTS_DIR / "schemas" / "execution-policy.schema.yaml"
+    review_path = AGENTS_DIR / "schemas" / "review-result.schema.yaml"
+    for path in [policy_path, review_path]:
+        if not path.exists():
+            errors.append(f"Missing execution schema {rel(path)}.")
+    if not policy_path.exists() or not review_path.exists():
+        return errors
+    try:
+        policy_schema = read_yaml(policy_path)
+        review_schema = read_yaml(review_path)
+    except AgentError as exc:
+        return [*errors, str(exc)]
+    for path, schema in [(policy_path, policy_schema), (review_path, review_schema)]:
+        if schema.get("schema_version") != 1:
+            errors.append(f"{rel(path)} schema_version must be 1.")
+    roles = policy_schema.get("roles") or {}
+    if roles.get("enum") != list(execution.CANONICAL_ROLES):
+        errors.append(f"{rel(policy_path)} roles.enum must match the canonical roles.")
+    profiles = policy_schema.get("profiles") or {}
+    if profiles.get("reasoning_effort") != list(execution.REASONING_EFFORTS):
+        errors.append(f"{rel(policy_path)} profiles.reasoning_effort drifts from the code.")
+    if profiles.get("cost_class") != list(execution.COST_CLASSES):
+        errors.append(f"{rel(policy_path)} profiles.cost_class drifts from the code.")
+    escalation = policy_schema.get("escalation") or {}
+    if escalation.get("triggers") != list(execution.ESCALATION_TRIGGERS):
+        errors.append(f"{rel(policy_path)} escalation.triggers drifts from the code.")
+    budgets = policy_schema.get("budgets") or {}
+    if budgets.get("scopes") != list(execution.BUDGET_SCOPES):
+        errors.append(f"{rel(policy_path)} budgets.scopes drifts from the code.")
+    result = review_schema.get("result") or {}
+    if result.get("enum") != list(execution.REVIEW_RESULTS):
+        errors.append(f"{rel(review_path)} result.enum drifts from the code.")
+    findings = review_schema.get("findings") or {}
+    if findings.get("severity") != list(execution.FINDING_SEVERITIES):
+        errors.append(f"{rel(review_path)} findings.severity drifts from the code.")
+    if findings.get("category") != list(execution.FINDING_CATEGORIES):
+        errors.append(f"{rel(review_path)} findings.category drifts from the code.")
+    return errors
+
+
+def validate_review_contract() -> list[str]:
+    """Prove the structured review-result contract is wired and enforced.
+
+    Mirrors how ``validate_conventional_commit_validator`` exercises its
+    deterministic validator: a valid clean result must pass and a malformed result
+    must be rejected.
+    """
+    errors: list[str] = []
+    execution = execution_module()
+    clean = {"result": "clean", "findings": []}
+    if execution.validate_review_result(clean):
+        errors.append("review-result contract must accept a clean result with no findings.")
+    malformed = {"result": "clean", "findings": [{"severity": "unknown"}]}
+    if not execution.validate_review_result(malformed):
+        errors.append("review-result contract must reject a malformed result.")
     return errors
 
 
@@ -595,18 +705,34 @@ def validate_openai_metadata(path: Path, skill_name: str) -> list[str]:
     return errors
 
 
-def validate_model_metadata(path: Path, skill_name: str) -> list[str]:
+def validate_model_metadata(path: Path, skill_name: str, profiles: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     try:
         data = read_yaml(path)
     except AgentError as exc:
         return [str(exc)]
+    profile_name = data.get("profile")
+    if not isinstance(profile_name, str) or not profile_name.strip():
+        errors.append(
+            f"{rel(path)} must request an execution profile via a non-empty 'profile' key."
+        )
+    elif profile_name not in profiles:
+        available = ", ".join(sorted(profiles)) or "(none)"
+        errors.append(
+            f"{rel(path)} references missing execution profile '{profile_name}'. "
+            f"Available profiles: {available}."
+        )
+    elif skill_name == "conventional-commit":
+        profile = profiles[profile_name]
+        cost_class = profile.get("cost_class") if isinstance(profile, dict) else None
+        if cost_class != "cheap":
+            errors.append(
+                f"{rel(path)} must reference a cheap execution profile for conventional-commit "
+                f"(cost_class: cheap), but '{profile_name}' is '{cost_class}'."
+            )
     model = data.get("model")
-    if not isinstance(model, str) or not model.strip():
-        errors.append(f"{rel(path)} model must be a non-empty string.")
-    elif skill_name == "conventional-commit" and model not in CHEAP_MODELS:
-        cheap_models = ", ".join(sorted(CHEAP_MODELS))
-        errors.append(f"{rel(path)} must use a cheap model: {cheap_models}.")
+    if model is not None and (not isinstance(model, str) or not model.strip()):
+        errors.append(f"{rel(path)} model, when set, must be a non-empty opaque string.")
     reasoning_effort = data.get("reasoning_effort")
     if reasoning_effort is not None and reasoning_effort not in ALLOWED_REASONING_EFFORTS:
         efforts = ", ".join(sorted(ALLOWED_REASONING_EFFORTS))
@@ -649,7 +775,7 @@ def validate_conventional_commit_validator(script_path: Path) -> list[str]:
     return errors
 
 
-def validate_skill_bundle(skill_dir: Path, skill_name: str) -> list[str]:
+def validate_skill_bundle(skill_dir: Path, skill_name: str, profiles: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     agents_dir = skill_dir / "agents"
     scripts_dir = skill_dir / "scripts"
@@ -658,7 +784,7 @@ def validate_skill_bundle(skill_dir: Path, skill_name: str) -> list[str]:
     if openai_path.exists():
         errors.extend(validate_openai_metadata(openai_path, skill_name))
     if model_path.exists():
-        errors.extend(validate_model_metadata(model_path, skill_name))
+        errors.extend(validate_model_metadata(model_path, skill_name, profiles))
     if skill_name == "conventional-commit":
         if not openai_path.exists():
             errors.append(f"Missing required skill metadata {rel(openai_path)}.")
@@ -1769,6 +1895,70 @@ def print_handoff(value: Any, output_format: str) -> None:
     print(handoff.render_text(value))
 
 
+def resolve_route(
+    role: str,
+    *,
+    attempt: int = 1,
+    review_cycle: int = 0,
+    trigger: str | None = None,
+    usage_file: str | None = None,
+) -> Any:
+    """Resolve one role to a deterministic execution decision.
+
+    This is the thin, human-facing surface over the canonical policy resolver in
+    ``agent_execution.py``. It resolves *policy only*: it never invokes a model,
+    never launches a process, and never persists a record.
+    """
+    execution = execution_module()
+    try:
+        policy = read_yaml(AGENTS_DIR / "execution.yaml")
+    except AgentError as exc:
+        raise AgentError(str(exc)) from exc
+    usage: Any = None
+    if usage_file:
+        path = Path(usage_file)
+        if not path.is_absolute():
+            path = ROOT / usage_file
+        if not path.exists():
+            raise AgentError(f"Usage file {usage_file} does not exist.")
+        try:
+            usage = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise AgentError(f"Usage file {usage_file} is not valid JSON: {exc}") from exc
+    try:
+        return execution.resolve_execution(
+            policy,
+            role,
+            attempt=attempt,
+            review_cycle=review_cycle,
+            trigger=trigger,
+            usage=usage,
+        )
+    except execution.ExecutionPolicyError as exc:
+        raise AgentError(str(exc)) from exc
+
+
+def print_route(decision: Any, output_format: str) -> None:
+    """Print a resolved execution decision in the requested format."""
+    if output_format == "json":
+        print(json.dumps(decision.as_dict(), indent=2, sort_keys=True))
+        return
+    print(f"Status: {decision.status}")
+    print(f"Action: {decision.action}")
+    print(f"Role: {decision.role}")
+    print(f"Profile: {decision.profile}")
+    print(f"Harness: {decision.harness}")
+    print(f"Model: {decision.model if decision.model else '(harness default)'}")
+    print(f"Reasoning effort: {decision.reasoning_effort}")
+    print(f"Capabilities: {', '.join(decision.capabilities)}")
+    print(f"Attempt: {decision.attempt}")
+    print(f"Escalated: {'yes' if decision.escalated else 'no'}")
+    if decision.escalation_reason:
+        print(f"Escalation reason: {decision.escalation_reason}")
+    print(f"Budget: {decision.budget.status}")
+    print(f"Reason: {decision.reason}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1788,6 +1978,13 @@ def main() -> None:
     handoff = sub.add_parser("handoff")
     handoff.add_argument("--task")
     handoff.add_argument("--format", choices=["text", "json"], default="text")
+    route = sub.add_parser("route")
+    route.add_argument("--role", required=True)
+    route.add_argument("--attempt", type=int, default=1)
+    route.add_argument("--review-cycle", type=int, default=0)
+    route.add_argument("--trigger")
+    route.add_argument("--usage-file")
+    route.add_argument("--format", choices=["text", "json"], default="text")
     sub.add_parser("validate-skills")
     for name in ["pre-task", "pre-review", "post-task"]:
         command = sub.add_parser(name)
@@ -1803,6 +2000,17 @@ def main() -> None:
             )
         elif args.command == "handoff":
             print_handoff(derive_handoff(args.task), args.format)
+        elif args.command == "route":
+            print_route(
+                resolve_route(
+                    args.role,
+                    attempt=args.attempt,
+                    review_cycle=args.review_cycle,
+                    trigger=args.trigger,
+                    usage_file=args.usage_file,
+                ),
+                args.format,
+            )
         elif args.command == "validate-skills":
             fail_if_errors(validate_agent_skills())
             print("Agent skills are valid.")

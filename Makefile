@@ -1,4 +1,4 @@
-.PHONY: check release-check template-release-prepare template-release-tag test-template test-agent test-workflow test-lifecycle test-static test-mirror test-release-workflow test-backend test-frontend test-python-profiles test-copier-update project-status sync-project-docs validate-project validate-template-docs validate-agent-layer sync-agent-layer task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve pr-validate agent-status agent-context agent-handoff validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
+.PHONY: check release-check template-release-prepare template-release-tag test-template test-agent test-workflow test-lifecycle test-static test-mirror test-release-workflow test-backend test-frontend test-python-profiles test-copier-update project-status sync-project-docs validate-project validate-template-docs validate-agent-layer sync-agent-layer task-ready task-start task-review task-complete task-block task-unblock task-cancel task-approve pr-validate agent-status agent-context agent-handoff agent-route validate-agent-skills agent-pre-task agent-pre-review agent-post-task agent-review-report
 
 check: validate-project validate-template-docs validate-agent-skills validate-agent-layer
 	UV_CACHE_DIR=$${UV_CACHE_DIR:-/tmp/uv-cache} uv run pytest tests/test_template_static.py tests/test_project_state_validation_golden_path.py tests/test_agent_layer_mirror.py tests/test_agent_context_routing.py
@@ -65,6 +65,9 @@ agent-context:
 
 agent-handoff:
 	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py handoff --task $(TASK) $(if $(FORMAT),--format $(FORMAT),)
+
+agent-route:
+	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py route --role $(ROLE) $(if $(ATTEMPT),--attempt $(ATTEMPT),) $(if $(REVIEW_CYCLE),--review-cycle $(REVIEW_CYCLE),) $(if $(TRIGGER),--trigger $(TRIGGER),) $(if $(USAGE),--usage-file $(USAGE),) $(if $(FORMAT),--format $(FORMAT),)
 
 validate-agent-skills:
 	PYTHONDONTWRITEBYTECODE=1 python template/tools/agent.py validate-skills

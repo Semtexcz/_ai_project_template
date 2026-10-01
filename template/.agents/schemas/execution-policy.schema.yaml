@@ -1,0 +1,41 @@
+schema_version: 1
+
+# Declarative schema for .agents/execution.yaml (role-based execution policy).
+# The canonical enforcement is `validate_policy` in template/tools/agent_execution.py;
+# `make validate-agent-skills` cross-checks these declarations against the code so
+# the two cannot drift. This is a small hand-written schema, matching the style of
+# skill.schema.yaml and context-map.schema.yaml.
+
+required:
+  - schema_version
+  - roles
+  - profiles
+
+roles:
+  # Exactly the canonical roles: adding one is an architecture decision.
+  enum: [planner, implementer, reviewer, fixer]
+  required_keys: [profile]
+  profile: reference-to-profiles
+
+profiles:
+  required_keys: [harness, model, reasoning_effort, cost_class, capabilities]
+  harness: non-empty-string
+  model: null-or-opaque-string
+  reasoning_effort: [low, medium, high]
+  cost_class: [cheap, efficient, high]
+  capabilities: non-empty-list-of-strings
+
+policy:
+  positive-integers: [max_implementation_attempts, max_review_cycles]
+
+escalation:
+  triggers: [implementation_failure, architecture_failure, external_blocker]
+  rule-keys:
+    role: reference-to-roles
+    profile: reference-to-profiles
+    action: [execute, human]
+    after_attempts: positive-integer
+
+budgets:
+  scopes: [task, session, campaign]
+  max_cost_usd: null-or-positive-number

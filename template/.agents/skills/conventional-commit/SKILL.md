@@ -31,7 +31,9 @@ Inspect the smallest relevant diff first. Prefer staged changes when they
 exist; otherwise inspect the user-scoped working tree diff and say which source
 you used.
 
-Use the low-cost model profile declared in `agents/model.yaml` for drafting.
+Use the low-cost `utility-cheap` execution profile declared in
+`agents/model.yaml` for drafting (the profile lives in `.agents/execution.yaml`,
+so no vendor model name is pinned in this skill).
 Produce exactly one commit message candidate unless the user explicitly asks for
 alternatives.
 

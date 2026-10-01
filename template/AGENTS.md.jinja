@@ -45,6 +45,23 @@ agents cannot silently claim the same task. `make agent-worktree-remove TASK=<id
 refuses to delete dirty or unmerged work unless `FORCE=1` is passed explicitly,
 and `make agent-claim-release TASK=<id>` releases a stale claim.
 
+`.agents/execution.yaml` is the one source of truth for role-based execution
+policy. It maps the canonical roles (`planner`, `implementer`, `reviewer`,
+`fixer`) to reusable execution profiles (harness, opaque model, reasoning effort,
+cost class, capabilities). Resolve policy without invoking a model:
+
+```bash
+make agent-route ROLE=implementer FORMAT=json
+```
+
+This resolves policy only - it never launches a model. Roles resolve
+deterministically, escalation is explicit (an agent cannot silently choose a
+stronger profile), and configured retry/review limits and cost budgets return a
+blocking/human decision instead of continuing. Different concepts stay separate:
+skill = what runs, role = execution responsibility, profile = cost/capability
+policy, harness = how execution will run, model = an opaque configured detail
+(`null` inherits the harness default).
+
 While implementing, run the focused checks the context bundle recommends. The
 single canonical local gate at review is `make agent-pre-review TASK=<id>`, which
 runs the project's `make check` once; do not run `make check` right before it.

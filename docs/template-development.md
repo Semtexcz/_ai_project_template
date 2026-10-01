@@ -197,6 +197,64 @@ and committed dashboards vs generated ones) are intentional representations or
 deterministic persisted views rather than byte mirrors, so they stay
 hand-authored.
 
+## Role-Based Execution Policy
+
+`.agents/execution.yaml` is the one visible source of truth for role-based
+execution policy, and it is mirrored to generated projects like any other
+canonical agent-layer file. It keeps five different concepts separate:
+
+| Concept | Meaning | Example |
+|---|---|---|
+| skill | what engineering operation runs | `implement-change`, `review-change` |
+| role | why execution needs a quality/cost class | `planner`, `implementer`, `reviewer`, `fixer` |
+| profile | reusable cost/capability policy | `reasoning-high`, `coding-efficient`, `utility-cheap` |
+| harness | how execution will run | `codex` (today), `local` (later) |
+| model | opaque configured implementation detail | `null` = the harness default |
+
+Roles resolve deterministically to profiles:
+
+```text
+role -> configured policy -> profile -> decision
+```
+
+`make agent-route ROLE=<role> [FORMAT=json]` prints the decision (status, role,
+profile, harness, model, reasoning effort, capabilities, escalation, budget). It
+resolves policy only: it never launches a model. `policy` holds deterministic
+retry/review limits (`max_implementation_attempts`, `max_review_cycles`) that
+return a blocking/human decision instead of running the next attempt, and
+`escalation` holds the only explicit ways a role may change profile
+(`implementation_failure`, `architecture_failure`, `external_blocker`), so an
+agent can never silently promote itself to a stronger, costlier profile.
+
+Default profiles use `model: null` to inherit the configured harness model
+instead of pinning a time-sensitive vendor model name. To customize, set an
+explicit opaque model on the profile:
+
+```yaml
+profiles:
+  coding-efficient:
+    harness: codex
+    model: "<your configured model>"
+```
+
+Later, a local or other harness can be added without changing roles:
+
+```yaml
+profiles:
+  coding-efficient:
+    harness: local
+    model: "<local model>"
+```
+
+The canonical layer never interprets vendor model names and contains no price
+table. `budgets` (scopes `task`, `session`, `campaign`) are configuration only:
+budget evaluation compares a configured ceiling against usage reported by the
+harness, and a configured ceiling with unknown cost blocks and asks a human
+rather than pretending the budget is safe. `template/tools/agent_execution.py`
+is the pure resolver; it is emitted for every profile, while `make agent-route`
+is exposed only in managed projects. Lightweight projects can ignore role routing
+entirely and keep `edit -> check -> done`.
+
 ## Change Profiles Safely
 
 When changing profile behavior, update the smallest matching set:

@@ -1,0 +1,25 @@
+schema_version: 1
+
+# Declarative schema for a structured review result. The canonical enforcement is
+# `validate_review_result` in template/tools/agent_execution.py; `make
+# validate-agent-skills` cross-checks these declarations against the code.
+#
+# The contract is intentionally small and non-mutating: a review inspects and
+# returns findings. It has no field for writing code, so review can never modify
+# the change it is reviewing.
+
+required:
+  - result
+  - findings
+
+result:
+  enum: [clean, changes_requested]
+
+findings:
+  # `clean` has no findings; `changes_requested` has at least one.
+  item_required_keys: [severity, category, location, problem, expected]
+  severity: [blocking, non_blocking]
+  category: [implementation, architecture, external]
+  location: non-empty-string
+  problem: non-empty-string
+  expected: non-empty-string

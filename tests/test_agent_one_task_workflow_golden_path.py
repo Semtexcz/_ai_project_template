@@ -285,8 +285,8 @@ def test_agent_negative_scenarios(tmp_path: Path) -> None:
         root / ".agents" / "skills" / "conventional-commit" / "agents" / "model.yaml"
     )
     model.write_text(
-        model.read_text(encoding="utf-8").replace("gpt-5-mini", "gpt-5"),
+        model.read_text(encoding="utf-8").replace("utility-cheap", "reasoning-high"),
         encoding="utf-8",
     )
     result = run(["make", "validate-agent-skills"], root, expect_success=False)
-    assert "must use a cheap model" in result.stdout
+    assert "cheap execution profile" in result.stdout
