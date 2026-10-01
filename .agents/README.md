@@ -72,15 +72,16 @@ model   = an opaque, harness-specific identifier (null = the harness default)
 - `make agent-route ROLE=<role> [FORMAT=json]` prints the deterministic decision
   (status, role, profile, harness, model, reasoning effort, capabilities,
   escalation, budget). It resolves policy only: it never launches a model.
-- Deterministic escalation is explicit: `implementation_failure`,
-  `architecture_failure`, and `external_blocker`. An agent cannot silently
-  promote itself to a stronger profile. Retry/review limits
-  (`max_implementation_attempts`, `max_review_cycles`) return a blocking/human
-  decision instead of running the next attempt.
+- Policy validation is fail-closed: unknown keys are rejected rather than ignored,
+  and escalation fields are trigger-specific (`implementation_failure` uses
+  `after_attempts` + `profile`, `architecture_failure` uses `role`, and
+  `external_blocker` uses `action: human`). Retry/review counters and reported
+  usage values enforce their non-negative/positive domains before resolution.
 - Budget configuration uses the logical scopes `task`, `session`, and `campaign`.
   The canonical layer only evaluates a configured ceiling against harness-reported
-  usage; it never stores accounting and never derives a price. Unknown cost with a
-  configured ceiling blocks and asks a human.
+  usage; it never stores accounting and never derives a price. Contradictory cost
+  records are rejected, and missing usage scope with a configured ceiling blocks
+  rather than silently bypassing budget protection.
 - Reviewer is a distinct role: it inspects and returns findings and never marks
   implementation reviewed. Structured review results use
   `.agents/schemas/review-result.schema.yaml`; implementation findings route to

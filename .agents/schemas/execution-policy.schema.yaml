@@ -10,15 +10,18 @@ required:
   - schema_version
   - roles
   - profiles
+allowed_keys: [schema_version, roles, profiles, policy, escalation, budgets]
 
 roles:
   # Exactly the canonical roles: adding one is an architecture decision.
   enum: [planner, implementer, reviewer, fixer]
   required_keys: [profile]
+  allowed_keys: [profile]
   profile: reference-to-profiles
 
 profiles:
   required_keys: [harness, model, reasoning_effort, cost_class, capabilities]
+  allowed_keys: [harness, model, reasoning_effort, cost_class, capabilities]
   harness: non-empty-string
   model: null-or-opaque-string
   reasoning_effort: [low, medium, high]
@@ -26,16 +29,28 @@ profiles:
   capabilities: non-empty-list-of-strings
 
 policy:
+  allowed_keys: [max_implementation_attempts, max_review_cycles]
   positive-integers: [max_implementation_attempts, max_review_cycles]
 
 escalation:
   triggers: [implementation_failure, architecture_failure, external_blocker]
-  rule-keys:
-    role: reference-to-roles
-    profile: reference-to-profiles
-    action: [execute, human]
-    after_attempts: positive-integer
+  rules:
+    implementation_failure:
+      required_keys: [after_attempts, profile]
+      allowed_keys: [after_attempts, profile]
+      after_attempts: positive-integer
+      profile: reference-to-profiles
+    architecture_failure:
+      required_keys: [role]
+      allowed_keys: [role]
+      role: reference-to-roles
+    external_blocker:
+      required_keys: [action]
+      allowed_keys: [action]
+      action: [human]
 
 budgets:
   scopes: [task, session, campaign]
+  entry_required_keys: [max_cost_usd]
+  entry_allowed_keys: [max_cost_usd]
   max_cost_usd: null-or-positive-number

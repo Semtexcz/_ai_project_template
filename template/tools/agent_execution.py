@@ -38,6 +38,7 @@ from __future__ import annotations
 # pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnnecessaryIsInstance=false
 from collections.abc import Mapping
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any
 
 EXECUTION_SCHEMA_VERSION = 1
@@ -55,6 +56,32 @@ ESCALATION_TRIGGERS: tuple[str, ...] = (
 )
 COST_KINDS: tuple[str, ...] = ("actual", "estimated", "unknown")
 BUDGET_SCOPES: tuple[str, ...] = ("task", "session", "campaign")
+POLICY_TOP_LEVEL_KEYS: tuple[str, ...] = (
+    "schema_version",
+    "roles",
+    "profiles",
+    "policy",
+    "escalation",
+    "budgets",
+)
+ROLE_ENTRY_KEYS: tuple[str, ...] = ("profile",)
+PROFILE_KEYS: tuple[str, ...] = (
+    "harness",
+    "model",
+    "reasoning_effort",
+    "cost_class",
+    "capabilities",
+)
+POLICY_SECTION_KEYS: tuple[str, ...] = (
+    "max_implementation_attempts",
+    "max_review_cycles",
+)
+BUDGET_ENTRY_KEYS: tuple[str, ...] = ("max_cost_usd",)
+ESCALATION_RULE_KEYS: dict[str, tuple[str, ...]] = {
+    "implementation_failure": ("after_attempts", "profile"),
+    "architecture_failure": ("role",),
+    "external_blocker": ("action",),
+}
 
 REVIEW_RESULTS: tuple[str, ...] = ("clean", "changes_requested")
 FINDING_SEVERITIES: tuple[str, ...] = ("blocking", "non_blocking")
@@ -118,10 +145,11 @@ class UsageRecord:
 
 
 def usage_from_mapping(value: Mapping[str, Any] | None) -> UsageRecord | None:
-    """Normalize a usage mapping into a :class:`UsageRecord`.
+    """Normalize and validate a harness usage mapping into a :class:`UsageRecord`.
 
-    Missing cost/token values stay ``None`` and an absent ``cost_kind`` becomes
-    ``unknown``, so an under-reporting harness can never look cheaper than it is.
+    Missing values stay unknown; they are never fabricated as zero. Reported
+    numeric values must be within their public domains, and cost kind/value pairs
+    must agree so malformed accounting cannot alter a budget decision.
     """
     if value is None:
         return None
@@ -134,14 +162,18 @@ def usage_from_mapping(value: Mapping[str, Any] | None) -> UsageRecord | None:
             return None
         if isinstance(raw, bool) or not isinstance(raw, int):
             raise ExecutionPolicyError(f"usage.{key} must be an integer or null.")
+        if raw < 0:
+            raise ExecutionPolicyError(f"usage.{key} must be non-negative.")
         return raw
 
     def optional_number(key: str) -> float | None:
         raw = value.get(key)
         if raw is None:
             return None
-        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-            raise ExecutionPolicyError(f"usage.{key} must be a number or null.")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(float(raw)):
+            raise ExecutionPolicyError(f"usage.{key} must be a finite number or null.")
+        if raw < 0:
+            raise ExecutionPolicyError(f"usage.{key} must be non-negative.")
         return float(raw)
 
     cost_kind = value.get("cost_kind", "unknown")
@@ -150,9 +182,18 @@ def usage_from_mapping(value: Mapping[str, Any] | None) -> UsageRecord | None:
     attempt = value.get("attempt", 1)
     if isinstance(attempt, bool) or not isinstance(attempt, int):
         raise ExecutionPolicyError("usage.attempt must be an integer.")
+    if attempt < 1:
+        raise ExecutionPolicyError("usage.attempt must be a positive integer.")
     scope = value.get("scope")
     if scope is not None and scope not in BUDGET_SCOPES:
         raise ExecutionPolicyError(f"usage.scope must be one of: {', '.join(BUDGET_SCOPES)}.")
+    cost_usd = optional_number("cost_usd")
+    if cost_kind == "unknown" and cost_usd is not None:
+        raise ExecutionPolicyError("usage.cost_usd must be null when usage.cost_kind is unknown.")
+    if cost_kind in {"actual", "estimated"} and cost_usd is None:
+        raise ExecutionPolicyError(
+            f"usage.cost_usd is required when usage.cost_kind is {cost_kind}."
+        )
     return UsageRecord(
         role=_optional_str(value.get("role"), "usage.role"),
         profile=_optional_str(value.get("profile"), "usage.profile"),
@@ -161,11 +202,20 @@ def usage_from_mapping(value: Mapping[str, Any] | None) -> UsageRecord | None:
         result=_optional_str(value.get("result"), "usage.result"),
         input_tokens=optional_int("input_tokens"),
         output_tokens=optional_int("output_tokens"),
-        cost_usd=optional_number("cost_usd"),
+        cost_usd=cost_usd,
         cost_kind=str(cost_kind),
         elapsed_seconds=optional_number("elapsed_seconds"),
         scope=None if scope is None else str(scope),
     )
+
+
+def _validated_usage(
+    usage: Mapping[str, Any] | UsageRecord | None,
+) -> UsageRecord | None:
+    """Validate both public usage input forms through one normalization path."""
+    if isinstance(usage, UsageRecord):
+        return usage_from_mapping(usage.as_dict())
+    return usage_from_mapping(usage)
 
 
 @dataclass(frozen=True)
@@ -290,7 +340,19 @@ class InvocationRecord:
 
 
 def _positive_number(raw: Any) -> bool:
-    return not isinstance(raw, bool) and isinstance(raw, (int, float)) and float(raw) > 0
+    return (
+        not isinstance(raw, bool)
+        and isinstance(raw, (int, float))
+        and isfinite(float(raw))
+        and float(raw) > 0
+    )
+
+
+def _unknown_keys(value: Mapping[str, Any], allowed: tuple[str, ...], label: str) -> list[str]:
+    unknown = sorted(str(key) for key in value if key not in allowed)
+    if not unknown:
+        return []
+    return [f"{label} has unknown key(s): {', '.join(unknown)}."]
 
 
 def validate_policy(policy: Any) -> list[str]:
@@ -302,6 +364,7 @@ def validate_policy(policy: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(policy, Mapping):
         return [".agents/execution.yaml must be a YAML mapping."]
+    errors.extend(_unknown_keys(policy, POLICY_TOP_LEVEL_KEYS, ".agents/execution.yaml"))
     if policy.get("schema_version") != EXECUTION_SCHEMA_VERSION:
         errors.append(f".agents/execution.yaml schema_version must be {EXECUTION_SCHEMA_VERSION}.")
     profiles = policy.get("profiles")
@@ -334,6 +397,7 @@ def validate_policy(policy: Any) -> list[str]:
         if not isinstance(entry, Mapping):
             errors.append(f".agents/execution.yaml roles.{role} must be a mapping.")
             continue
+        errors.extend(_unknown_keys(entry, ROLE_ENTRY_KEYS, f".agents/execution.yaml roles.{role}"))
         profile_name = entry.get("profile")
         if not isinstance(profile_name, str) or not profile_name.strip():
             errors.append(
@@ -353,6 +417,7 @@ def _validate_profile(name: str, profile: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(profile, Mapping):
         return [f".agents/execution.yaml profiles.{name} must be a mapping."]
+    errors.extend(_unknown_keys(profile, PROFILE_KEYS, f".agents/execution.yaml profiles.{name}"))
     harness = profile.get("harness")
     if not isinstance(harness, str) or not harness.strip():
         errors.append(f".agents/execution.yaml profiles.{name}.harness must be a non-empty string.")
@@ -393,7 +458,10 @@ def _validate_policy_section(policy_section: Any) -> list[str]:
         return errors
     if not isinstance(policy_section, Mapping):
         return [".agents/execution.yaml policy must be a mapping."]
-    for key in ["max_implementation_attempts", "max_review_cycles"]:
+    errors.extend(
+        _unknown_keys(policy_section, POLICY_SECTION_KEYS, ".agents/execution.yaml policy")
+    )
+    for key in POLICY_SECTION_KEYS:
         value = policy_section.get(key)
         if value is None:
             continue
@@ -420,34 +488,30 @@ def _validate_escalation(
         if not isinstance(rule, Mapping):
             errors.append(f".agents/execution.yaml escalation.{trigger} must be a mapping.")
             continue
-        target_role = rule.get("role")
-        if target_role is not None and target_role not in roles:
-            errors.append(
-                f".agents/execution.yaml escalation.{trigger}.role references missing role "
-                f"'{target_role}'."
-            )
-        target_profile = rule.get("profile")
-        if target_profile is not None and target_profile not in profiles:
-            errors.append(
-                f".agents/execution.yaml escalation.{trigger}.profile references missing "
-                f"profile '{target_profile}'."
-            )
-        action = rule.get("action")
-        if action is not None and action not in {ACTION_EXECUTE, ACTION_HUMAN}:
-            errors.append(
-                f".agents/execution.yaml escalation.{trigger}.action must be one of: "
-                f"{ACTION_EXECUTE}, {ACTION_HUMAN}."
-            )
-        after_attempts = rule.get("after_attempts")
-        if after_attempts is not None and (
-            isinstance(after_attempts, bool)
-            or not isinstance(after_attempts, int)
-            or after_attempts < 1
-        ):
-            errors.append(
-                f".agents/execution.yaml escalation.{trigger}.after_attempts must be a "
-                "positive integer."
-            )
+        allowed = ESCALATION_RULE_KEYS[trigger]
+        label = f".agents/execution.yaml escalation.{trigger}"
+        errors.extend(_unknown_keys(rule, allowed, label))
+        missing = [key for key in allowed if key not in rule]
+        if missing:
+            errors.append(f"{label} is missing required key(s): {', '.join(missing)}.")
+        if trigger == "implementation_failure":
+            target_profile = rule.get("profile")
+            if target_profile not in profiles:
+                errors.append(f"{label}.profile references missing profile '{target_profile}'.")
+            after_attempts = rule.get("after_attempts")
+            if (
+                isinstance(after_attempts, bool)
+                or not isinstance(after_attempts, int)
+                or after_attempts < 1
+            ):
+                errors.append(f"{label}.after_attempts must be a positive integer.")
+        elif trigger == "architecture_failure":
+            target_role = rule.get("role")
+            if target_role not in roles:
+                errors.append(f"{label}.role references missing role '{target_role}'.")
+        else:
+            if rule.get("action") != ACTION_HUMAN:
+                errors.append(f"{label}.action must be {ACTION_HUMAN}.")
     return errors
 
 
@@ -464,17 +528,19 @@ def _validate_budgets(budgets: Any) -> list[str]:
             f"{', '.join(sorted(unknown))}. Use one of: {', '.join(BUDGET_SCOPES)}."
         )
     for scope, entry in budgets.items():
+        if scope not in BUDGET_SCOPES:
+            continue
         if not isinstance(entry, Mapping):
             errors.append(f".agents/execution.yaml budgets.{scope} must be a mapping.")
             continue
-        limit = entry.get("max_cost_usd")
-        if limit is None:
+        label = f".agents/execution.yaml budgets.{scope}"
+        errors.extend(_unknown_keys(entry, BUDGET_ENTRY_KEYS, label))
+        if "max_cost_usd" not in entry:
+            errors.append(f"{label} is missing required key: max_cost_usd.")
             continue
-        if not _positive_number(limit):
-            errors.append(
-                f".agents/execution.yaml budgets.{scope}.max_cost_usd must be null or a "
-                "positive number."
-            )
+        limit = entry.get("max_cost_usd")
+        if limit is not None and not _positive_number(limit):
+            errors.append(f"{label}.max_cost_usd must be null or a positive number.")
     return errors
 
 
@@ -528,10 +594,18 @@ def resolve_execution(
     profile can change are an explicit escalation trigger or a configured limit;
     an agent cannot silently promote itself to a stronger, costlier profile.
     """
+    errors = validate_policy(policy)
+    if errors:
+        raise ExecutionPolicyError("; ".join(errors))
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+        raise ExecutionPolicyError("attempt must be a positive integer.")
+    if isinstance(review_cycle, bool) or not isinstance(review_cycle, int) or review_cycle < 0:
+        raise ExecutionPolicyError("review_cycle must be a non-negative integer.")
     if trigger is not None and trigger not in ESCALATION_TRIGGERS:
         raise ExecutionPolicyError(
             f"Unknown trigger '{trigger}'. Use one of: {', '.join(ESCALATION_TRIGGERS)}."
         )
+    record = _validated_usage(usage)
     primary_profile = policy_role_profile(policy, role)
     policy_section = policy.get("policy")
     policy_section = policy_section if isinstance(policy_section, Mapping) else {}
@@ -609,8 +683,7 @@ def resolve_execution(
 
     profile = _profile(policy, effective_profile)
     budget = _ok_budget()
-    if usage is not None:
-        record = usage if isinstance(usage, UsageRecord) else usage_from_mapping(usage)
+    if record is not None:
         budget = evaluate_budget(policy, record)
 
     status = STATUS_READY
@@ -661,8 +734,8 @@ def _blocked_decision(
 ) -> ExecutionDecision:
     profile = _profile(policy, profile_name)
     budget = _ok_budget()
-    if usage is not None:
-        record = usage if isinstance(usage, UsageRecord) else usage_from_mapping(usage)
+    record = _validated_usage(usage)
+    if record is not None:
         budget = evaluate_budget(policy, record)
     return ExecutionDecision(
         status=STATUS_BLOCKED,
@@ -700,6 +773,21 @@ def evaluate_budget(policy: Mapping[str, Any], usage: UsageRecord | None) -> Bud
         raw_limit = budgets[scope].get("max_cost_usd")  # type: ignore[index]
         if raw_limit is not None:
             limit = float(raw_limit)
+    if scope is None:
+        configured_limits = [
+            float(entry["max_cost_usd"])
+            for entry in budgets.values()
+            if isinstance(entry, Mapping) and entry.get("max_cost_usd") is not None
+        ]
+        if configured_limits:
+            return BudgetDecision(
+                "unknown",
+                None,
+                None,
+                cost,
+                cost_kind,
+                "a cost budget is configured but usage.scope is missing",
+            )
     if limit is None:
         return BudgetDecision("ok", scope, None, cost, cost_kind, None)
     if cost_kind == "unknown" or cost is None:
@@ -789,7 +877,7 @@ def build_invocation_record(
     T-035 stops at producing the record. It never writes it to a file, database,
     or event log; that is future orchestration work.
     """
-    record = usage if isinstance(usage, UsageRecord) else usage_from_mapping(usage)
+    record = _validated_usage(usage)
     return InvocationRecord(
         role=decision.role,
         profile=decision.profile,

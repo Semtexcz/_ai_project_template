@@ -171,6 +171,79 @@ def test_canonical_roles_exist_in_default_policy() -> None:
         assert policy["roles"][role]["profile"] in policy["profiles"]
 
 
+def test_policy_validation_fails_closed_for_unknown_keys_and_unsupported_escalation_fields() -> None:
+    cases = [
+        ({"surprise": True}, ".agents/execution.yaml has unknown key(s): surprise."),
+        ({"policy": {"max_implementation_attempt": 3}}, "policy has unknown key(s): max_implementation_attempt."),
+        ({"budgets": {"task": {"max_cost_us": 1}}}, "budgets.task has unknown key(s): max_cost_us."),
+        ({"roles": {"implementer": {"foo": "bar"}}}, "roles.implementer has unknown key(s): foo."),
+        ({"profiles": {"coding-efficient": {"surprise": True}}}, "profiles.coding-efficient has unknown key(s): surprise."),
+        ({"escalation": {"implementation_failure": {"after_attempt": 2}}}, "escalation.implementation_failure has unknown key(s): after_attempt."),
+        ({"escalation": {"implementation_failure": {"action": "human"}}}, "escalation.implementation_failure has unknown key(s): action."),
+        ({"escalation": {"external_blocker": {"profile": "reasoning-high"}}}, "escalation.external_blocker has unknown key(s): profile."),
+    ]
+    for change, expected in cases:
+        policy = default_policy()
+        for section, value in change.items():
+            policy[section] = value
+        errors = EXECUTION.validate_policy(policy)
+        assert any(expected in error for error in errors), errors
+        with pytest.raises(EXECUTION.ExecutionPolicyError, match="unknown key"):
+            EXECUTION.resolve_execution(policy, "implementer")
+
+
+def test_canonical_trigger_specific_escalation_rules_validate_and_resolve() -> None:
+    policy = default_policy()
+    assert EXECUTION.validate_policy(policy) == []
+    assert EXECUTION.resolve_execution(
+        policy, "implementer", attempt=2, trigger="implementation_failure"
+    ).profile == "reasoning-high"
+    assert EXECUTION.resolve_execution(policy, "reviewer", trigger="architecture_failure").role == "planner"
+    external = EXECUTION.resolve_execution(policy, "implementer", trigger="external_blocker")
+    assert (external.status, external.action) == ("blocked", "human")
+
+
+def test_resolver_rejects_invalid_runtime_numeric_inputs() -> None:
+    policy = default_policy()
+    for kwargs, expected in [
+        ({"attempt": 0}, "attempt must be a positive integer"),
+        ({"attempt": -1}, "attempt must be a positive integer"),
+        ({"review_cycle": -1}, "review_cycle must be a non-negative integer"),
+        ({"usage": {"input_tokens": -1}}, "usage.input_tokens must be non-negative"),
+        ({"usage": {"output_tokens": -1}}, "usage.output_tokens must be non-negative"),
+        ({"usage": {"cost_usd": -1, "cost_kind": "actual"}}, "usage.cost_usd must be non-negative"),
+        ({"usage": {"elapsed_seconds": -1}}, "usage.elapsed_seconds must be non-negative"),
+        ({"usage": {"attempt": 0}}, "usage.attempt must be a positive integer"),
+    ]:
+        with pytest.raises(EXECUTION.ExecutionPolicyError, match=expected):
+            EXECUTION.resolve_execution(policy, "implementer", **kwargs)
+
+
+def test_usage_cost_kind_consistency_is_fail_closed() -> None:
+    for usage, expected in [
+        ({"cost_kind": "unknown", "cost_usd": 1.23}, "must be null when usage.cost_kind is unknown"),
+        ({"cost_kind": "actual"}, "is required when usage.cost_kind is actual"),
+        ({"cost_kind": "estimated"}, "is required when usage.cost_kind is estimated"),
+    ]:
+        with pytest.raises(EXECUTION.ExecutionPolicyError, match=expected):
+            EXECUTION.usage_from_mapping(usage)
+
+
+def test_missing_usage_scope_cannot_bypass_a_configured_budget() -> None:
+    policy = budgeted_policy(1.0)
+    decision = EXECUTION.resolve_execution(
+        policy, "implementer", usage={"cost_usd": 100, "cost_kind": "actual"}
+    )
+    assert (decision.status, decision.action, decision.budget.status) == ("blocked", "human", "unknown")
+    assert "scope is missing" in (decision.budget.reason or "")
+
+    open_policy = budgeted_policy(None)
+    no_budget = EXECUTION.resolve_execution(
+        open_policy, "implementer", usage={"cost_usd": 100, "cost_kind": "actual"}
+    )
+    assert (no_budget.status, no_budget.budget.status) == ("ready", "ok")
+
+
 def test_role_profile_separation_changes_resolution_without_skill_logic() -> None:
     policy = default_policy()
     before = EXECUTION.resolve_execution(policy, "implementer")
@@ -453,6 +526,17 @@ def test_agent_route_cli_resolves_policy_without_invoking_a_model() -> None:
         expect_success=False,
     )
     assert "Unknown role" in unknown.stdout
+
+    for option, value, expected in [
+        ("--attempt", "0", "attempt must be a positive integer"),
+        ("--review-cycle", "-1", "review_cycle must be a non-negative integer"),
+    ]:
+        invalid = run(
+            [sys.executable, "template/tools/agent.py", "route", "--role", "implementer", option, value],
+            ROOT,
+            expect_success=False,
+        )
+        assert expected in invalid.stdout
 
 
 def test_generated_projects_expose_the_execution_policy(

@@ -224,7 +224,11 @@ retry/review limits (`max_implementation_attempts`, `max_review_cycles`) that
 return a blocking/human decision instead of running the next attempt, and
 `escalation` holds the only explicit ways a role may change profile
 (`implementation_failure`, `architecture_failure`, `external_blocker`), so an
-agent can never silently promote itself to a stronger, costlier profile.
+agent can never silently promote itself to a stronger, costlier profile. Policy
+validation is fail-closed: unknown keys and trigger-inapplicable escalation
+fields are rejected before resolution. Runtime counters and usage values enforce
+positive/non-negative domains; contradictory costs are rejected; and a missing
+usage scope blocks when any configured cost ceiling would otherwise apply.
 
 Default profiles use `model: null` to inherit the configured harness model
 instead of pinning a time-sensitive vendor model name. To customize, set an
@@ -249,8 +253,8 @@ profiles:
 The canonical layer never interprets vendor model names and contains no price
 table. `budgets` (scopes `task`, `session`, `campaign`) are configuration only:
 budget evaluation compares a configured ceiling against usage reported by the
-harness, and a configured ceiling with unknown cost blocks and asks a human
-rather than pretending the budget is safe. `template/tools/agent_execution.py`
+harness, and a configured ceiling with unknown cost or missing scope blocks and
+asks a human rather than pretending the budget is safe. `template/tools/agent_execution.py`
 is the pure resolver; it is emitted for every profile, while `make agent-route`
 is exposed only in managed projects. Lightweight projects can ignore role routing
 entirely and keep `edit -> check -> done`.
