@@ -3,7 +3,7 @@ id: T-032
 
 title: Separate managed tasks from agent sessions and add deterministic handoff
 
-status: in-progress
+status: review
 
 priority: 1
 
