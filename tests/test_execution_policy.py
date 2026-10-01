@@ -380,6 +380,68 @@ def test_unknown_usage_is_not_invented_as_zero() -> None:
     assert open_decision.budget.cost_usd is None
 
 
+def test_public_evaluate_budget_is_a_safe_standalone_seam() -> None:
+    """The public seam validates policy and usage without any prior call."""
+    policy = budgeted_policy(1.0)
+
+    under = EXECUTION.evaluate_budget(
+        policy, {"scope": "task", "cost_usd": 0.4, "cost_kind": "actual"}
+    )
+    assert (under.status, under.limit_usd) == ("ok", 1.0)
+
+    exhausted = EXECUTION.evaluate_budget(
+        policy, {"scope": "task", "cost_usd": 1.0, "cost_kind": "actual"}
+    )
+    assert exhausted.status == "exhausted"
+
+    # A malformed mapping never reaches budget arithmetic.
+    with pytest.raises(EXECUTION.ExecutionPolicyError, match="cost_usd must be non-negative"):
+        EXECUTION.evaluate_budget(
+            policy, {"scope": "task", "cost_usd": -1, "cost_kind": "actual"}
+        )
+
+    # A dataclass cannot bypass normalization: constructing UsageRecord is not
+    # validation.
+    with pytest.raises(EXECUTION.ExecutionPolicyError, match="cost_usd must be non-negative"):
+        EXECUTION.evaluate_budget(
+            policy, EXECUTION.UsageRecord(scope="task", cost_usd=-1, cost_kind="actual")
+        )
+
+    # Malformed budget policy fails closed before any budget arithmetic.
+    for broken_budgets in ({"task": {"max_cost_usd": -1}}, {"task": {"max_cost_us": 1}}):
+        broken = default_policy()
+        broken["budgets"] = broken_budgets
+        with pytest.raises(EXECUTION.ExecutionPolicyError):
+            EXECUTION.evaluate_budget(
+                broken, {"scope": "task", "cost_usd": 0.4, "cost_kind": "actual"}
+            )
+
+    # A configured ceiling is never reported safe without proven cost/scope.
+    for usage in (
+        {"cost_usd": 0.4, "cost_kind": "actual"},  # missing scope
+        {"scope": "task"},  # unknown cost
+        None,  # no usage at all
+    ):
+        decision = EXECUTION.evaluate_budget(policy, usage)
+        assert decision.status == "unknown"
+        assert decision.blocks is True
+
+    # Without a configured ceiling, absent usage stays valid.
+    open_decision = EXECUTION.evaluate_budget(budgeted_policy(None), None)
+    assert (open_decision.status, open_decision.blocks) == ("ok", False)
+
+    # A claimed actual/estimated cost with no value is an error, never a guess.
+    for kind in ("actual", "estimated"):
+        with pytest.raises(EXECUTION.ExecutionPolicyError, match="is required"):
+            EXECUTION.evaluate_budget(policy, {"scope": "task", "cost_kind": kind})
+
+    # The public seam and resolve_execution share one deterministic decision.
+    shared_usage = {"scope": "task", "cost_usd": 0.4, "cost_kind": "actual"}
+    assert EXECUTION.evaluate_budget(policy, shared_usage) == EXECUTION.resolve_execution(
+        policy, "implementer", usage=shared_usage
+    ).budget
+
+
 def test_structured_review_results_validate_and_reject_malformed() -> None:
     assert EXECUTION.validate_review_result({"result": "clean", "findings": []}) == []
     for category, expected_action, expected_role in [

@@ -575,10 +575,6 @@ def _profile(policy: Mapping[str, Any], profile_name: str) -> Mapping[str, Any]:
     return profile
 
 
-def _ok_budget() -> BudgetDecision:
-    return BudgetDecision("ok", None, None, None, "unknown", None)
-
-
 def resolve_execution(
     policy: Mapping[str, Any],
     role: str,
@@ -625,7 +621,7 @@ def resolve_execution(
                 review_cycle=review_cycle,
                 trigger=trigger,
                 reason="implementation attempt limit exhausted",
-                usage=usage,
+                record=record,
             )
     if role == "reviewer":
         limit = policy_section.get("max_review_cycles")
@@ -638,7 +634,7 @@ def resolve_execution(
                 review_cycle=review_cycle,
                 trigger=trigger,
                 reason="review cycle limit exhausted",
-                usage=usage,
+                record=record,
             )
 
     if trigger == "external_blocker":
@@ -650,7 +646,7 @@ def resolve_execution(
             review_cycle=review_cycle,
             trigger=trigger,
             reason="external blocker requires a human decision",
-            usage=usage,
+            record=record,
         )
 
     effective_role = role
@@ -682,9 +678,9 @@ def resolve_execution(
             )
 
     profile = _profile(policy, effective_profile)
-    budget = _ok_budget()
-    if record is not None:
-        budget = evaluate_budget(policy, record)
+    # ``record`` is already validated by ``_validated_usage`` above, so reuse the
+    # validated helper instead of re-validating through the public seam.
+    budget = _evaluate_budget_validated(policy, record)
 
     status = STATUS_READY
     action = ACTION_EXECUTE
@@ -730,13 +726,11 @@ def _blocked_decision(
     review_cycle: int,
     trigger: str | None,
     reason: str,
-    usage: Mapping[str, Any] | UsageRecord | None,
+    record: UsageRecord | None,
 ) -> ExecutionDecision:
     profile = _profile(policy, profile_name)
-    budget = _ok_budget()
-    record = _validated_usage(usage)
-    if record is not None:
-        budget = evaluate_budget(policy, record)
+    # The caller already validated policy and usage, so go straight to arithmetic.
+    budget = _evaluate_budget_validated(policy, record)
     return ExecutionDecision(
         status=STATUS_BLOCKED,
         action=ACTION_HUMAN,
@@ -756,13 +750,35 @@ def _blocked_decision(
     )
 
 
-def evaluate_budget(policy: Mapping[str, Any], usage: UsageRecord | None) -> BudgetDecision:
+def evaluate_budget(
+    policy: Mapping[str, Any],
+    usage: Mapping[str, Any] | UsageRecord | None,
+) -> BudgetDecision:
     """Evaluate a configured cost ceiling against reported usage.
 
-    A configured ceiling with *unknown* accumulated cost is never treated as safe:
-    the conservative decision is to block and ask a human, because continuing
-    could silently overspend. No price is ever derived from tokens.
+    This is a *safe standalone* public seam: it validates the policy and
+    normalizes/validates the usage input itself, so a caller never has to run
+    ``validate_policy()``, ``usage_from_mapping()``, or ``resolve_execution()``
+    first. A manually constructed :class:`UsageRecord` is re-validated here and
+    cannot smuggle in malformed accounting.
+
+    A configured ceiling with *unknown* or missing accumulated cost is never
+    treated as safe: the conservative decision is to block and ask a human,
+    because continuing could silently overspend. No price is derived from tokens.
+
+    Public seams validate; the private ``_..._validated`` helper below assumes its
+    inputs were already validated, so the decision logic stays single-sourced.
     """
+    errors = validate_policy(policy)
+    if errors:
+        raise ExecutionPolicyError("; ".join(errors))
+    return _evaluate_budget_validated(policy, _validated_usage(usage))
+
+
+def _evaluate_budget_validated(
+    policy: Mapping[str, Any], usage: UsageRecord | None
+) -> BudgetDecision:
+    """Budget arithmetic over already-validated policy and usage inputs."""
     budgets = policy.get("budgets")
     budgets = budgets if isinstance(budgets, Mapping) else {}
     scope = usage.scope if usage is not None else None
