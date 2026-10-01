@@ -174,6 +174,26 @@ branch still holds unique unmerged commits, and only the explicit
 never a claim boundary: if an agent disappears, inspect the claim with
 `make agent-worktrees` and release it explicitly with `make agent-claim-release`.
 
+## Handoff
+
+A large task can outlive one agent conversation. The task, branch, worktree,
+claim, and pull request persist; the session does not. Managed projects therefore
+expose an optional handoff:
+
+```bash
+make agent-handoff TASK=T-002
+make agent-handoff TASK=T-002 FORMAT=json
+```
+
+Run it inside the worktree that owns the task. It renders the derived, runtime-only
+state a fresh session needs to continue: task, lifecycle and approval state,
+dependencies, branch/HEAD/worktree/claim ownership and dirty state, a compact
+branch-aware changed-file summary, recent task commits, the remaining acceptance
+criteria, the lifecycle next action, the checks resolved by the same context
+routing, and deterministic resume commands. Output is deterministic, bounded at
+8 kB, and never persisted, so it holds no transcript, reasoning, diff, test log, or
+command history, and it creates no session record. Requesting it from the wrong
+worktree fails loudly. The ordinary single-session loop does not need it.
 After another task merges into the base branch, update the affected worktree with
 normal Git commands (`git fetch`, then merge or rebase onto the base) and rerun
 the relevant checks there. No tooling rewrites another agent's active branch, and
