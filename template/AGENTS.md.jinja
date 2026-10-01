@@ -26,7 +26,10 @@ Respect exactly one owned task per worktree and use the generated context bundle
 `make agent-status` derives the task this checkout owns from its branch and local
 claim, so a parallel worktree does not need to be told its own task. Use the
 default context mode for a new task; use `MODE=resume` when resuming or fixing an
-existing PR.
+existing PR. A large task may resume with an optional
+`FOCUS="<path> ..."` to eagerly load only a small working set; it never changes
+the complete branch scope, recommended checks, or governance, and it is never
+persisted.
 
 Work on independent tasks in parallel by giving each one its own worktree instead
 of sharing a checkout:

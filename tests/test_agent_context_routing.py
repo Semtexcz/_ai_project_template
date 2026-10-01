@@ -59,7 +59,11 @@ def test_python_src_skeleton_routes_to_python_profile_checks() -> None:
 def test_canonical_agent_tool_change_routes_to_agent_neighborhood() -> None:
     agent = load_agent_tool()
     checks = agent.recommended_checks(root_config(), ["template/tools/agent.py"])
-    assert checks == ["make validate-agent-skills", "make test-agent"]
+    assert checks == [
+        "make validate-agent-skills",
+        "make test-agent",
+        "uv run pytest tests/test_agent_focused_resume.py",
+    ]
 
 
 def test_lifecycle_tool_change_routes_to_lifecycle_neighborhood() -> None:

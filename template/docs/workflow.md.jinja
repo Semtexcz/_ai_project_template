@@ -194,6 +194,23 @@ routing, and deterministic resume commands. Output is deterministic, bounded at
 8 kB, and never persisted, so it holds no transcript, reasoning, diff, test log, or
 command history, and it creates no session record. Requesting it from the wrong
 worktree fails loudly. The ordinary single-session loop does not need it.
+
+A large task can change many files while one fresh session needs only a few. That
+is the difference between *branch scope* and *session working set*: the complete
+change set stays authoritative and observable, and `FOCUS` optionally selects the
+small working set a resume session eagerly loads. It is an advanced, optional
+resume optimization - not required for ordinary tasks:
+
+```bash
+make agent-context TASK=T-002 MODE=resume FOCUS="tools/agent.py tests/test_agent_efficiency.py"
+```
+
+`FOCUS` is ephemeral request input and is never persisted. It applies to
+`MODE=resume` only, accepts repository-relative exact files, and never changes
+task identity, ownership, the complete changed-file metadata, recommended checks,
+diff safety, or governance. Non-focused changed files stay visible as metadata
+and remain discoverable through the existing search roots. `MODE=new` and
+`MODE=resume` without `FOCUS` behave exactly as before.
 After another task merges into the base branch, update the affected worktree with
 normal Git commands (`git fetch`, then merge or rebase onto the base) and rerun
 the relevant checks there. No tooling rewrites another agent's active branch, and

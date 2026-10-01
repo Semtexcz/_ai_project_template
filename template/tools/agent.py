@@ -97,11 +97,15 @@ CONTEXT_CATEGORY_PRIORITY = {
     "task": 0,
     "skill": 1,
     "bootstrap": 2,
+    "focused": 3,
     "changed": 3,
     "managed": 4,
     "change": 5,
     "profile": 6,
 }
+# Omission reasons for changed files that never became eager candidates. They
+# keep "outside focus" distinguishable from budget truncation and exclusion.
+FOCUS_OMISSION_REASON = "outside focus"
 # Why an agent must stop instead of guessing. Shared by the context bundle and
 # the deterministic handoff so both surfaces stay consistent by construction.
 CONTEXT_STOP_CONDITIONS = [
@@ -795,6 +799,33 @@ def project_relative_path(value: object, *, label: str) -> tuple[str, Path]:
     return normalized, candidate
 
 
+def repository_relative_path(path: Path, *, label: str) -> str:
+    """Return the canonical repository-relative identity of a filesystem path.
+
+    The identity is always derived from the resolved target, so equivalent
+    spellings and in-repository symlinks collapse to one path. A path that
+    resolves outside the project root is rejected. This is the single seam that
+    both context loading and focus validation use for containment and identity.
+    """
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError as exc:
+        raise AgentError(f"{label} {path} resolves outside the project root.") from exc
+
+
+def canonical_project_path(value: object, *, label: str) -> tuple[str, Path]:
+    """Return a repository-contained value's canonical (relative path, target).
+
+    ``value`` is only used to locate the target: the returned repository-relative
+    identity comes from the resolved target, so ``tools/a.py``, ``./tools/a.py``,
+    and ``tools//a.py`` share one identity and an in-repository symlink inherits
+    the identity of its target instead of bypassing policy checks under its own
+    spelling.
+    """
+    _normalized, resolved = project_relative_path(value, label=label)
+    return repository_relative_path(resolved, label=label), resolved
+
+
 def safe_project_path(pattern: str) -> Path:
     _normalized, path = project_relative_path(pattern, label="Context path")
     return path
@@ -811,19 +842,9 @@ def normalize_search_root(value: str) -> str:
 
 
 def add_existing_file(files: list[str], seen: set[str], path: Path, excludes: list[str]) -> None:
-    resolved = path.resolve()
-    try:
-        rel_path = resolved.relative_to(ROOT.resolve()).as_posix()
-    except ValueError as exc:
-        raise AgentError(f"Context path {path} resolves outside the project root.") from exc
+    rel_path = repository_relative_path(path, label="Context path")
     if excluded(rel_path, excludes) or excluded(rel_path, SENSITIVE_PATTERNS):
         raise AgentError(f"Sensitive or excluded file {rel_path} cannot be included in context.")
-    if path.is_symlink():
-        target = path.resolve()
-        try:
-            target.relative_to(ROOT.resolve())
-        except ValueError as exc:
-            raise AgentError(f"Symlink {rel_path} resolves outside the project root.") from exc
     if path.is_file() and rel_path not in seen:
         files.append(rel_path)
         seen.add(rel_path)
@@ -1057,16 +1078,31 @@ def recommended_checks(config: dict[str, Any], changes: list[str]) -> list[str]:
 
 
 def resolve_context(
-    task_id: str | None, skill: str | None = None, mode: str = "new"
+    task_id: str | None,
+    skill: str | None = None,
+    mode: str = "new",
+    focus: list[str] | None = None,
 ) -> dict[str, Any]:
     """Resolve the deterministic context bundle for the selected task.
 
     ``mode="resume"`` keeps the bundle small for review/fix work on an existing
     PR: profile exploratory files are not eagerly loaded and the branch diff
     carries the affected-file context.
+
+    ``focus`` is an optional, ephemeral working-set selector: a list of
+    repository-relative files to eagerly load in ``mode="resume"``. It never
+    changes task identity, ownership, the complete branch change set, routing, or
+    recommended checks - only which files this session loads eagerly. Passing a
+    focus in another mode is rejected instead of being silently ignored, and no
+    focus state is ever persisted.
     """
     managed_project = require_project_module()
     task = get_task(task_id)
+    if focus and mode != "resume":
+        raise AgentError(
+            "FOCUS is only supported with MODE=resume. Run: make agent-context "
+            'TASK=<id> MODE=resume FOCUS="<path> ..."'
+        )
     config = read_yaml(AGENTS_DIR / "context-map.yaml")
     errors = validate_context_map()
     if errors:
@@ -1076,6 +1112,7 @@ def resolve_context(
     max_files = int(budget.get("max_files", DEFAULT_CONTEXT_BUDGET["max_files"]))
     max_bytes = int(budget.get("max_bytes", DEFAULT_CONTEXT_BUDGET["max_bytes"]))
     selected_skill, skill_files, skill_roots = resolve_skill_context(skill)
+    focus_paths = validate_focus_paths(focus, excludes) if focus else None
     state = managed_project.read_state()
     project_type = str(state.get("project", {}).get("type", ""))
     runtime_level = str(state.get("project", {}).get("runtime_level", ""))
@@ -1092,20 +1129,40 @@ def resolve_context(
         deleted=deleted,
         project_type=project_type,
         runtime_level=runtime_level,
+        focus=focus_paths,
     )
     included, omitted, total_bytes = select_budgeted(candidates, max_files, max_bytes)
     omitted.extend(changed_omitted)
-    reason = (
-        "Tier 1 resume/fix context: task, skill, branch diff, and affected "
-        "files without full project re-orientation"
-        if mode == "resume"
-        else "Tier 1 new-task context: task, skill reads, bootstrap, changed "
-        "files, and narrow configuration"
-    )
+    focused_requested = focus_paths or []
+    included_paths = {item["path"] for item in included}
+    focused_loaded = [path for path in focused_requested if path in included_paths]
+    if mode == "resume" and focus_paths is not None:
+        reason = (
+            "Tier 1 focused resume context: complete branch metadata with an "
+            "explicit ephemeral working set eagerly loaded"
+        )
+    elif mode == "resume":
+        reason = (
+            "Tier 1 resume/fix context: task, skill, branch diff, and affected "
+            "files without full project re-orientation"
+        )
+    else:
+        reason = (
+            "Tier 1 new-task context: task, skill reads, bootstrap, changed "
+            "files, and narrow configuration"
+        )
+    metrics = {
+        "branch_changed_files_count": len(changes),
+        "focused_requested_files_count": len(focused_requested),
+        "focused_loaded_files_count": len(focused_loaded),
+        "eager_files_count": len(included),
+        "total_bytes": total_bytes,
+    }
     return {
         "mode": mode,
         "reason": reason,
         "skill": selected_skill,
+        "focus_enabled": focus_paths is not None,
         "task": {
             "id": task.id,
             "title": task.title,
@@ -1116,12 +1173,15 @@ def resolve_context(
         "stop_conditions": CONTEXT_STOP_CONDITIONS,
         "files": [item["path"] for item in included],
         "files_included": included,
+        "focused_files": focused_requested,
+        "focused_loaded_files": focused_loaded,
         "search_roots": sorted(search_roots),
         "changed_files": sorted(changes),
         "deleted_files": sorted(deleted),
         "recommended_checks": recommended_checks(config, sorted(changes)),
         "budget": {"max_files": max_files, "max_bytes": max_bytes},
         "total_bytes": total_bytes,
+        "metrics": metrics,
         "omitted": omitted,
         "next_action": managed_project.recommended_next_action(state, managed_project.load_tasks()),
     }
@@ -1172,6 +1232,37 @@ def resolve_skill_context(
     return skill_name, sorted(explicit), sorted(roots)
 
 
+def validate_focus_paths(focus: list[str], excludes: list[str]) -> list[str]:
+    """Validate explicit resume focus into canonical repository-relative files.
+
+    Focus is an ephemeral request input: it selects the current session's eager
+    working set and is never persisted. Each entry is resolved to its canonical
+    repository-relative target before any policy check, so the exclusion/sensitive
+    decision and the returned identity always describe the actual file that
+    would be loaded: equivalent spellings (``./tools/a.py``, ``tools//a.py``) and
+    in-repository symlinks cannot bypass the policy or duplicate a focus entry.
+    Every entry must be an existing regular file inside the repository, must not
+    be excluded or sensitive, and must not escape the repository through ``..``,
+    an absolute path, ``~``, or a symlink. Directories and missing files are
+    rejected because focus names files. The returned paths are de-duplicated and
+    sorted so the result is deterministic.
+    """
+    validated: list[str] = []
+    for entry in focus:
+        canonical, path = canonical_project_path(entry, label="Focus")
+        if excluded(canonical, excludes) or excluded(canonical, SENSITIVE_PATTERNS):
+            raise AgentError(f"Focus path {entry} is sensitive or excluded and cannot be loaded.")
+        if path.is_dir():
+            raise AgentError(
+                f"Focus path {entry} is a directory; focus names files, not directories."
+            )
+        if not path.exists():
+            raise AgentError(f"Focus path {entry} does not exist in the repository.")
+        if canonical not in validated:
+            validated.append(canonical)
+    return sorted(validated)
+
+
 def collect_context_candidates(
     *,
     task: Any,
@@ -1184,12 +1275,22 @@ def collect_context_candidates(
     deleted: set[str],
     project_type: str,
     runtime_level: str,
+    focus: list[str] | None = None,
 ) -> tuple[list[tuple[int, str, str, bool]], set[str], list[dict[str, str]]]:
     """Collect deterministic (priority, category, path, protected) candidates,
-    available search roots, and changed files that were excluded from loading."""
+    available search roots, and changed files that were excluded from loading.
+
+    ``focus`` (validated repository-relative files) turns the eager working set
+    into a selector rather than a filter over ``changed_files``: focused files -
+    changed or not - become protected eager candidates, while every non-focused
+    changed file is reported with an ``outside focus`` reason instead of being
+    silently loaded or dropped. The changed-file metadata itself, change-pattern
+    routing, and search roots always derive from the complete change set.
+    """
     candidates: list[tuple[int, str, str, bool]] = []
     roots: set[str] = set()
     changed_omitted: list[dict[str, str]] = []
+    focus_set = set(focus) if focus is not None else None
 
     def add_files(
         category: str,
@@ -1226,8 +1327,27 @@ def collect_context_candidates(
         if excluded(rel_path, excludes) or excluded(rel_path, SENSITIVE_PATTERNS):
             changed_omitted.append({"path": rel_path, "category": "changed", "reason": "excluded"})
             continue
+        if focus_set is not None:
+            # Focused changed files are added below as protected eager candidates;
+            # everything else stays visible metadata but is not eagerly loaded.
+            if rel_path in focus_set:
+                continue
+            changed_omitted.append(
+                {
+                    "path": rel_path,
+                    "category": "changed",
+                    "reason": FOCUS_OMISSION_REASON,
+                }
+            )
+            continue
         if resolved.is_file():
             candidates.append((CONTEXT_CATEGORY_PRIORITY["changed"], "changed", rel_path, False))
+    if focus is not None:
+        # Every explicitly focused file - changed or not - is an intentional,
+        # protected eager candidate. The changed loop above already skipped them,
+        # so no path is added twice.
+        for path in focus:
+            candidates.append((CONTEXT_CATEGORY_PRIORITY["focused"], "focused", path, True))
     managed = config.get("managed") or {}
     add_files("managed", managed.get("files", []) or [])
     change_patterns = config.get("change_patterns", {}) or {}
@@ -1273,13 +1393,13 @@ def select_budgeted(
     ]
     if len(protected_paths) > max_files:
         raise AgentError(
-            f"Required task/skill/bootstrap context needs {len(protected_paths)} files "
+            f"Required task/skill/bootstrap/focused context needs {len(protected_paths)} files "
             f"but budget.max_files is {max_files}. Raise the context budget."
         )
     core_bytes = sum((ROOT / path).stat().st_size for path, _category in protected_paths)
     if core_bytes > max_bytes:
         raise AgentError(
-            f"Required task/skill/bootstrap context needs {core_bytes} bytes "
+            f"Required task/skill/bootstrap/focused context needs {core_bytes} bytes "
             f"but budget.max_bytes is {max_bytes}. Raise the context budget."
         )
     included: list[dict[str, Any]] = []
@@ -1361,7 +1481,9 @@ def derive_handoff(task_id: str | None) -> Any:
             return handoff.HandoffDependency(task_id=identifier, status="unknown", blocking=True)
         status = str(managed_project.effective_status(state, tasks_by[identifier]))
         return handoff.HandoffDependency(
-            task_id=identifier, status=status, blocking=status not in {"done", "cancelled"}
+            task_id=identifier,
+            status=status,
+            blocking=status not in {"done", "cancelled"},
         )
 
     entries = changed_file_entries()
@@ -1418,7 +1540,10 @@ def derive_handoff(task_id: str | None) -> Any:
             recommended_checks(config, sorted({path for _source, path, _deleted in entries}))
         ),
         resume_from_worktree=f"cd {owner.worktree}",
-        resume_commands=("make agent-status", f"make agent-context TASK={task.id} MODE=resume"),
+        resume_commands=(
+            "make agent-status",
+            f"make agent-context TASK={task.id} MODE=resume",
+        ),
         stop_conditions=tuple(CONTEXT_STOP_CONDITIONS),
     )
     try:
@@ -1591,6 +1716,10 @@ def print_context(data: dict[str, Any], output_format: str) -> None:
     omitted = data.get("omitted", [])
     print(f"Mode: {data.get('mode', 'new')}")
     print(f"Reason: {data.get('reason', '')}")
+    if data.get("focus_enabled"):
+        print(f"Focus (ephemeral, not persisted): {len(data.get('focused_files', []))} requested")
+        for path in data.get("focused_files", []):
+            print(f"- {path}")
     print(f"Task: {task['id']} - {task['title']}")
     print(f"Status: {task['status']}")
     print(f"Approval: {task['approval_level']} {task['approval_status']}")
@@ -1618,6 +1747,16 @@ def print_context(data: dict[str, Any], output_format: str) -> None:
     print("Recommended checks:")
     for item in data.get("recommended_checks", []):
         print(f"- {item}")
+    metrics = data.get("metrics", {})
+    if metrics:
+        print(
+            "Metrics: "
+            f"branch changed {metrics.get('branch_changed_files_count', 0)} | "
+            f"focused {metrics.get('focused_loaded_files_count', 0)}/"
+            f"{metrics.get('focused_requested_files_count', 0)} | "
+            f"eager {metrics.get('eager_files_count', 0)} | "
+            f"bytes {metrics.get('total_bytes', 0)}"
+        )
     print(f"Next action: {data['next_action']}")
 
 
@@ -1639,6 +1778,13 @@ def main() -> None:
     context.add_argument("--skill")
     context.add_argument("--mode", choices=["new", "resume"], default="new")
     context.add_argument("--format", choices=["text", "json"], default="text")
+    context.add_argument(
+        "--focus",
+        nargs="+",
+        default=None,
+        metavar="PATH",
+        help="Repository-relative files the current resume session eagerly loads.",
+    )
     handoff = sub.add_parser("handoff")
     handoff.add_argument("--task")
     handoff.add_argument("--format", choices=["text", "json"], default="text")
@@ -1652,7 +1798,7 @@ def main() -> None:
             print(agent_status())
         elif args.command == "context":
             print_context(
-                resolve_context(args.task, skill=args.skill, mode=args.mode),
+                resolve_context(args.task, skill=args.skill, mode=args.mode, focus=args.focus),
                 args.format,
             )
         elif args.command == "handoff":

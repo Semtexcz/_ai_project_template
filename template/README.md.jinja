@@ -169,7 +169,10 @@ task there from the branch and its local claim. Cleanup
 a stale claim left by a stopped agent.
 
 `agent-context` is bounded by the context-map `budget` and reports included and
-omitted files. Use `MODE=resume` when resuming or fixing an existing PR.
+omitted files. Use `MODE=resume` when resuming or fixing an existing PR. A large
+task may add an optional `FOCUS="<path> ..."` to a resume to eagerly load only a
+small working set; it is ephemeral, never persisted, and never changes the
+complete branch scope, recommended checks, or governance.
 
 {% if workflow_mode == "pr" %}
 A1 and A2 work remains in review until a human GitHub merge of the task's pull request:

@@ -262,6 +262,7 @@ checks:
   "template/tools/agent.py":
     - make validate-agent-skills
     - make test-agent
+    - uv run pytest tests/test_agent_focused_resume.py
   # The handoff model and its focused tests: agent-tool validation plus the
   # deterministic handoff suite, without the whole fast gate.
   "template/tools/agent_handoff.py":
@@ -300,6 +301,8 @@ checks:
     - uv run pytest tests/test_agent_efficiency.py
   "tests/test_agent_handoff.py":
     - uv run pytest tests/test_agent_handoff.py
+  "tests/test_agent_focused_resume.py":
+    - uv run pytest tests/test_agent_focused_resume.py
   "tests/test_agent_one_task_workflow_golden_path.py":
     - uv run pytest tests/test_agent_one_task_workflow_golden_path.py
   "tests/test_project_state_validation_golden_path.py":

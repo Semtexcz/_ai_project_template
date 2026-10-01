@@ -60,6 +60,44 @@ configuration, the Makefile, or unrelated planning and dashboard artifacts:
 and hands back the result, and `managed.files` keeps only `project/state.yaml`
 while the planning skills read the dashboards they actually need.
 
+### Focus a resume session on a small working set
+
+A large task can change 30-50 files while a single fresh session needs only a
+handful. That is the difference between *branch scope* and *session working set*;
+they are separate concepts:
+
+```text
+branch scope != session working set
+```
+
+`FOCUS` is an optional, ephemeral `agent-context` input that selects which files
+this session eagerly loads. It never changes task identity, branch, worktree,
+claim, lifecycle, dependencies, approval, the complete changed-file metadata,
+recommended checks, diff safety, or ownership validation:
+
+```bash
+make agent-handoff TASK=<id>
+
+# start a fresh agent session, then continue the same task with a small working set
+make agent-status
+make agent-context TASK=<id> MODE=resume FOCUS="template/tools/agent.py tests/test_agent_efficiency.py"
+```
+
+FOCUS is repository-relative, exact-path only (no globs), applies to
+`MODE=resume` only, and is never persisted - it is request input, not task,
+session, handoff, or Git state. Every path is validated against the existing
+exclusion and sensitive-file policies and must stay inside the repository;
+directories, missing files, traversal, absolute paths, and escaping symlinks are
+rejected. Focused files - changed or not - are loaded as intentional protected
+context, while the complete branch change set stays visible as metadata and
+unfocused changed files remain discoverable through the existing search roots.
+Focused resume still reports the whole branch, so `recommended_checks` derives
+from the complete change set, never from the focused subset.
+
+`MODE=new` and `MODE=resume` without `FOCUS` are unchanged, so ordinary
+single-session and small tasks never need `FOCUS`.
+
+
 ## Choose The Ownership Boundary
 
 Template-owned files can be changed when the scaffold or workflow changes:

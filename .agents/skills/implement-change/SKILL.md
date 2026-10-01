@@ -45,3 +45,8 @@ In managed projects, `make agent-handoff TASK=<id>` renders the compact,
 deterministic state of the task this worktree owns. Use it when a large task must
 continue in a fresh session: the task, branch, worktree, claim, and pull request
 persist, while the conversation does not.
+
+When a large branch is resumed in a fresh session, `make agent-context TASK=<id>
+MODE=resume FOCUS="<path> ..."` optionally eagerly loads only that small working
+set. `FOCUS` is ephemeral request input (never persisted) and never changes the
+complete branch scope, recommended checks, ownership, or governance.
