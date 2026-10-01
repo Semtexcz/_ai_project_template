@@ -173,6 +173,7 @@ def prepare(
     task_id: str = "T-002",
     title: str = "Add deterministic handoff",
     status: str = "in-progress",
+    baseline_files: tuple[str, ...] = (),
 ) -> Path:
     """Copy the rendered project, add a task, and claim it on a task branch.
 
@@ -184,6 +185,13 @@ def prepare(
     git(["init", "-b", "main"], root)
     git(["add", "-A"], root)
     git(["commit", "-q", "-m", "chore: fixture"], root)
+    for relative in baseline_files:
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("baseline\n", encoding="utf-8")
+    if baseline_files:
+        git(["add", "-A"], root)
+        git(["commit", "-q", "-m", "chore: add baseline files"], root)
     branch = f"task/{task_id}-handoff-fixture"
     git(["checkout", "-q", "-b", branch], root)
     task_path = root / "project" / "tasks" / f"{task_id}-handoff-fixture.md"
@@ -211,7 +219,7 @@ def handoff_text(root: Path, task_id: str = "T-002") -> str:
     ).stdout
 
 
-def handoff_json(root: Path, task_id: str = "T-002") -> dict[str, object]:
+def handoff_json_output(root: Path, task_id: str = "T-002") -> tuple[str, dict[str, object]]:
     result = run(
         [sys.executable, "tools/agent.py", "handoff", "--task", task_id, "--format", "json"],
         root,
@@ -219,7 +227,11 @@ def handoff_json(root: Path, task_id: str = "T-002") -> dict[str, object]:
     )
     payload, _ = json.JSONDecoder().raw_decode(result.stdout[result.stdout.index("{") :])
     assert isinstance(payload, dict)
-    return payload
+    return result.stdout, payload
+
+
+def handoff_json(root: Path, task_id: str = "T-002") -> dict[str, object]:
+    return handoff_json_output(root, task_id)[1]
 
 
 def test_handoff_is_deterministic_across_processes(
@@ -247,6 +259,7 @@ def test_handoff_is_deterministic_across_processes(
     assert payload["worktree"]["ownership_consistent"] is True
     assert payload["worktree"]["head_sha"]
     assert payload["metrics"]["handoff_bytes"] <= 8192
+    assert len(first.encode("utf-8")) == payload["metrics"]["handoff_bytes"]
 
 
 def test_fresh_process_reconstructs_the_same_task_branch_worktree_and_claim(
@@ -272,32 +285,31 @@ def test_fresh_process_reconstructs_the_same_task_branch_worktree_and_claim(
     assert "make agent-context TASK=T-002 MODE=resume" in text
 
 
-def test_handoff_stays_bounded_for_a_large_task_and_compacts_changes(
+def test_handoff_stays_bounded_for_a_large_deleted_branch_and_compacts_changes(
     managed_project: Path, tmp_path: Path
 ) -> None:
-    root = prepare(managed_project, tmp_path, "large-task")
-    for index in range(120):
-        target = (
-            root
-            / "docs"
-            / "reference"
-            / f"section-{index:03d}-with-a-deliberately-long-descriptive-name.md"
-        )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("placeholder\n", encoding="utf-8")
-    result = run(
-        [sys.executable, "tools/agent.py", "handoff", "--task", "T-002", "--format", "json"],
-        root,
-        env=env_for(root),
+    deleted_paths = tuple(
+        "docs/reference/"
+        f"section-{index:03d}-with-a-deliberately-long-descriptive-baseline-name.md"
+        for index in range(150)
     )
-    assert len(result.stdout.encode("utf-8")) <= 8192
-    payload = handoff_json(root)
+    root = prepare(managed_project, tmp_path, "large-deletion-task", baseline_files=deleted_paths)
+    git(["rm", *deleted_paths], root)
+    git(["commit", "-q", "-m", "chore: delete large baseline"], root)
+
+    output, payload = handoff_json_output(root)
     changes = payload["changes"]
-    assert changes["count"] >= 120
+    assert len(output.encode("utf-8")) <= 8192
+    assert payload["metrics"]["handoff_bytes"] == len(output.encode("utf-8"))
+    assert changes["count"] >= len(deleted_paths)
+    assert changes["deleted_count"] == len(deleted_paths)
     assert changes["listed"] + changes["omitted"] == changes["count"]
+    assert changes["deleted_listed"] + changes["deleted_omitted"] == changes["deleted_count"]
+    assert changes["listed"] <= 28
     assert changes["omitted"] > 0
+    assert changes["deleted_omitted"] > 0
+    assert any(item["deleted"] is True for item in changes["files"])
     assert payload["metrics"]["changed_files_count"] == changes["count"]
-    assert payload["metrics"]["handoff_bytes"] <= 8192
 
 
 def test_handoff_carries_no_transcript_reasoning_diff_log_or_command_history(
@@ -426,6 +438,35 @@ def test_changed_file_summary_is_branch_aware_and_never_embeds_contents(
     assert any(path.startswith("project/tasks/T-002") for path in paths)
     # Sources and paths only: no file contents are embedded anywhere.
     assert marker not in json.dumps(payload, sort_keys=True)
+
+
+def test_changed_file_entries_preserve_source_and_deletion_state(
+    managed_project: Path, tmp_path: Path
+) -> None:
+    deleted_path = "docs/old-branch-file.md"
+    root = prepare(managed_project, tmp_path, "mixed-change-sources", baseline_files=(deleted_path,))
+    git(["rm", deleted_path], root)
+    git(["commit", "-q", "-m", "chore: delete branch file"], root)
+    (root / "staged-added.py").write_text("value = 1\n", encoding="utf-8")
+    git(["add", "staged-added.py"], root)
+    readme = root / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + "\nworktree change\n", encoding="utf-8")
+    (root / "untracked-file.md").write_text("scratch\n", encoding="utf-8")
+
+    payload = handoff_json(root)
+    files = {item["path"]: item for item in payload["changes"]["files"]}
+    assert files[deleted_path] == {"source": "branch", "path": deleted_path, "deleted": True}
+    assert files["staged-added.py"] == {
+        "source": "staged",
+        "path": "staged-added.py",
+        "deleted": False,
+    }
+    assert files["README.md"] == {"source": "worktree", "path": "README.md", "deleted": False}
+    assert files["untracked-file.md"] == {
+        "source": "untracked",
+        "path": "untracked-file.md",
+        "deleted": False,
+    }
 
 
 def test_recommended_checks_match_agent_context_routing(

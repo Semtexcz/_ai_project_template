@@ -49,7 +49,10 @@ lives in `template/tools/agent.py` and reuses the canonical task, ownership,
 branch-aware changed-file, lifecycle, and recommended-check seams. Nothing is
 persisted - there is no session id, no session record, and no second task file -
 so a handoff cannot drift from repository state. Normal output is bounded at
-8 kB, and a changed-file list is compacted deterministically beyond 100 entries.
+8 kB. One changed-file collection is compacted deterministically to 28 entries,
+while total and deleted counts plus explicit omitted counts remain observable;
+each listed entry carries its source and deletion state. In `FORMAT=json`,
+`metrics.handoff_bytes` is exactly the UTF-8 byte length of the emitted JSON.
 
 Implementation sessions intentionally do not eagerly load the routing
 configuration, the Makefile, or unrelated planning and dashboard artifacts:

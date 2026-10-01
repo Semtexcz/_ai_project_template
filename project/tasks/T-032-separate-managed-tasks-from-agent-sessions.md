@@ -127,10 +127,13 @@ validating their skills unchanged.
 
 The handoff is derived and runtime-only: no session id, session record, claim of
 persistence, timestamp, or second task file. Ownership mismatch fails loudly
-(get_task + an explicit owned-task comparison), dirty state is reported, changed
-files stay `(source, path)` entries capped at 40 with the true total reported,
-and the payload fails loudly above 8 kB. Metrics are
-`changed_files_count`, `recommended_checks_count`, and `handoff_bytes`.
+(get_task + an explicit owned-task comparison), dirty state is reported, and
+one changed-file collection carries `(source, path, deleted)` entries capped at
+28. True changed and deleted totals remain visible alongside explicit listed and
+omitted counts, so no second unbounded deleted-path collection exists. The
+payload fails loudly above 8 kB. Metrics are `changed_files_count`,
+`recommended_checks_count`, and `handoff_bytes`, which exactly equals the UTF-8
+byte size of the final `FORMAT=json` output.
 `CONTEXT_STOP_CONDITIONS` is now a shared constant so handoff and context cannot
 drift.
 

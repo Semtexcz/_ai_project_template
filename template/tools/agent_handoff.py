@@ -17,8 +17,8 @@ transcript, not a reasoning summary, and not a second task record:
 
 * No timestamps. Every field comes from task, Git, or claim state, so two
   handoffs of the same repository state are byte-identical.
-* No file contents. Changed files stay ``(source, path)`` entries whose source
-  is the existing branch/staged/worktree/untracked classification.
+* No file contents. Changed files stay ``(source, path, deleted)`` entries whose
+  source is the existing branch/staged/worktree/untracked classification.
 * No logs and no command history. Verification is represented by the checks that
   *should* run next, resolved by the existing context routing.
 * A hard byte budget with deterministic compaction, so even a very large branch
@@ -43,7 +43,7 @@ HANDOFF_BYTE_BUDGET = 8192
 # branch without embedding diffs, so a large template-authoring task still
 # produces a small payload. The listed change count is capped because a handoff
 # is a resume aid, not a diff: the true total is still reported.
-HANDOFF_MAX_CHANGED_FILES = 40
+HANDOFF_MAX_CHANGED_FILES = 28
 HANDOFF_MAX_COMMITS = 5
 HANDOFF_MAX_REMAINING_CRITERIA = 20
 
@@ -83,10 +83,11 @@ class HandoffWorktree:
 
 @dataclass(frozen=True)
 class HandoffChangedFile:
-    """One changed path with the canonical change source that reported it."""
+    """One changed path with its canonical source and deletion state."""
 
     source: str
     path: str
+    deleted: bool
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,7 @@ class AgentHandoff:
     worktree: HandoffWorktree
     changed_files: tuple[HandoffChangedFile, ...]
     changed_files_omitted: int
-    deleted_files: tuple[str, ...]
+    deleted_files_omitted: int
     recent_commits: tuple[HandoffCommit, ...]
     remaining_acceptance_criteria: tuple[str, ...]
     remaining_criteria_omitted: int
@@ -132,12 +133,7 @@ class AgentHandoff:
     stop_conditions: tuple[str, ...]
 
     def body(self) -> dict[str, Any]:
-        """Return the deterministic payload without the metrics block.
-
-        The metrics block is attached afterwards by :meth:`to_payload`, so
-        ``metrics.handoff_bytes`` can measure this body exactly instead of
-        depending on its own size.
-        """
+        """Return the deterministic handoff payload without metrics."""
         return {
             "schema_version": HANDOFF_SCHEMA_VERSION,
             "task": {
@@ -181,10 +177,14 @@ class AgentHandoff:
                 "count": len(self.changed_files) + self.changed_files_omitted,
                 "listed": len(self.changed_files),
                 "omitted": self.changed_files_omitted,
+                "deleted_count": sum(item.deleted for item in self.changed_files)
+                + self.deleted_files_omitted,
+                "deleted_listed": sum(item.deleted for item in self.changed_files),
+                "deleted_omitted": self.deleted_files_omitted,
                 "files": [
-                    {"source": item.source, "path": item.path} for item in self.changed_files
+                    {"source": item.source, "path": item.path, "deleted": item.deleted}
+                    for item in self.changed_files
                 ],
-                "deleted": list(self.deleted_files),
             },
             "recent_commits": [
                 {"sha": commit.sha, "subject": commit.subject} for commit in self.recent_commits
@@ -201,21 +201,29 @@ class AgentHandoff:
         }
 
     def to_payload(self) -> dict[str, Any]:
-        """Return the machine-readable payload including deterministic metrics."""
+        """Return the machine-readable payload with its exact rendered byte size.
+
+        ``handoff_bytes`` is the UTF-8 byte length of the final ``FORMAT=json``
+        output. The value is self-referential, so resolve it deterministically to
+        a fixed point before returning the payload.
+        """
         payload = self.body()
-        payload["metrics"] = {
+        metrics = {
             "changed_files_count": len(self.changed_files) + self.changed_files_omitted,
             "recommended_checks_count": len(self.recommended_checks),
-            # Byte size of the payload without this metrics block, so the value
-            # never depends on its own digit count.
-            "handoff_bytes": payload_bytes(payload),
+            "handoff_bytes": 0,
         }
-        return payload
+        payload["metrics"] = metrics
+        while True:
+            measured = payload_bytes(payload)
+            if metrics["handoff_bytes"] == measured:
+                return payload
+            metrics["handoff_bytes"] = measured
 
 
 def canonical_json(data: Any) -> str:
-    """Return the compact canonical JSON encoding used for size accounting."""
-    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    """Return the exact newline-terminated JSON emitted for ``FORMAT=json``."""
+    return json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
 def payload_bytes(payload: dict[str, Any]) -> int:
@@ -241,7 +249,7 @@ def enforce_budget(handoff: AgentHandoff) -> int:
 
 def render_json(handoff: AgentHandoff) -> str:
     """Render the machine-readable handoff used by ``FORMAT=json``."""
-    return json.dumps(handoff.to_payload(), indent=2, sort_keys=True, ensure_ascii=False)
+    return canonical_json(handoff.to_payload())
 
 
 def render_text(handoff: AgentHandoff) -> str:

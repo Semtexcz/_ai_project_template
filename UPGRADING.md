@@ -90,7 +90,10 @@ fresh agent session. After updating:
   migration step is required, and lightweight projects do not receive either.
 - The handoff is derived at read time from existing task, Git, worktree, claim,
   and context-map state. It is never persisted, so there is nothing to configure,
-  commit, or clean up, and no session record exists to become stale.
+  commit, or clean up, and no session record exists to become stale. Its one
+  bounded changed-file list includes source and deletion state; total/deleted and
+  omitted counts stay visible even for large deletion migrations. In `FORMAT=json`,
+  `metrics.handoff_bytes` exactly equals the emitted JSON UTF-8 size.
 - Ordinary implementation context got smaller: `implement-change` no longer
   eagerly reads `.agents/context-map.yaml` or the `Makefile`, and `managed.files`
   now carries only `project/state.yaml`. If a local context-map customization

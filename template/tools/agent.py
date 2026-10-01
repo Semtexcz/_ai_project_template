@@ -919,8 +919,8 @@ def _parse_name_status(lines: list[str]) -> list[tuple[str, bool]]:
     return entries
 
 
-def changed_file_entries() -> list[tuple[str, str]]:
-    """Return deterministic (source, path) entries for the complete branch/PR
+def changed_file_entries() -> list[tuple[str, str, bool]]:
+    """Return deterministic (source, path, deleted) entries for the complete branch/PR
     change set: committed branch changes + staged + unstaged + untracked.
 
     The union is stable after commits: a clean worktree on a feature branch
@@ -948,33 +948,19 @@ def changed_file_entries() -> list[tuple[str, str]]:
         if path.strip():
             add("untracked", path.strip(), False)
     return sorted(
-        ((source, path) for path, (source, _deleted) in merged.items()),
+        ((source, path, deleted) for path, (source, deleted) in merged.items()),
         key=lambda item: item[1],
     )
 
 
 def deleted_changed_files() -> set[str]:
-    deleted: set[str] = set()
-    base = git_base_commit()
-    if base is not None:
-        for path, is_deleted in _parse_name_status(
-            git_stdout_lines(["diff", "--name-status", base, "HEAD"])
-        ):
-            if is_deleted:
-                deleted.add(path)
-    for path, is_deleted in _parse_name_status(
-        git_stdout_lines(["diff", "--cached", "--name-status"])
-    ):
-        if is_deleted:
-            deleted.add(path)
-    for path, is_deleted in _parse_name_status(git_stdout_lines(["diff", "--name-status"])):
-        if is_deleted:
-            deleted.add(path)
-    return deleted
+    """Return deleted paths from the canonical enriched changed-file entries."""
+    return {path for _source, path, deleted in changed_file_entries() if deleted}
 
 
 def changed_files() -> list[str]:
-    return [path for _, path in changed_file_entries()]
+    """Return changed paths, preserving the existing path-only public surface."""
+    return [path for _source, path, _deleted in changed_file_entries()]
 
 
 def _existing_make_commands(commands: list[str]) -> list[str]:
@@ -1416,10 +1402,11 @@ def derive_handoff(task_id: str | None) -> Any:
             notes=tuple(owner.notes),
         ),
         changed_files=tuple(
-            handoff.HandoffChangedFile(source=source, path=path) for source, path in listed
+            handoff.HandoffChangedFile(source=source, path=path, deleted=deleted)
+            for source, path, deleted in listed
         ),
         changed_files_omitted=len(entries) - len(listed),
-        deleted_files=tuple(sorted(deleted_changed_files())),
+        deleted_files_omitted=sum(deleted for _source, _path, deleted in entries[len(listed) :]),
         recent_commits=tuple(
             handoff.HandoffCommit(sha=sha, subject=subject)
             for sha, subject in recent_commits(handoff.HANDOFF_MAX_COMMITS)
@@ -1427,7 +1414,9 @@ def derive_handoff(task_id: str | None) -> Any:
         remaining_acceptance_criteria=tuple(unchecked[:remaining_limit]),
         remaining_criteria_omitted=max(0, len(unchecked) - remaining_limit),
         next_action=managed_project.recommended_next_action(state, tasks),
-        recommended_checks=tuple(recommended_checks(config, sorted({p for _s, p in entries}))),
+        recommended_checks=tuple(
+            recommended_checks(config, sorted({path for _source, path, _deleted in entries}))
+        ),
         resume_from_worktree=f"cd {owner.worktree}",
         resume_commands=("make agent-status", f"make agent-context TASK={task.id} MODE=resume"),
         stop_conditions=tuple(CONTEXT_STOP_CONDITIONS),
@@ -1536,11 +1525,10 @@ def pre_task(task_id: str) -> None:
 
 def diff_safety_errors() -> list[str]:
     errors: list[str] = []
-    deleted = deleted_changed_files()
-    for _status, path in changed_file_entries():
+    for _source, path, deleted in changed_file_entries():
         if excluded(path, SENSITIVE_PATTERNS):
             errors.append(f"Sensitive file appears in Git diff: {path}.")
-        if excluded(path, BUILD_ARTIFACT_PATTERNS) and path not in deleted:
+        if excluded(path, BUILD_ARTIFACT_PATTERNS) and not deleted:
             errors.append(f"Build artifact appears in Git diff: {path}.")
     return errors
 
@@ -1637,7 +1625,7 @@ def print_handoff(value: Any, output_format: str) -> None:
     """Print the derived handoff in the requested format."""
     handoff = handoff_module()
     if output_format == "json":
-        print(handoff.render_json(value))
+        sys.stdout.write(handoff.render_json(value))
         return
     print(handoff.render_text(value))
 
