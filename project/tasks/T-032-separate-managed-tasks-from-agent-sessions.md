@@ -74,22 +74,22 @@ disposable.
 
 ## Acceptance Criteria
 
-- [ ] `make agent-handoff TASK=<id>` and `FORMAT=json` return deterministic
+- [x] `make agent-handoff TASK=<id>` and `FORMAT=json` return deterministic
       structured output derived only from canonical repository state.
-- [ ] Output covers task identity/lifecycle/approval/dependencies/blocker,
+- [x] Output covers task identity/lifecycle/approval/dependencies/blocker,
       branch/HEAD/worktree/claim ownership and dirty state, a compact
       branch-aware changed-file summary with change source, a bounded set of
       recent task commits, derivable remaining acceptance criteria, the
       lifecycle next action, reused recommended checks, deterministic resume
       commands, and small metrics.
-- [ ] Ownership mismatch fails loudly; changed files never embed contents.
-- [ ] Normal handoff output is at most 8 kB and contains no transcript,
+- [x] Ownership mismatch fails loudly; changed files never embed contents.
+- [x] Normal handoff output is at most 8 kB and contains no transcript,
       reasoning, full diff, full logs, or command history.
-- [ ] The normal one-session `agent-status` -> `agent-context` -> implement ->
+- [x] The normal one-session `agent-status` -> `agent-context` -> implement ->
       `agent-pre-review` flow stays valid without invoking handoff.
-- [ ] Ordinary implementation context no longer eagerly loads unrelated
+- [x] Ordinary implementation context no longer eagerly loads unrelated
       planning/dashboard artifacts or routing-only files.
-- [ ] Focused tests pass and the canonical pre-review gate passes; the task ends
+- [x] Focused tests pass and the canonical pre-review gate passes; the task ends
       `review` / `pending` with exactly one PR and no agent merge.
 
 ## Verification
@@ -113,4 +113,51 @@ disposable.
 
 ## Completion Notes
 
-Pending.
+`template/tools/agent_handoff.py` owns the handoff model: the frozen
+`AgentHandoff` value, its deterministic JSON payload (schema version 1), the
+concise human rendering, the canonical JSON size accounting, and a loud byte
+budget. Derivation lives in `template/tools/agent.py` and reuses existing seams
+only - `get_task`, `resolve_owner`, `worktree_states`, `effective_status`,
+`acceptance_checkboxes`, `changed_file_entries`, `recommended_checks`,
+`recommended_next_action` - so no second task loader, change detector, or
+check router exists. `make agent-handoff TASK=<id>` (and `FORMAT=json`) is
+managed-only; `tools/agent_handoff.py` is excluded from lightweight generation
+and `implement-change` never references the target, so lightweight projects keep
+validating their skills unchanged.
+
+The handoff is derived and runtime-only: no session id, session record, claim of
+persistence, timestamp, or second task file. Ownership mismatch fails loudly
+(get_task + an explicit owned-task comparison), dirty state is reported, changed
+files stay `(source, path)` entries capped at 40 with the true total reported,
+and the payload fails loudly above 8 kB. Metrics are
+`changed_files_count`, `recommended_checks_count`, and `handoff_bytes`.
+`CONTEXT_STOP_CONDITIONS` is now a shared constant so handoff and context cannot
+drift.
+
+Context reduction: `implement-change` no longer eagerly reads
+`.agents/context-map.yaml` or the `Makefile` (tooling resolves routing), and
+`managed.files` keeps only `project/state.yaml`; the planning/reassessment skills
+still read the dashboards through their own `reads:`.
+
+Evidence: `tests/test_agent_handoff.py` (10 passed) proves cross-process
+determinism, fresh-process reconstruction of task/branch/worktree/claim, the
+8 kB bound with a 120-file change set and deterministic compaction, absence of
+transcript/reasoning/diff/log/command-history, loud ownership mismatch and
+unowned-checkout refusal, dirty/clean determinism, branch+staged+unstaged+
+untracked change sources without contents, check/stop-condition/next-action
+consistency with `agent-context`, the unchanged single-session loop, and the
+rendered managed `make agent-handoff` target. Also green:
+`tests/test_agent_efficiency.py` (29), `tests/test_agent_context_routing.py`
+(13), `tests/test_agent_layer_mirror.py` (5),
+`tests/test_project_tool_modules.py` + `tests/test_project_tool_worktrees.py`
+(21), `tests/test_agent_one_task_workflow_golden_path.py` (4, including a full
+generated `make check` with ruff and Pyright strict over `tools/`),
+`tests/test_parallel_agent_worktrees_golden_path.py` (3),
+`tests/test_script_local_golden_path.py` (1),
+`tests/test_copier_update_golden_path.py` (3), `make test-static` (20),
+`make test-lifecycle` (17), `make validate-project`,
+`make validate-agent-skills`, `make validate-template-docs`,
+`make validate-agent-layer`. One focused expectation moved with the narrowed
+baseline: the context budget test now uses `max_files: 3`, and the
+implement-change skill test now asserts the routing config and Makefile are
+*not* eagerly loaded.
