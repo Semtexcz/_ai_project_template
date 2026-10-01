@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -518,10 +519,36 @@ def test_pre_review_runs_one_canonical_gate() -> None:
     body = text[text.index(marker) :]
     body = body[: body.index("\n\ndef ")]
     assert body.count('run_command("make check")') == 1
+    assert "fail_if_errors(diff_safety_errors())" in body
     assert "validate_agent_skills()" not in body
     assert "make validate-project" not in body
     # The whole tool contains only the single canonical full-gate invocation.
     assert text.count('run_command("make check")') == 1
+    # Local pre-review is never the exhaustive release gate.
+    assert "release-check" not in body
+    assert "release-check" not in text
+
+
+GOLDEN_PATH_PRE_REVIEW_INVOCATION = re.compile(r'\[\s*"make",\s*"agent-pre-review"')
+GOLDEN_PATH_FULL_GATE_INVOCATION = re.compile(r'\[\s*"make",\s*"check"')
+
+
+def test_golden_paths_do_not_duplicate_the_local_full_gate() -> None:
+    """A normal cycle runs focused checks, then one `agent-pre-review`.
+
+    `agent-pre-review` already runs `make check`, so a golden path that calls
+    `make check` immediately before it would duplicate the local full gate.
+    Focused implementation-level checks before pre-review stay allowed.
+    """
+    offenders: list[str] = []
+    for path in sorted((ROOT / "tests").glob("test_*.py")):
+        text = path.read_text(encoding="utf-8")
+        pre_review = GOLDEN_PATH_PRE_REVIEW_INVOCATION.search(text)
+        if pre_review is None:
+            continue
+        if GOLDEN_PATH_FULL_GATE_INVOCATION.search(text[: pre_review.start()]):
+            offenders.append(path.name)
+    assert offenders == []
 
 
 def test_representative_generated_profiles_render_concise_context(

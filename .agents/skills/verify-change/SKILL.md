@@ -39,3 +39,10 @@ Choose focused checks first, then broader checks. Examples:
 - Documentation-only change: documentation validation, `make check`.
 
 Report commands run, results, and any risk that remains unverified.
+
+Start from the focused checks for the changed surface. In a governed project the
+single canonical local gate is `make agent-pre-review TASK=<id>`, which runs the
+project's `make check` once; do not run `make check` separately right before it.
+Exhaustive confidence beyond that gate belongs to CI, which runs after the push:
+it is required but asynchronous, so the implementation session ends at the pushed
+pull request and does not wait for or poll CI.

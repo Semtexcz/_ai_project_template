@@ -42,8 +42,18 @@ documents that the context bundle already resolves deterministically.
   yourself; never merge your own governed PR.
 - In `local`/`branch` managed projects, `make task-approve` (humans only)
   followed by `make task-complete` remains the explicit offline fallback.
-- Prefer focused checks while implementing; `make agent-pre-review` runs the
-  canonical `make check` full gate once at final pre-review.
+- Prefer focused checks while implementing: run the commands `make agent-context`
+  recommends for the changed surface. `make agent-pre-review TASK=<id>` is the
+  single canonical local gate per review cycle and runs `make check` exactly
+  once; do not run `make check` immediately before it, and do not run
+  `make release-check` during normal implementation.
+- The implementation session ends once the task is in review and its pull request
+  is pushed. CI remains required, exhaustive, and asynchronous: do not wait for
+  or poll GitHub Actions. If CI fails, start a fresh session, run
+  `make agent-handoff TASK=<id>` and a focused resume on the same
+  task/branch/worktree/claim/PR, fix the failure, run the focused checks, run
+  `make agent-pre-review TASK=<id>` once for that repair cycle, push the same
+  pull request, and stop.
 - For parallel work, give each independent task its own worktree instead of
   sharing one checkout: `make agent-worktree TASK=<id>` claims the task, creates
   `task/T-###-<slug>` outside the project tree, and prints the worktree path.

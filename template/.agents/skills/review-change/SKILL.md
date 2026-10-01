@@ -63,3 +63,7 @@ Treat material planning/status drift as a readiness finding. Do not make every
 incidental documentation mismatch a blocker; only material contradictions
 between the actual repository state and durable planning/status documentation
 should affect readiness.
+
+Readiness stops at a safe diff and a task in review with its pull request pushed;
+exhaustive validation runs asynchronously in CI after that boundary and is never
+a reason to poll or wait inside the implementation session.

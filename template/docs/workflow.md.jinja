@@ -89,15 +89,18 @@ branch diff against the base, affected files, and the selected skill without
 reloading the project's architectural context.
 
 Prefer the focused checks recommended for the changed-file set while
-implementing. Run the canonical full gate exactly once at final pre-review:
+implementing. The single canonical local gate at final pre-review is:
 
 ```bash
-make check
+make agent-pre-review TASK=<id>
 ```
 
-`make check` is validation-only and already runs the project, documentation,
-and agent-skill validators. Do not re-run the same validators separately
-through `agent-pre-review`.
+`make agent-pre-review` checks diff safety and runs the project's `make check`
+gate exactly once. Do not run `make check` separately right before it, and do not
+run the exhaustive release validation during normal implementation. That
+exhaustive validation is CI's job: it runs after you push, it is required, and it
+is asynchronous - do not wait for or poll CI. The implementation session ends
+when the task is in review and the pull request is pushed.
 
 ## Agent Skills
 

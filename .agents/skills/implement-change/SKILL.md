@@ -50,3 +50,12 @@ When a large branch is resumed in a fresh session, `make agent-context TASK=<id>
 MODE=resume FOCUS="<path> ..."` optionally eagerly loads only that small working
 set. `FOCUS` is ephemeral request input (never persisted) and never changes the
 complete branch scope, recommended checks, ownership, or governance.
+
+Run the focused checks that `make agent-context` recommends for the changed
+surface while iterating. In a governed project the single canonical local gate is
+`make agent-pre-review TASK=<id>` (it runs the project's `make check` once); do
+not run `make check` immediately before it. Exhaustive validation is CI's job:
+once the task is in review and the branch is pushed, the implementation session
+ends and does not wait for or poll CI. A CI failure starts a fresh session that
+resumes from durable state - the task, branch, worktree, claim, and pull request
+persist while the conversation does not.
