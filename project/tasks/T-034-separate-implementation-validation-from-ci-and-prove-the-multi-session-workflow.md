@@ -3,7 +3,7 @@ id: T-034
 
 title: Separate implementation validation from CI and prove the multi-session workflow
 
-status: in-progress
+status: review
 
 priority: 1
 
