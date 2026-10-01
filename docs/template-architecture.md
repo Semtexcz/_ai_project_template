@@ -139,8 +139,12 @@ deterministic task/skill bundle bounded by the `budget` declared in
 never recursively loaded as context. The bundle reports included files with
 categories, omitted files with reasons, changed files considered, search roots,
 and total bytes. `MODE=resume` keeps the bundle small when an existing PR is
-being resumed or fixed. `agent-pre-review` runs the canonical `make check` full
-gate once instead of re-running the validators that gate already contains.
+being resumed or fixed. A resume may add an optional `FOCUS="<path> ..."` to
+eagerly load only an explicit small working set while the complete branch change
+set stays authoritative and observable (`branch scope != session working set`);
+`FOCUS` is ephemeral request input that never changes checks, diff safety, or
+governance. `agent-pre-review` runs the canonical `make check` full gate once
+instead of re-running the validators that gate already contains.
 
 Lightweight projects do not render those lifecycle commands, but they do render
 `make validate-agent-skills`.
