@@ -572,13 +572,25 @@ def test_representative_generated_profiles_render_concise_context(
         assert "## Agent Context" in workflow
         assert "## Task Records" in workflow
         assert "search_roots" in workflow
-        assert "MODE=resume" in workflow
         context_map = (generated / ".agents" / "context-map.yaml").read_text(
             encoding="utf-8"
         )
         assert "schema_version: 2" in context_map
         assert "search_roots:" in context_map
         assert "budget:" in context_map
+
+    # The context bundle and its `MODE=resume` input are managed-only: the
+    # managed profile documents them, and lightweight generation must not teach
+    # a command or mode it does not have.
+    managed_workflow = (managed_fullstack / "docs" / "workflow.md").read_text(
+        encoding="utf-8"
+    )
+    lightweight_workflow = (lightweight / "docs" / "workflow.md").read_text(
+        encoding="utf-8"
+    )
+    assert "MODE=resume" in managed_workflow
+    assert "MODE=resume" not in lightweight_workflow
+    assert "make agent-context" not in lightweight_workflow
 
     # Managed full-stack projects expose profile files and no recursive trees.
     managed_context = context_json(managed_fullstack)

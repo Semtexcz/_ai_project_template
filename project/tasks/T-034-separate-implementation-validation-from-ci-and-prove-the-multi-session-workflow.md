@@ -110,6 +110,11 @@ and proves the multi-session loop end to end.
 - Focused: new multi-session golden path and pre-review invariant tests, plus
   `tests/test_agent_handoff.py` and `tests/test_agent_focused_resume.py` for the
   T-032/T-033 regressions.
+- Profile rendering: `test_generated_workflow_guidance_matches_profile_commands`
+  proves documented commands match generated Make targets for lightweight,
+  managed `local`/`branch`, and managed `pr` renders;
+  `test_root_template_pr_ci_policy_remains_template_authoring_specific` proves
+  the root template policy is unchanged.
 - Full gate: `make check`, invoked through `make agent-pre-review TASK=T-034`.
 
 ## Documentation Impact
@@ -139,6 +144,19 @@ The duplicated local gate was removed from
 path invokes `make check` before `agent-pre-review`. No CI polling, scheduler,
 CI status store, transcript, or session record was added; CI remains required and
 asynchronous, and `release-check` stays in real template release tooling.
+
+Generated-project profile scoping: the boundary guidance is now rendered only for
+the profile it applies to. `template/AGENTS.md.jinja` and
+`template/docs/workflow.md.jinja` branch on `governance` and `workflow_mode`, so
+lightweight projects document only `make check`; managed `local`/`branch` projects
+keep `make agent-pre-review TASK=<id>` plus their configured local/branch
+approval and completion boundary; and only managed `pr` projects document the
+pushed-PR stop and required asynchronous CI boundary. The shared
+`implement-change`/`verify-change`/`review-change` skills use profile-safe
+wording, and `test_generated_workflow_guidance_matches_profile_commands` proves
+documented managed commands exist in each rendered profile while
+`test_root_template_pr_ci_policy_remains_template_authoring_specific` proves the
+root template policy is unchanged.
 
 Evidence (all green): `tests/test_agent_multi_session_workflow_golden_path.py`
 (1) proves Phases A-D - implementation with focused checks only and a bounded

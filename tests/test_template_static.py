@@ -344,6 +344,78 @@ def test_lightweight_generation_omits_managed_governance_machinery(tmp_path: Pat
     subprocess.run(["make", "validate-agent-skills"], cwd=generated, env=env, check=True)
 
 
+def make_targets(makefile: str) -> set[str]:
+    return {
+        line.split(":", 1)[0]
+        for line in makefile.splitlines()
+        if line and not line.startswith((" ", "\t", ".")) and ":" in line
+    }
+
+
+def documented_make_commands(document: str) -> set[str]:
+    return {
+        line.split("make ", 1)[1].split()[0].strip("`.,:;)")
+        for line in document.splitlines()
+        if "make " in line
+    }
+
+
+def test_generated_workflow_guidance_matches_profile_commands(tmp_path: Path) -> None:
+    lightweight = copy_project(tmp_path, governance="lightweight", workflow_mode="local")
+    managed_local = copy_project(tmp_path, governance="managed", workflow_mode="branch")
+    managed_pr = copy_project(tmp_path, governance="managed", workflow_mode="pr")
+
+    lightweight_workflow = (lightweight / "docs" / "workflow.md").read_text(encoding="utf-8")
+    lightweight_agents = (lightweight / "AGENTS.md").read_text(encoding="utf-8")
+    lightweight_targets = make_targets((lightweight / "Makefile").read_text(encoding="utf-8"))
+    assert "make check" in lightweight_workflow
+    for forbidden in [
+        "make agent-pre-review",
+        "make agent-handoff",
+        "TASK=<id>",
+        "task in review",
+        "push the pull request",
+        "required exhaustive CI",
+        "FOCUS",
+    ]:
+        assert forbidden not in lightweight_workflow
+    assert "agent-pre-review" not in lightweight_targets
+    assert documented_make_commands(lightweight_workflow) <= lightweight_targets
+    assert "make agent-pre-review" not in lightweight_agents
+
+    local_workflow = (managed_local / "docs" / "workflow.md").read_text(encoding="utf-8")
+    local_agents = (managed_local / "AGENTS.md").read_text(encoding="utf-8")
+    local_targets = make_targets((managed_local / "Makefile").read_text(encoding="utf-8"))
+    assert "make agent-pre-review TASK=<id>" in local_workflow
+    assert "agent-pre-review" in local_targets
+    assert documented_make_commands(local_workflow) <= local_targets
+    for forbidden in ["push the same pull request", "Required exhaustive CI", "do not wait for or poll it"]:
+        assert forbidden not in local_workflow
+        assert forbidden not in local_agents
+    assert "configured local/branch lifecycle" in local_workflow
+    assert "configured local/branch lifecycle" in local_agents
+
+    pr_workflow = (managed_pr / "docs" / "workflow.md").read_text(encoding="utf-8")
+    pr_agents = (managed_pr / "AGENTS.md").read_text(encoding="utf-8")
+    pr_targets = make_targets((managed_pr / "Makefile").read_text(encoding="utf-8"))
+    assert "make agent-pre-review TASK=<id>" in pr_workflow
+    assert "agent-pre-review" in pr_targets
+    assert documented_make_commands(pr_workflow) <= pr_targets
+    for required in ["push the same pull request", "Required exhaustive CI", "do not wait for or poll it"]:
+        assert required in pr_workflow
+        assert required in pr_agents
+
+
+def test_root_template_pr_ci_policy_remains_template_authoring_specific() -> None:
+    root_agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    root_development = (ROOT / "docs" / "template-development.md").read_text(encoding="utf-8")
+    root_agent_layer = (ROOT / ".agents" / "README.md").read_text(encoding="utf-8")
+    assert "CI remains required, exhaustive, and asynchronous" in root_agents
+    assert "or poll GitHub Actions" in root_agents
+    assert "must not wait for or poll it" in root_development
+    assert "pull request" in root_agent_layer
+
+
 def test_managed_generation_preserves_task_lifecycle(tmp_path: Path) -> None:
     generated = copy_project(tmp_path, governance="managed", workflow_mode="pr")
 
