@@ -86,7 +86,9 @@ changelog drift from `project/state.yaml.template.version`.
   release readiness. It is read-only, works on the PR/task branch, requires
   `HEAD.template.version > HEAD^1.template.version`, rejects a version bump
   followed by another commit, and shares its core invariant with
-  `make template-release-tag`.
+  `make template-release-tag`. Template CI explicitly validates
+  `github.event.pull_request.head.sha` for this Git-history boundary, while
+  ordinary release-candidate checks retain their normal integration checkout.
 - The `v1.2.0` version transition is the final commit of this release PR, so the
   branch tip itself introduces the release. Historically the bump was committed
   before later T-036 commits; that shape breaks rebase merges and is now
@@ -121,8 +123,11 @@ changelog section is not the version being prepared, and
 `make release-check`) proves final changelog/version equality, and
 `make validate-template-release-boundary` proves the PR tip itself introduces
 that version relative to `HEAD^1`, sharing its core invariant with
-`make template-release-tag`. The `v1.2.0` transition is now the final commit of
-this release PR. The Copier fixture regression was repaired;
+`make template-release-tag`. Template CI explicitly validates
+`github.event.pull_request.head.sha` for this Git-history boundary, while
+ordinary release-candidate checks retain their normal integration checkout. The
+`v1.2.0` transition is now the final commit of this release PR. The Copier
+fixture regression was repaired;
 `tests/test_copier_update_golden_path.py` passes locally.
 
 This task was replayed onto the then-current `origin/main` after the original

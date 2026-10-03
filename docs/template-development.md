@@ -414,10 +414,14 @@ Final release readiness has three distinct checks:
 - `make validate-template-release-boundary` proves `HEAD` itself introduces
   `template.version` relative to `HEAD^1`.
 
-Template CI runs the latter two after `make release-check`. The boundary check is
-what makes merge, squash, fast-forward, and rebase merges compatible with
-post-merge tagging: because a rebase merges every PR commit individually, the
-version-transition commit must be the final commit of the release PR.
+Template CI runs the latter two after `make release-check`. On `pull_request`,
+the Git release-boundary gate explicitly checks the actual PR head rather than
+GitHub's synthetic merge ref, because the boundary protects commit ordering for
+rebase/fast-forward histories. On a push to `main`, it checks the pushed main
+tip. The boundary check is what makes merge, squash, fast-forward, and rebase
+merges compatible with post-merge tagging: because a rebase merges every PR
+commit individually, the version-transition commit must be the final commit of
+the release PR.
 
 ## Template Releases (PR-only, two-phase)
 

@@ -166,6 +166,30 @@ def test_release_hygiene_gitignore_and_gate_are_declared() -> None:
     assert "`make release-check` runs the full" in readme
 
 
+def test_release_ci_checks_actual_pr_head_for_git_release_boundary() -> None:
+    workflow = (ROOT / ".github/workflows/template-ci.yml").read_text()
+    release_job = workflow.split("  release-check:\n", 1)[1].split("\n  render-matrix:", 1)[0]
+
+    release_check = "run: make release-check"
+    release_ready = "run: make validate-template-release-ready"
+    pr_head_checkout = "- name: Check out actual pull request head for release-boundary validation"
+    boundary = "run: make validate-template-release-boundary"
+
+    assert release_check in release_job
+    assert release_ready in release_job
+    assert release_job.index(release_check) < release_job.index(release_ready)
+    assert pr_head_checkout in release_job
+    assert "if: github.event_name == 'pull_request'" in release_job
+    assert "ref: ${{ github.event.pull_request.head.sha }}" in release_job
+    assert "fetch-depth: 2" in release_job
+    assert release_job.index(pr_head_checkout) < release_job.index(boundary)
+
+    boundary_step = release_job[release_job.index("- name: Require the final release boundary (HEAD introduces template.version)"):]
+    boundary_step = boundary_step.split("\n      - name:", 1)[0]
+    assert "if:" not in boundary_step
+    assert boundary in boundary_step
+
+
 def test_documentation_validation_targets_are_declared() -> None:
     makefile = (ROOT / "Makefile").read_text()
     generated_makefile = (ROOT / "template" / "Makefile.jinja").read_text()
