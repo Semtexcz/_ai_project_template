@@ -12,7 +12,9 @@ separate concerns.
   generated only when `governance=managed`.
 - Capability skills live in `.agents/capabilities/skills/*/SKILL.md` and are
   generated only for profiles with the matching specialized workflow.
-- Skill-local `agents/` metadata may pin model profiles and validator scripts.
+- Skill-local `agents/` metadata requests an execution profile and a
+  deterministic validator script; the profile's harness/model/reasoning settings
+  live in `.agents/execution.yaml`.
 - Skills describe judgment, inputs, reads, outputs, approval boundaries, and
   stop conditions. They do not rewrite task state.
 - In managed projects, project state, task transitions, approvals, and dashboard
@@ -48,6 +50,44 @@ Capability skills:
 
 - `change-api-contract` for full-stack OpenAPI/client workflows.
 - `verify-production-artifact` for production runtime artifact checks.
+
+## Execution Policy
+
+`.agents/execution.yaml` is the one visible source of truth for role-based
+execution policy. It separates four different things:
+
+```text
+skill   = what engineering operation runs        (implement-change, review-change, ...)
+role    = why execution needs a quality/cost class (planner, implementer, reviewer, fixer)
+profile = reusable execution policy              (harness, model, reasoning_effort, cost_class)
+harness = where execution runs                   (codex today; local/other later)
+model   = an opaque, harness-specific identifier (null = the harness default)
+```
+
+- Roles resolve deterministically to profiles; the canonical roles are exactly
+  `planner`, `implementer`, `reviewer`, `fixer`.
+- A `model: null` profile inherits the configured harness model, so no
+  time-sensitive vendor model name is pinned in canonical policy. The resolver
+  never interprets vendor model names and contains no price table.
+- `make agent-route ROLE=<role> [FORMAT=json]` prints the deterministic decision
+  (status, role, profile, harness, model, reasoning effort, capabilities,
+  escalation, budget). It resolves policy only: it never launches a model.
+- Policy validation is fail-closed: unknown keys are rejected rather than ignored,
+  and escalation fields are trigger-specific (`implementation_failure` uses
+  `after_attempts` + `profile`, `architecture_failure` uses `role`, and
+  `external_blocker` uses `action: human`). Retry/review counters and reported
+  usage values enforce their non-negative/positive domains before resolution.
+- Budget configuration uses the logical scopes `task`, `session`, and `campaign`.
+  The canonical layer only evaluates a configured ceiling against harness-reported
+  usage; it never stores accounting and never derives a price. Contradictory cost
+  records are rejected, and missing usage scope with a configured ceiling blocks
+  rather than silently bypassing budget protection.
+- Reviewer is a distinct role: it inspects and returns findings and never marks
+  implementation reviewed. Structured review results use
+  `.agents/schemas/review-result.schema.yaml`; implementation findings route to
+  `fixer`, architecture findings to `planner`, and external blockers to a human.
+- Orchestration (goal decomposition, retries, review/fix loops, scheduling) is a
+  separate concern and is not part of the execution policy.
 
 ## Context Map
 

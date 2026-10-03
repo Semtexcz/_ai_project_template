@@ -12,7 +12,11 @@ derived handoff (T-032), an optional focused resume working set that keeps a
 complete branch observable while a fresh session eagerly loads only the files it
 needs (T-033), and explicit validation boundaries that keep focused
 implementation checks, the single local pre-review gate, and exhaustive
-asynchronous CI separate across fresh sessions (T-034).
+asynchronous CI separate across fresh sessions (T-034). It also adds the
+role-based execution-policy primitive the future orchestrator depends on:
+canonical planner/implementer/reviewer/fixer roles that resolve deterministically
+to reusable execution profiles, plus deterministic escalation, budget, and
+structured review/usage contracts (T-035).
 
 ## Next Gate
 

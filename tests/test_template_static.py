@@ -611,7 +611,9 @@ def test_conventional_commit_skill_uses_cheap_model_and_validator() -> None:
     )
 
     assert "$conventional-commit" in root_openai.read_text(encoding="utf-8")
-    assert 'model: "gpt-5-mini"' in root_model.read_text(encoding="utf-8")
+    model_text = root_model.read_text(encoding="utf-8")
+    assert 'profile: "utility-cheap"' in model_text
+    assert "gpt-5" not in model_text
     assert "validate_commit_message.py" in root_skill.read_text(encoding="utf-8")
 
     valid = subprocess.run(

@@ -131,6 +131,12 @@ change_patterns:
     search_roots:
       - template/tools/
       - tests/
+  "template/tools/agent_execution.py":
+    files:
+      - docs/template-development.md
+    search_roots:
+      - template/tools/
+      - tests/
   "template/tools/project.py":
     files:
       - docs/template-development.md
@@ -272,6 +278,11 @@ checks:
     - make validate-agent-skills
     - make test-agent
     - uv run pytest tests/test_agent_handoff.py
+  # The execution-policy engine plus its focused policy/budget/review suite.
+  "template/tools/agent_execution.py":
+    - make validate-agent-skills
+    - make test-agent
+    - uv run pytest tests/test_execution_policy.py
   "template/tools/project.py":
     - make validate-project
     - make test-lifecycle

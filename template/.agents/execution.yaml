@@ -1,0 +1,85 @@
+schema_version: 1
+
+# Canonical execution policy (issue #24, policy layer).
+#
+# This file is the one visible source of truth for role -> profile execution
+# policy. It separates four different things:
+#
+#   skill   - what engineering operation runs (owned by .agents/skills)
+#   role    - why execution needs a quality/cost class (planner, implementer,
+#             reviewer, fixer)
+#   profile - reusable execution policy (harness, model, reasoning, cost class)
+#   harness - where execution runs (codex today; local/other later)
+#   model   - an opaque, harness-specific identifier; null means "use the
+#             configured harness default", so no time-sensitive model name is
+#             pinned here.
+#
+# It contains no vendor price table and no vendor model-name logic. Cost budgets
+# use usage reported by the harness; the canonical layer never derives a price.
+
+roles:
+  planner:
+    profile: reasoning-high
+  implementer:
+    profile: coding-efficient
+  reviewer:
+    profile: reasoning-high
+  fixer:
+    profile: coding-efficient
+
+profiles:
+  reasoning-high:
+    harness: codex
+    model: null
+    reasoning_effort: high
+    cost_class: high
+    capabilities:
+      - planning
+      - architecture
+      - review
+
+  coding-efficient:
+    harness: codex
+    model: null
+    reasoning_effort: medium
+    cost_class: efficient
+    capabilities:
+      - implementation
+      - repair
+
+  utility-cheap:
+    harness: codex
+    model: null
+    reasoning_effort: low
+    cost_class: cheap
+    capabilities:
+      - constrained-text
+
+# Deterministic retry/review limits. These are policy decisions, not an
+# automatic retry loop: the resolver returns a blocking/human decision when a
+# limit is exhausted and never performs the next attempt itself.
+policy:
+  max_implementation_attempts: 3
+  max_review_cycles: 3
+
+# Deterministic escalation. A role only changes profile/role through one of
+# these explicit triggers, so an agent can never silently promote itself to a
+# stronger profile.
+escalation:
+  implementation_failure:
+    after_attempts: 2
+    profile: reasoning-high
+  architecture_failure:
+    role: planner
+  external_blocker:
+    action: human
+
+# Budget configuration only. Accumulated usage is owned by the future
+# orchestrator (#25); this layer never stores session/task/campaign accounting.
+budgets:
+  task:
+    max_cost_usd: null
+  session:
+    max_cost_usd: null
+  campaign:
+    max_cost_usd: null
