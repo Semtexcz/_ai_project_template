@@ -76,6 +76,8 @@ jobs:
         run: make release-check
       - name: Require the final release boundary (changelog == template.version)
         run: make validate-template-release-ready
+      - name: Require the final release boundary (HEAD introduces template.version)
+        run: make validate-template-release-boundary
 
   render-matrix:
     runs-on: ubuntu-latest

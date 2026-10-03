@@ -142,9 +142,10 @@ no `Unreleased` section).
 2. After CI and a human merge the release PR to `main`, tag the merged commit:
    `make template-release-tag`. It verifies local `main` matches `origin/main`
    and that the current `main` tip introduced the `template.version` transition,
-   then creates an annotated `vX.Y.Z` tag at that release boundary. The tip may
-   be a merge commit, squash commit, or release commit under fast-forward/rebase
-   history. Tagging creates no commits.
+   then creates an annotated `vX.Y.Z` tag at that release boundary. Merge, squash,
+   fast-forward, and rebase histories are supported when the version-transition
+   commit is the final commit of the release PR; rebase preserves commit order.
+   Tagging creates no commits.
 
 Publish only the intended tag with `git push origin vX.Y.Z`. See
 [docs/template-development.md](docs/template-development.md) for the full

@@ -405,13 +405,19 @@ prepared before the version commit exists. `make template-release-prepare`
 additionally refuses to prepare a release whose newest changelog section is not
 the version being prepared.
 
-Because ordinary validation accepts one pending bump, a change could otherwise
-ship a newer changelog version, skip release preparation, and still pass. The
-strict, release-ready gate closes that gap:
-`make validate-template-release-ready` requires the newest changelog release to
-exactly equal `template.version`, and Template CI runs it on every pull request
-after `make release-check`. Use the ordinary gate while authoring a change and
-the release-ready gate to prove the final release is consistent.
+Final release readiness has three distinct checks:
+
+- `make validate-template-docs` validates changelog structure and permits one
+  pending SemVer bump so release preparation can run.
+- `make validate-template-release-ready` proves the newest changelog release
+  exactly equals `template.version`.
+- `make validate-template-release-boundary` proves `HEAD` itself introduces
+  `template.version` relative to `HEAD^1`.
+
+Template CI runs the latter two after `make release-check`. The boundary check is
+what makes merge, squash, fast-forward, and rebase merges compatible with
+post-merge tagging: because a rebase merges every PR commit individually, the
+version-transition commit must be the final commit of the release PR.
 
 ## Template Releases (PR-only, two-phase)
 
@@ -499,8 +505,9 @@ make template-release-tag
 4. requires local `main` == `origin/main` and fails clearly when local main is
    behind, ahead, or diverged;
 5. reads `template.version` from `project/state.yaml`;
-6. verifies that `HEAD` records `vX.Y.Z` and its first parent (`HEAD^1`)
-   records a valid, strictly older template version;
+6. reuses the shared release-boundary validator to verify that `HEAD` records
+   `vX.Y.Z` and its first parent (`HEAD^1`) records a valid, strictly older
+   template version;
 7. refuses an already-existing local tag;
 8. creates an annotated `vX.Y.Z` tag pointing at `HEAD`.
 
@@ -537,10 +544,15 @@ the following hold:
   strictly older template version.
 
 This identifies the current main tip as the release boundary and prevents
-tagging arbitrary later commits. It supports merge commits, squash commits, and
-fast-forward/rebase history without depending on GitHub commit-message layout.
-The prepared `chore(release): vX.Y.Z` subject remains review evidence, but is
-not a tag-time requirement because merge strategies may rewrite it.
+tagging arbitrary later commits. It supports merge commits, squash commits,
+fast-forward, and rebase history without depending on GitHub commit-message
+layout, provided the version-transition commit is the final commit of the release
+PR: a rebase replays every PR commit in order, so a later repair commit would move
+the main tip past the transition and correctly fail the boundary check. The
+shared `make validate-template-release-boundary` gate enforces the same invariant
+on the PR tip before the merge, so the two cannot drift. The prepared
+`chore(release): vX.Y.Z` subject remains review evidence, but is not a tag-time
+requirement because merge strategies may rewrite it.
 
 ### Failure and recovery
 

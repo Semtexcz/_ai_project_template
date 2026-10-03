@@ -101,8 +101,11 @@ documents that the context bundle already resolves deterministically.
   nor exactly one SemVer bump ahead. That permissive window is intentional: it
   lets release preparation run before the version commit exists.
   `make validate-template-release-ready` (executed by Template CI after
-  `make release-check`) is the strict final boundary and requires the newest
-  `CHANGELOG.md` release to equal `template.version` exactly.
+  `make release-check`) requires the newest `CHANGELOG.md` release to equal
+  `template.version` exactly. Template CI then runs
+  `make validate-template-release-boundary`, which proves `HEAD` itself
+  introduces that version relative to `HEAD^1`. The version transition must be
+  the final release-PR commit so rebase history remains taggable.
 
 Canonical agent procedures are in `.agents/`. Codex-specific adapter notes are
 in `.codex/`. Project-specific context is in `project/` and `docs/`.

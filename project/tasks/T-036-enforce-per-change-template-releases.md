@@ -59,6 +59,9 @@ changelog drift from `project/state.yaml.template.version`.
 - [x] Validation and focused tests reject invalid changelog/release contracts.
 - [x] A strict release-ready gate requires the newest changelog release to equal
       `template.version`, and Template CI runs it on every pull request.
+- [x] A final read-only release-boundary gate proves `HEAD` itself introduces
+      `template.version` relative to `HEAD^1`, and Template CI runs it after the
+      release-ready gate.
 
 ## Verification
 
@@ -77,11 +80,17 @@ changelog drift from `project/state.yaml.template.version`.
   tests/test_template_changelog_policy.py` passes, covering both validation
   states: one pending bump passes ordinary validation, while the strict gate
   requires exact equality.
-- `make release-check` cannot pass in this environment:
-  `tests/test_copier_update_golden_path.py` fails on the base commit too because
-  `corepack` is unavailable. `make template-release-prepare` therefore could not
-  run; the `v1.2.0` bump was applied as an equivalent `chore(release): v1.2.0`
-  commit that changes only `template.version`, and CI runs the real release gate.
+- `tests/test_copier_update_golden_path.py` now passes: its fixture regression
+  was repaired, so no current `corepack` blocker is claimed.
+- `make validate-template-release-boundary` is the final Git-history half of
+  release readiness. It is read-only, works on the PR/task branch, requires
+  `HEAD.template.version > HEAD^1.template.version`, rejects a version bump
+  followed by another commit, and shares its core invariant with
+  `make template-release-tag`.
+- The `v1.2.0` version transition is the final commit of this release PR, so the
+  branch tip itself introduces the release. Historically the bump was committed
+  before later T-036 commits; that shape breaks rebase merges and is now
+  machine-rejected.
 - Release tests derive the current version from `project/state.yaml`, so future
   version bumps no longer break them.
 
@@ -91,10 +100,14 @@ Root `AGENTS.md`, `README.md`, `docs/template-development.md`,
 `docs/template-architecture.md`, `.agents/README.md`, and `CHANGELOG.md` now
 state that every template change ships a version and a dated English changelog
 entry with no `Unreleased` section. `docs/template-development.md` (and
-`AGENTS.md`/`.agents/README.md`) also document the two validation states: the
-permissive ordinary gate that allows one pending SemVer bump so release
-preparation can run, and the strict `make validate-template-release-ready` gate
-that Template CI runs to require exact changelog/version equality.
+`AGENTS.md`/`.agents/README.md`) also document the three validation boundaries:
+the permissive ordinary changelog gate that allows one pending SemVer bump so
+release preparation can run, the strict `make validate-template-release-ready`
+state/content equality gate, and the final
+`make validate-template-release-boundary` Git-history gate that requires the
+branch tip itself to introduce the version transition. The release docs explain
+that merge, squash, fast-forward, and rebase histories are supported only when
+that transition commit is final, because a rebase replays PR commits in order.
 
 ## Completion Notes
 
@@ -105,7 +118,12 @@ consolidated under `## v1.2.0 - 2026-10-03` and the template version is bumped t
 contract, `make template-release-prepare` refuses a release whose newest
 changelog section is not the version being prepared, and
 `make validate-template-release-ready` (run by Template CI after
-`make release-check`) proves the final changelog/version equality.
+`make release-check`) proves final changelog/version equality, and
+`make validate-template-release-boundary` proves the PR tip itself introduces
+that version relative to `HEAD^1`, sharing its core invariant with
+`make template-release-tag`. The `v1.2.0` transition is now the final commit of
+this release PR. The Copier fixture regression was repaired;
+`tests/test_copier_update_golden_path.py` passes locally.
 
 This task was replayed onto the then-current `origin/main` after the original
 branch was found to descend from a stale base. The replay reapplies only T-036

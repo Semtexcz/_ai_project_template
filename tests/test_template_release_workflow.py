@@ -752,3 +752,129 @@ def test_generated_projects_do_not_expose_maintainer_release_commands(
     project_tool = generated / "tools" / "project.py"
     if project_tool.exists():
         assert "release-template" not in project_tool.read_text(encoding="utf-8")
+
+
+# --- Final PR release boundary -------------------------------------------------
+#
+# Release-ready changelog/state equality is necessary but not sufficient for
+# rebase merges: GitHub replays every PR commit individually. The final PR commit
+# must therefore be the version transition itself.
+
+
+def test_repository_tip_introduces_current_template_release() -> None:
+    """The checked-out release PR tip must itself introduce template.version."""
+    result = run(["make", "validate-template-release-boundary"], ROOT)
+
+    assert "Verified template release boundary at HEAD" in result.stdout
+
+
+def test_template_release_boundary_accepts_final_release_tip(tmp_path: Path) -> None:
+    version = bumped(current_template_version(), "patch")
+    repo = release_branch(tmp_path, version)
+    run(["make", "template-release-prepare", "BUMP=patch"], repo)
+
+    result = run(["make", "validate-template-release-boundary"], repo)
+
+    assert version in result.stdout
+    assert "No repository state was modified" in result.stdout
+
+
+def test_template_release_boundary_rejects_commit_after_version_transition(tmp_path: Path) -> None:
+    """The exact regression fixed by this task: a bump followed by another commit."""
+    version = bumped(current_template_version(), "patch")
+    repo = release_branch(tmp_path, version)
+    run(["make", "template-release-prepare", "BUMP=patch"], repo)
+    readme = repo / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + "\npost-release note\n", encoding="utf-8")
+    run(["git", "add", "README.md"], repo)
+    run(["git", "commit", "-q", "-m", "docs: post-release note"], repo)
+
+    result = run(["make", "validate-template-release-boundary"], repo, expect_success=False)
+
+    assert f"Version {version} was already present before the current branch tip" in output_of(result)
+
+
+def test_template_release_boundary_rejects_non_advancing_transition(tmp_path: Path) -> None:
+    repo = release_branch(tmp_path)
+    readme = repo / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + "\nsame-version note\n", encoding="utf-8")
+    run(["git", "add", "README.md"], repo)
+    run(["git", "commit", "-q", "-m", "docs: same version"], repo)
+
+    result = run(["make", "validate-template-release-boundary"], repo, expect_success=False)
+
+    assert "was already present before the current branch tip" in output_of(result)
+
+
+def test_template_release_boundary_rejects_rollback(tmp_path: Path) -> None:
+    version = bumped(current_template_version(), "patch")
+    repo = release_branch(tmp_path, version)
+    run(["make", "template-release-prepare", "BUMP=patch"], repo)
+    state = repo / "project" / "state.yaml"
+    state.write_text(
+        state.read_text(encoding="utf-8").replace(
+            f"version: {version}", f"version: {current_template_version()}"
+        ),
+        encoding="utf-8",
+    )
+    run(["git", "add", "project/state.yaml"], repo)
+    run(["git", "commit", "-q", "-m", "chore: accidental version rollback"], repo)
+
+    result = run(["make", "validate-template-release-boundary"], repo, expect_success=False)
+
+    assert "template.version did not advance at the current branch tip" in output_of(result)
+
+
+def test_template_release_boundary_rejects_invalid_parent_version(tmp_path: Path) -> None:
+    repo = release_branch(tmp_path)
+    state = repo / "project" / "state.yaml"
+    state.write_text(
+        state.read_text(encoding="utf-8").replace(
+            f"version: {current_template_version()}", "version: invalid"
+        ),
+        encoding="utf-8",
+    )
+    run(["git", "add", "project/state.yaml"], repo)
+    run(["git", "commit", "-q", "-m", "test: invalid parent version"], repo)
+    state.write_text(
+        state.read_text(encoding="utf-8").replace(
+            "version: invalid", f"version: {current_template_version()}"
+        ),
+        encoding="utf-8",
+    )
+    run(["git", "add", "project/state.yaml"], repo)
+    run(["git", "commit", "-q", "-m", "test: restore version"], repo)
+
+    result = run(["make", "validate-template-release-boundary"], repo, expect_success=False)
+
+    assert "could not read a valid previous template version from HEAD^1" in output_of(result)
+
+
+def test_template_release_tag_accepts_multi_commit_fast_forward_rebase_style_history(
+    tmp_path: Path,
+) -> None:
+    """A rebase/fast-forward release stays taggable when its bump is the final commit."""
+    repo = tmp_path / "multi-commit-template"
+    copy_template_repo(repo)
+    version = bumped(current_template_version(), "patch")
+    add_changelog_release(repo, version)
+    init_release_repo(repo)
+    add_origin(repo, tmp_path)
+    run(["git", "checkout", "-q", "-b", f"release/{version}"], repo)
+    for number in (1, 2):
+        note = repo / f"release-note-{number}.md"
+        note.write_text(f"implementation commit {number}\n", encoding="utf-8")
+        run(["git", "add", note.name], repo)
+        run(["git", "commit", "-q", "-m", f"docs: implementation step {number}"], repo)
+    run(["make", "template-release-prepare", "BUMP=patch"], repo)
+    subject = run(["git", "log", "-1", "--pretty=%s"], repo).stdout.strip()
+    assert subject == f"chore(release): {version}"
+    run(["git", "push", "-q", "-u", "origin", f"release/{version}"], repo)
+    run(["git", "checkout", "-q", "main"], repo)
+    run(["git", "merge", "-q", "--ff-only", f"release/{version}"], repo)
+    run(["git", "push", "-q", "origin", "main"], repo)
+
+    run(["make", "validate-template-release-boundary"], repo)
+    result = run(["make", "template-release-tag"], repo)
+
+    assert f"Created annotated tag {version}" in result.stdout

@@ -236,9 +236,10 @@ def test_template_ci_release_gate_requires_the_strict_release_ready_boundary() -
     """Template CI must prove the strict final release boundary on every PR.
 
     The ordinary release check stays permissive so `make template-release-prepare`
-    can run before the version commit exists. The strict release-ready gate is an
-    additional final step that requires the newest changelog release to equal
-    `project/state.yaml.template.version`.
+    can run before the version commit exists. Ordinary checks are then followed by
+    two additional final steps: release-ready equality (newest changelog release
+    equals `project/state.yaml.template.version`) and the Git release boundary
+    (`HEAD` introduces `template.version` relative to `HEAD^1`).
     """
     root_ci = (ROOT / ".github" / "workflows" / "template-ci.yml").read_text()
     makefile = (ROOT / "Makefile").read_text()
@@ -246,15 +247,25 @@ def test_template_ci_release_gate_requires_the_strict_release_ready_boundary() -
     assert "release-check:" in root_ci
     assert "make release-check" in root_ci
     assert "make validate-template-release-ready" in root_ci
-    # The strict gate is an additional final step, not a replacement for the
-    # permissive release check that release preparation still depends on.
+    assert "make validate-template-release-boundary" in root_ci
+    # Both gates are additional final steps, not replacements for the permissive
+    # release check that release preparation still depends on.
     assert root_ci.index("make release-check") < root_ci.index(
         "make validate-template-release-ready"
+    )
+    assert root_ci.index("make validate-template-release-ready") < root_ci.index(
+        "make validate-template-release-boundary"
     )
 
     assert "\nvalidate-template-release-ready:" in makefile
     recipe = makefile.split("\nvalidate-template-release-ready:", 1)[1].split("\n\n", 1)[0]
     assert "tools/template_docs.py --release-ready" in recipe
+
+    assert "\nvalidate-template-release-boundary:" in makefile
+    boundary_recipe = makefile.split("\nvalidate-template-release-boundary:", 1)[1].split(
+        "\n\n", 1
+    )[0]
+    assert "tools/template_release.py verify" in boundary_recipe
 
 
 def test_template_ci_render_matrix_respects_governance_modes() -> None:
