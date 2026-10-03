@@ -98,7 +98,11 @@ documents that the context bundle already resolves deterministically.
   `make validate-template-docs` (part of `make check`) rejects `Unreleased`
   sections, malformed release headings, non-descending releases, an empty newest
   section, and a changelog version that is neither the current `template.version`
-  nor exactly one SemVer bump ahead.
+  nor exactly one SemVer bump ahead. That permissive window is intentional: it
+  lets release preparation run before the version commit exists.
+  `make validate-template-release-ready` (executed by Template CI after
+  `make release-check`) is the strict final boundary and requires the newest
+  `CHANGELOG.md` release to equal `template.version` exactly.
 
 Canonical agent procedures are in `.agents/`. Codex-specific adapter notes are
 in `.codex/`. Project-specific context is in `project/` and `docs/`.

@@ -222,7 +222,12 @@ Every template change is a release: it bumps
 section. `make validate-template-docs` (part of `make check`) rejects an
 `Unreleased` section, malformed or non-descending release headings, an empty
 newest release section, and a changelog version that is neither the current
-`template.version` nor exactly one SemVer bump ahead.
+`template.version` nor exactly one SemVer bump ahead. That permissive window is
+intentional: it lets release preparation run before the version commit exists.
+`make validate-template-release-ready` is the strict final boundary that Template
+CI runs after `make release-check`: it requires the newest `CHANGELOG.md` release
+to equal `template.version` exactly, so a change cannot ship a newer changelog
+version, skip `make template-release-prepare`, and still pass.
 
 Phase 1 (`make template-release-prepare BUMP=<major|minor|patch>`) prepares an
 ordinary, reviewable version commit on a non-`main` release branch. It requires

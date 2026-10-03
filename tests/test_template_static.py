@@ -232,6 +232,31 @@ def test_agent_workflow_strictness_is_configurable() -> None:
     assert "{% if workflow_mode == \"pr\" %}" in generated_ci
 
 
+def test_template_ci_release_gate_requires_the_strict_release_ready_boundary() -> None:
+    """Template CI must prove the strict final release boundary on every PR.
+
+    The ordinary release check stays permissive so `make template-release-prepare`
+    can run before the version commit exists. The strict release-ready gate is an
+    additional final step that requires the newest changelog release to equal
+    `project/state.yaml.template.version`.
+    """
+    root_ci = (ROOT / ".github" / "workflows" / "template-ci.yml").read_text()
+    makefile = (ROOT / "Makefile").read_text()
+
+    assert "release-check:" in root_ci
+    assert "make release-check" in root_ci
+    assert "make validate-template-release-ready" in root_ci
+    # The strict gate is an additional final step, not a replacement for the
+    # permissive release check that release preparation still depends on.
+    assert root_ci.index("make release-check") < root_ci.index(
+        "make validate-template-release-ready"
+    )
+
+    assert "\nvalidate-template-release-ready:" in makefile
+    recipe = makefile.split("\nvalidate-template-release-ready:", 1)[1].split("\n\n", 1)[0]
+    assert "tools/template_docs.py --release-ready" in recipe
+
+
 def test_template_ci_render_matrix_respects_governance_modes() -> None:
     root_ci = (ROOT / ".github" / "workflows" / "template-ci.yml").read_text()
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 from typing import Any
@@ -207,13 +208,14 @@ def semver_bump(version: str, bump: str) -> str:
     raise ValueError(f"Invalid bump '{bump}'.")
 
 
-def validate_changelog_text(text: str, state_version: str | None) -> list[str]:
-    """Validate the template changelog against the released version policy.
+def parse_changelog(text: str) -> tuple[list[str], list[tuple[str, int]]]:
+    """Parse a changelog into structural errors and released sections.
 
-    Enforces the per-change release policy: no ``Unreleased`` section, dated
-    SemVer release headings in descending order, a non-empty newest release
-    section, and a newest version that is either the current template version or
-    exactly one SemVer bump ahead of it (the pending release).
+    The structural rules are shared by every validation mode - the
+    ``# Changelog`` heading, no ``Unreleased`` section, dated SemVer release
+    headings in descending order, and a non-empty newest release section - so the
+    parser is single-sourced. Version-window rules differ per mode and stay in the
+    mode-specific validators.
     """
     errors: list[str] = []
     lines = text.splitlines()
@@ -244,7 +246,7 @@ def validate_changelog_text(text: str, state_version: str | None) -> list[str]:
 
     if not sections:
         errors.append("CHANGELOG.md must contain at least one '## vX.Y.Z - YYYY-MM-DD' release section.")
-        return errors
+        return errors, sections
 
     versions = [version for version, _index in sections]
     parsed = [parse_semver(version) for version in versions]
@@ -263,6 +265,21 @@ def validate_changelog_text(text: str, state_version: str | None) -> list[str]:
     if not any(line.lstrip().startswith("- ") for line in newest_body.splitlines()):
         errors.append(f"CHANGELOG.md section '## {newest}' must contain at least one entry.")
 
+    return errors, sections
+
+
+def validate_changelog_text(text: str, state_version: str | None) -> list[str]:
+    """Validate the changelog while a release may still be prepared.
+
+    This ordinary, permissive mode accepts a newest release that is either the
+    current ``template.version`` or exactly one ``patch``/``minor``/``major`` bump
+    ahead of it, so ``make template-release-prepare`` can run before the version
+    commit exists. The strict final boundary is ``validate_release_ready_text``.
+    """
+    errors, sections = parse_changelog(text)
+    if not sections:
+        return errors
+    newest = sections[0][0]
     if state_version:
         allowed = {state_version} | {semver_bump(state_version, bump) for bump in SEMVER_BUMPS}
         if newest not in allowed:
@@ -273,14 +290,77 @@ def validate_changelog_text(text: str, state_version: str | None) -> list[str]:
     return errors
 
 
-def validate_changelog() -> list[str]:
+def validate_release_ready_text(text: str, state_version: str | None) -> list[str]:
+    """Validate the strict final boundary: changelog version == template version.
+
+    Ordinary changelog validation permits one pending SemVer bump so a release can
+    be prepared before the version commit exists. That gap must be closed at the
+    final PR/CI boundary: without this strict check a change could ship a newer
+    changelog version, skip ``make template-release-prepare``, and still pass
+    ordinary documentation validation, violating the per-change release policy
+    that every template change is a release.
+    """
+    errors, sections = parse_changelog(text)
+    if not sections:
+        return errors
+    newest = sections[0][0]
+    if not state_version:
+        errors.append(
+            "project/state.yaml must define template.version for release-ready validation."
+        )
+    elif newest != state_version:
+        errors.append(
+            f"CHANGELOG.md newest release {newest} must exactly match the released "
+            f"template version {state_version} at the final release boundary; run "
+            "`make template-release-prepare BUMP=<major|minor|patch>` to record the version."
+        )
+    return errors
+
+
+def changelog_text() -> str | None:
     changelog = ROOT / "CHANGELOG.md"
     if not changelog.exists():
+        return None
+    return changelog.read_text(encoding="utf-8")
+
+
+def validate_changelog() -> list[str]:
+    text = changelog_text()
+    if text is None:
         return ["CHANGELOG.md is required."]
-    return validate_changelog_text(changelog.read_text(encoding="utf-8"), template_state_version())
+    return validate_changelog_text(text, template_state_version())
 
 
-def main() -> None:
+def validate_release_ready() -> list[str]:
+    text = changelog_text()
+    if text is None:
+        return ["CHANGELOG.md is required."]
+    return validate_release_ready_text(text, template_state_version())
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Validate template documentation and the release contract.",
+    )
+    parser.add_argument(
+        "--release-ready",
+        action="store_true",
+        help=(
+            "Require the strict final release boundary: the newest changelog release "
+            "must exactly equal project/state.yaml template.version."
+        ),
+    )
+    args = parser.parse_args(argv)
+
+    if args.release_ready:
+        errors = validate_release_ready()
+        if errors:
+            for error in errors:
+                print(f"ERROR: {error}")
+            raise SystemExit(1)
+        print("Template release is ready: changelog and template version match.")
+        return
+
     errors: list[str] = []
     errors.extend(validate_required_docs())
     errors.extend(validate_internal_links())
