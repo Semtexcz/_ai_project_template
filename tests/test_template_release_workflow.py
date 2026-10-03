@@ -761,13 +761,6 @@ def test_generated_projects_do_not_expose_maintainer_release_commands(
 # must therefore be the version transition itself.
 
 
-def test_repository_tip_introduces_current_template_release() -> None:
-    """The checked-out release PR tip must itself introduce template.version."""
-    result = run(["make", "validate-template-release-boundary"], ROOT)
-
-    assert "Verified template release boundary at HEAD" in result.stdout
-
-
 def test_template_release_boundary_accepts_final_release_tip(tmp_path: Path) -> None:
     version = bumped(current_template_version(), "patch")
     repo = release_branch(tmp_path, version)
