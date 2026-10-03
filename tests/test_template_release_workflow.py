@@ -187,7 +187,8 @@ def test_repo_changelog_matches_current_template_version() -> None:
     versions = release_tool.changelog_release_versions()
     assert versions, "CHANGELOG.md must contain dated release sections."
     assert versions[0] == current_template_version()
-    assert "Unreleased" not in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert not any(line.strip().lower().startswith("## unreleased") for line in text.splitlines())
 
 
 def test_require_changelog_release_rejects_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
