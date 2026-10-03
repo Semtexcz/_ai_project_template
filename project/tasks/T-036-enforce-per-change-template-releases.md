@@ -86,9 +86,10 @@ changelog drift from `project/state.yaml.template.version`.
   release readiness. It is read-only, works on the PR/task branch, requires
   `HEAD.template.version > HEAD^1.template.version`, rejects a version bump
   followed by another commit, and shares its core invariant with
-  `make template-release-tag`. Template CI explicitly validates
-  `github.event.pull_request.head.sha` for this Git-history boundary, while
-  ordinary release-candidate checks retain their normal integration checkout.
+  `make template-release-tag`. Hermetic release-workflow tests prove the
+  `HEAD`/`HEAD^1` invariant, while Template CI validates the actual
+  pull-request head with `fetch-depth: 2`; ordinary release-candidate checks
+  retain their normal integration checkout.
 - The `v1.2.0` version transition is the final commit of this release PR, so the
   branch tip itself introduces the release. Historically the bump was committed
   before later T-036 commits; that shape breaks rebase merges and is now
