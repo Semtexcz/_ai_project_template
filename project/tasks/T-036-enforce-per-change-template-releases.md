@@ -3,7 +3,7 @@ id: T-036
 
 title: Enforce per-change template releases
 
-status: in-progress
+status: review
 
 priority: 1
 
