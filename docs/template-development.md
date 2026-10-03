@@ -378,6 +378,41 @@ once for that repair cycle, push the same pull request, and stop.
 `make release-check` is the exhaustive template gate; normal task implementation
 never runs it locally. Actual template release preparation still uses it - see
 the release workflow below.
+
+## Version And Changelog Policy
+
+Every template change is a release, so every change carries a version bump and a
+changelog entry. The changelog has no `Unreleased` section: instead, the change
+adds a dated release section for the version it will ship as.
+
+1. Choose the SemVer bump for the change: `major` for breaking template or Copier
+   update contracts, `minor` for new template capability, and `patch` for fixes,
+   tooling, or documentation that preserve behavior.
+2. Add an English entry under `## vX.Y.Z - YYYY-MM-DD` in `CHANGELOG.md`, where
+   `vX.Y.Z` is the bumped version.
+3. Run `make template-release-prepare BUMP=<major|minor|patch>` on a non-`main`
+   release branch to record that version in `project/state.yaml` and create the
+   reviewable `chore(release): vX.Y.Z` commit. The changelog section and the
+   version commit travel together in the same pull request.
+
+`CHANGELOG.md` is validated as part of `make validate-template-docs`
+(`make check` and `make release-check`). It rejects an `Unreleased` section,
+release headings that are not `## vX.Y.Z - YYYY-MM-DD`, releases that are not in
+descending order, an empty newest release section, and a newest version that is
+neither the current `project/state.yaml` `template.version` nor exactly one
+SemVer bump ahead of it. That permissive window is what lets a release be
+prepared before the version commit exists. `make template-release-prepare`
+additionally refuses to prepare a release whose newest changelog section is not
+the version being prepared.
+
+Because ordinary validation accepts one pending bump, a change could otherwise
+ship a newer changelog version, skip release preparation, and still pass. The
+strict, release-ready gate closes that gap:
+`make validate-template-release-ready` requires the newest changelog release to
+exactly equal `template.version`, and Template CI runs it on every pull request
+after `make release-check`. Use the ordinary gate while authoring a change and
+the release-ready gate to prove the final release is consistent.
+
 ## Template Releases (PR-only, two-phase)
 
 Template releases follow the same rule as every other change: all commits
@@ -417,10 +452,12 @@ make template-release-prepare BUMP=minor
 2. refuses to run on `main` (with instructions to create a release branch),
    rejects a detached HEAD and dirty worktrees, refuses an already-existing
    target tag, and checks Git identity;
-3. runs `make release-check`;
-4. validates the candidate project state;
-5. updates `template.version` in `project/state.yaml`;
-6. creates a normal Git commit `chore(release): v1.2.0` on the current branch.
+3. requires a dated `## vX.Y.Z - YYYY-MM-DD` section for the target version in
+   `CHANGELOG.md` (so every change ships a version and a changelog entry);
+4. runs `make release-check`;
+5. validates the candidate project state;
+6. updates `template.version` in `project/state.yaml`;
+7. creates a normal Git commit `chore(release): v1.2.0` on the current branch.
 
 It creates no Git tag and pushes nothing. The command leaves you on the release
 branch. Use `DRY_RUN=1` to preview the prepare without writing state or

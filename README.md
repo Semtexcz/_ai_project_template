@@ -129,12 +129,16 @@ pytest suite, including all golden paths, Copier update, workflow, production
 runtime inspection, and documentation validation.
 
 Template releases follow the repository's PR-only `main` rule in two phases.
+Every template change is a release: it bumps the version and adds an English
+entry under a dated `## vX.Y.Z - YYYY-MM-DD` section in `CHANGELOG.md` (there is
+no `Unreleased` section).
 
 1. On a release branch, prepare the reviewable version commit:
-   `make template-release-prepare BUMP=<major|minor|patch>`. It runs the release
-   gate, updates `template.version` in `project/state.yaml`, and creates a
-   normal `chore(release): vX.Y.Z` commit. It creates no tag, pushes nothing,
-   and refuses to run on `main`.
+   `make template-release-prepare BUMP=<major|minor|patch>`. It requires a
+   matching `CHANGELOG.md` release section, runs the release gate, updates
+   `template.version` in `project/state.yaml`, and creates a normal
+   `chore(release): vX.Y.Z` commit. It creates no tag, pushes nothing, and
+   refuses to run on `main`.
 2. After CI and a human merge the release PR to `main`, tag the merged commit:
    `make template-release-tag`. It verifies local `main` matches `origin/main`
    and that the current `main` tip introduced the `template.version` transition,

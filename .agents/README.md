@@ -216,12 +216,21 @@ Template releases use a two-phase, PR-only flow. They are maintainer actions in
 the template repository root (`tools/template_release.py`), never in generated
 projects, and they are never a backdoor for committing to `main`.
 
+Every template change is a release: it bumps
+`project/state.yaml.template.version` and adds an English entry under a dated
+`## vX.Y.Z - YYYY-MM-DD` section in `CHANGELOG.md`. There is no `Unreleased`
+section. `make validate-template-docs` (part of `make check`) rejects an
+`Unreleased` section, malformed or non-descending release headings, an empty
+newest release section, and a changelog version that is neither the current
+`template.version` nor exactly one SemVer bump ahead.
+
 Phase 1 (`make template-release-prepare BUMP=<major|minor|patch>`) prepares an
-ordinary, reviewable version commit on a non-`main` release branch. It runs the
-release gate, updates `project/state.yaml.template.version`, commits
-`chore(release): vX.Y.Z`, creates no tag, pushes nothing, and refuses to run on
-`main`. The commit reaches `main` only through the normal push -> pull request
--> CI -> human approval -> merge workflow.
+ordinary, reviewable version commit on a non-`main` release branch. It requires
+a matching `CHANGELOG.md` release section, runs the release gate, updates
+`project/state.yaml.template.version`, commits `chore(release): vX.Y.Z`, creates
+no tag, pushes nothing, and refuses to run on `main`. The commit reaches `main`
+only through the normal push -> pull request -> CI -> human approval -> merge
+workflow.
 
 Phase 2 (`make template-release-tag`) runs on clean, up-to-date `main` after
 the release PR is merged. It fetches `origin main` (remote-tracking ref only),

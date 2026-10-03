@@ -21,6 +21,14 @@ PERSONAL_PATH_RE = re.compile(
         ]
     )
 )
+CHANGELOG_FIRST_LINE = "# Changelog"
+CHANGELOG_RELEASE_RE = re.compile(
+    r"^v(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+    r"\s+-\s+(?P<date>\d{4}-\d{2}-\d{2})$"
+)
+CHANGELOG_UNRELEASED_RE = re.compile(r"^\[?unreleased\]?:?$", re.IGNORECASE)
+SEMVER_RE = re.compile(r"^v(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$")
+SEMVER_BUMPS = ("major", "minor", "patch")
 
 
 def relative(path: Path) -> str:
@@ -164,6 +172,114 @@ def validate_diagrams() -> list[str]:
     return errors
 
 
+def template_state_version() -> str | None:
+    state_path = ROOT / "project" / "state.yaml"
+    if not state_path.exists():
+        return None
+    data = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        return None
+    template = data.get("template")
+    if not isinstance(template, dict):
+        return None
+    version = template.get("version")
+    return str(version) if version else None
+
+
+def parse_semver(version: str) -> tuple[int, int, int] | None:
+    match = SEMVER_RE.match(version.strip())
+    if not match:
+        return None
+    return (int(match.group("major")), int(match.group("minor")), int(match.group("patch")))
+
+
+def semver_bump(version: str, bump: str) -> str:
+    parsed = parse_semver(version)
+    if parsed is None:
+        raise ValueError(f"Invalid version '{version}'.")
+    major, minor, patch = parsed
+    if bump == "major":
+        return f"v{major + 1}.0.0"
+    if bump == "minor":
+        return f"v{major}.{minor + 1}.0"
+    if bump == "patch":
+        return f"v{major}.{minor}.{patch + 1}"
+    raise ValueError(f"Invalid bump '{bump}'.")
+
+
+def validate_changelog_text(text: str, state_version: str | None) -> list[str]:
+    """Validate the template changelog against the released version policy.
+
+    Enforces the per-change release policy: no ``Unreleased`` section, dated
+    SemVer release headings in descending order, a non-empty newest release
+    section, and a newest version that is either the current template version or
+    exactly one SemVer bump ahead of it (the pending release).
+    """
+    errors: list[str] = []
+    lines = text.splitlines()
+    first_line = next((line.strip() for line in lines if line.strip()), "")
+    if first_line != CHANGELOG_FIRST_LINE:
+        errors.append(f"CHANGELOG.md must start with '{CHANGELOG_FIRST_LINE}'.")
+
+    sections: list[tuple[str, int]] = []
+    for index, line in enumerate(lines):
+        match = re.match(r"^##\s+(?P<body>.+?)\s*$", line)
+        if not match:
+            continue
+        body = match.group("body")
+        if CHANGELOG_UNRELEASED_RE.match(body):
+            errors.append(
+                "CHANGELOG.md must not contain an Unreleased section; every template "
+                "change is released with its own version and changelog entry."
+            )
+            continue
+        release = CHANGELOG_RELEASE_RE.match(body)
+        if not release:
+            errors.append(
+                f"CHANGELOG.md section '## {body}' must be a released version heading "
+                "of the form '## vX.Y.Z - YYYY-MM-DD'."
+            )
+            continue
+        sections.append((f"v{release.group('major')}.{release.group('minor')}.{release.group('patch')}", index))
+
+    if not sections:
+        errors.append("CHANGELOG.md must contain at least one '## vX.Y.Z - YYYY-MM-DD' release section.")
+        return errors
+
+    versions = [version for version, _index in sections]
+    parsed = [parse_semver(version) for version in versions]
+    for previous, current in zip(parsed, parsed[1:]):
+        if previous is None or current is None:
+            continue
+        if current >= previous:
+            errors.append(
+                f"CHANGELOG.md releases must be in descending order; {versions} is not."
+            )
+            break
+
+    newest, newest_index = sections[0]
+    next_index = sections[1][1] if len(sections) > 1 else len(lines)
+    newest_body = "\n".join(lines[newest_index + 1 : next_index])
+    if not any(line.lstrip().startswith("- ") for line in newest_body.splitlines()):
+        errors.append(f"CHANGELOG.md section '## {newest}' must contain at least one entry.")
+
+    if state_version:
+        allowed = {state_version} | {semver_bump(state_version, bump) for bump in SEMVER_BUMPS}
+        if newest not in allowed:
+            errors.append(
+                f"CHANGELOG.md newest release {newest} must match the current template "
+                f"version {state_version} or its next patch/minor/major release."
+            )
+    return errors
+
+
+def validate_changelog() -> list[str]:
+    changelog = ROOT / "CHANGELOG.md"
+    if not changelog.exists():
+        return ["CHANGELOG.md is required."]
+    return validate_changelog_text(changelog.read_text(encoding="utf-8"), template_state_version())
+
+
 def main() -> None:
     errors: list[str] = []
     errors.extend(validate_required_docs())
@@ -172,6 +288,7 @@ def main() -> None:
     errors.extend(validate_profile_matrix())
     errors.extend(validate_text_hygiene())
     errors.extend(validate_diagrams())
+    errors.extend(validate_changelog())
     if errors:
         for error in errors:
             print(f"ERROR: {error}")

@@ -17,10 +17,12 @@ branch:
 
 1. validate the current template version and the requested SemVer bump;
 2. require a non-``main`` branch and a clean worktree;
-3. run ``make release-check``;
-4. validate the candidate project state;
-5. update ``project/state.yaml.template.version``;
-6. create a normal Git commit ``chore(release): vX.Y.Z`` on the branch.
+3. require a ``CHANGELOG.md`` release section for the target version, so every
+   template change carries a released version and its changelog entry;
+4. run ``make release-check``;
+5. validate the candidate project state;
+6. update ``project/state.yaml.template.version``;
+7. create a normal Git commit ``chore(release): vX.Y.Z`` on the branch.
 
 It creates no tag and pushes nothing. The version bump is a normal repository
 change and must reach ``main`` through the standard branch -> push -> pull
@@ -373,6 +375,43 @@ def require_git_identity() -> None:
         raise ReleaseError("Git user.name and user.email must be configured before release.")
 
 
+CHANGELOG_RELEASE_HEADING_RE = re.compile(
+    r"^##\s+(?P<version>v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))"
+    r"\s+-\s+\d{4}-\d{2}-\d{2}\s*$"
+)
+
+
+def changelog_release_versions() -> list[str]:
+    """Return released versions from CHANGELOG.md, newest first."""
+    path = ROOT / "CHANGELOG.md"
+    if not path.exists():
+        return []
+    versions: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = CHANGELOG_RELEASE_HEADING_RE.match(line.strip())
+        if match:
+            versions.append(match.group("version"))
+    return versions
+
+
+def require_changelog_release(next_version: str) -> None:
+    """Require a changelog release section for the version being prepared."""
+    versions = changelog_release_versions()
+    if not versions:
+        raise ReleaseError(
+            "CHANGELOG.md has no dated release section. Add a '## "
+            f"{next_version} - YYYY-MM-DD' section with this change's entries before "
+            "preparing the release."
+        )
+    if versions[0] != next_version:
+        raise ReleaseError(
+            f"CHANGELOG.md newest release is {versions[0]} but this release is "
+            f"{next_version}. Every template change is released with its own version "
+            f"and changelog entry: add the '## {next_version} - YYYY-MM-DD' section "
+            "first."
+        )
+
+
 def prepare_template_release(*, bump: str, dry_run: bool) -> None:
     project = load_project_tool()
     state = project.read_state()
@@ -402,6 +441,7 @@ def prepare_template_release(*, bump: str, dry_run: bool) -> None:
         raise ReleaseError(f"Git tag {next_version} already exists.")
     require_clean_worktree()
     require_git_identity()
+    require_changelog_release(next_version)
 
     print(f"Preparing template release {current_version} -> {next_version} ({bump}) on branch {branch}.")
     run_command(["make", "release-check"])

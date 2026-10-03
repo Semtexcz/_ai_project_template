@@ -21,7 +21,34 @@ RELEASE_CHECK_RECIPE_RE = re.compile(r"release-check:[^\n]*\n\t[^\n]*\n")
 RELEASE_CHECK_STUB = "release-check:\n\t@echo release-check fixture\n"
 RELEASE_CHECK_FAIL_MARKER = "\t@echo release-check fixture && exit 1\n"
 
-CURRENT_VERSION = "v1.1.1"
+
+def current_template_version() -> str:
+    """Read the released template version so release tests survive version bumps."""
+    text = (ROOT / "project" / "state.yaml").read_text(encoding="utf-8")
+    match = re.search(r"^\s*version:\s*(v\d+\.\d+\.\d+)\s*$", text, re.MULTILINE)
+    if not match:
+        raise AssertionError("Could not read template.version from project/state.yaml.")
+    return match.group(1)
+
+
+def bumped(version: str, bump: str) -> str:
+    major, minor, patch = (int(part) for part in version.lstrip("v").split("."))
+    if bump == "major":
+        return f"v{major + 1}.0.0"
+    if bump == "minor":
+        return f"v{major}.{minor + 1}.0"
+    if bump == "patch":
+        return f"v{major}.{minor}.{patch + 1}"
+    raise AssertionError(f"Unknown bump {bump!r}.")
+
+
+def add_changelog_release(repo: Path, version: str) -> None:
+    """Add a dated release section so a fixture satisfies the changelog policy."""
+    changelog = repo / "CHANGELOG.md"
+    text = changelog.read_text(encoding="utf-8")
+    header, _, body = text.partition("\n")
+    section = f"\n## {version} - 2026-10-04\n\n- Fixture release entry.\n\n"
+    changelog.write_text(header + "\n" + section + body.lstrip("\n"), encoding="utf-8")
 
 
 def load_release_tool() -> Any:
@@ -154,29 +181,54 @@ def test_invalid_template_version_fails_clearly() -> None:
         raise AssertionError("Invalid bump unexpectedly passed.")
 
 
-def release_branch(tmp_path: Path, version: str = "v1.1.2") -> Path:
+def test_repo_changelog_matches_current_template_version() -> None:
+    """The newest released changelog section equals the released template version."""
+    release_tool = load_release_tool()
+    versions = release_tool.changelog_release_versions()
+    assert versions, "CHANGELOG.md must contain dated release sections."
+    assert versions[0] == current_template_version()
+    assert "Unreleased" not in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+
+def test_require_changelog_release_rejects_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    release_tool = load_release_tool()
+    monkeypatch.setattr(release_tool, "ROOT", tmp_path)
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## v1.2.0 - 2026-10-03\n\n- Something.\n",
+        encoding="utf-8",
+    )
+
+    try:
+        release_tool.require_changelog_release("v1.2.1")
+    except release_tool.ReleaseError as exc:
+        assert "v1.2.0" in str(exc)
+        assert "v1.2.1" in str(exc)
+    else:
+        raise AssertionError("A changelog mismatch unexpectedly passed.")
+
+    release_tool.require_changelog_release("v1.2.0")
+
+
+def release_branch(tmp_path: Path, version: str | None = None) -> Path:
+    if version is None:
+        version = bumped(current_template_version(), "patch")
     repo = tmp_path / "template"
     copy_template_repo(repo)
+    add_changelog_release(repo, version)
     init_release_repo(repo)
     run(["git", "checkout", "-q", "-b", f"release/{version}"], repo)
     return repo
 
 
-@pytest.mark.parametrize(
-    ("bump", "expected_version"),
-    [
-        ("patch", "v1.1.2"),
-        ("minor", "v1.2.0"),
-        ("major", "v2.0.0"),
-    ],
-)
+@pytest.mark.parametrize("bump", ["patch", "minor", "major"])
 def test_template_release_prepare_success_for_each_bump(
     tmp_path: Path,
     bump: str,
-    expected_version: str,
 ) -> None:
+    expected_version = bumped(current_template_version(), bump)
     repo = tmp_path / "template"
     copy_template_repo(repo)
+    add_changelog_release(repo, expected_version)
     init_release_repo(repo)
     main_head = run(["git", "rev-parse", "HEAD"], repo).stdout.strip()
     run(["git", "checkout", "-q", "-b", f"release/{expected_version}"], repo)
@@ -237,10 +289,13 @@ def test_template_release_prepare_invalid_version_fails(tmp_path: Path) -> None:
     copy_template_repo(repo)
     init_release_repo(repo)
     state = repo / "project" / "state.yaml"
-    state.write_text(state.read_text(encoding="utf-8").replace("v1.1.1", "banana"), encoding="utf-8")
+    state.write_text(
+        state.read_text(encoding="utf-8").replace(current_template_version(), "banana"),
+        encoding="utf-8",
+    )
     run(["git", "add", "-A"], repo)
     run(["git", "commit", "-q", "-m", "set an invalid template version"], repo)
-    run(["git", "checkout", "-q", "-b", "release/v1.1.2"], repo)
+    run(["git", "checkout", "-q", "-b", f"release/{bumped(current_template_version(), 'patch')}"], repo)
     before = git_snapshot(repo)
 
     result = run(["make", "template-release-prepare", "BUMP=patch"], repo, expect_success=False)
@@ -250,23 +305,45 @@ def test_template_release_prepare_invalid_version_fails(tmp_path: Path) -> None:
 
 
 def test_template_release_prepare_existing_tag_fails_before_mutation(tmp_path: Path) -> None:
-    repo = release_branch(tmp_path)
-    run(["git", "tag", "v1.1.2"], repo)
+    target = bumped(current_template_version(), "patch")
+    repo = release_branch(tmp_path, version=target)
+    run(["git", "tag", target], repo)
     before = git_snapshot(repo)
 
     result = run(["make", "template-release-prepare", "BUMP=patch"], repo, expect_success=False)
 
-    assert "Git tag v1.1.2 already exists" in output_of(result)
+    assert f"Git tag {target} already exists" in output_of(result)
+    assert_release_unchanged(repo, before)
+
+
+def test_template_release_prepare_requires_changelog_release_section(tmp_path: Path) -> None:
+    """A release is refused until CHANGELOG.md documents the target version."""
+    target = bumped(current_template_version(), "patch")
+    repo = tmp_path / "template"
+    copy_template_repo(repo)
+    init_release_repo(repo)
+    run(["git", "checkout", "-q", "-b", f"release/{target}"], repo)
+    before = git_snapshot(repo)
+
+    result = run(["make", "template-release-prepare", "BUMP=patch"], repo, expect_success=False)
+
+    output = output_of(result)
+    assert f"CHANGELOG.md newest release is {current_template_version()}" in output
+    assert target in output
     assert_release_unchanged(repo, before)
 
 
 def test_template_release_prepare_dry_run_does_not_mutate(tmp_path: Path) -> None:
-    repo = release_branch(tmp_path)
+    target = bumped(current_template_version(), "patch")
+    repo = release_branch(tmp_path, version=target)
     before = git_snapshot(repo)
 
     result = run(["make", "template-release-prepare", "DRY_RUN=1"], repo)
 
-    assert f"Preparing template release {CURRENT_VERSION} -> v1.1.2 (patch) on branch release/v1.1.2." in result.stdout
+    assert (
+        f"Preparing template release {current_template_version()} -> {target} (patch) "
+        f"on branch release/{target}." in result.stdout
+    )
     assert "Dry run only" in result.stdout
     assert_release_unchanged(repo, before)
 
@@ -274,8 +351,10 @@ def test_template_release_prepare_dry_run_does_not_mutate(tmp_path: Path) -> Non
 def test_template_release_prepare_check_failure_aborts_before_mutation(tmp_path: Path) -> None:
     repo = tmp_path / "template"
     copy_template_repo(repo, release_check_fails=True)
+    target = bumped(current_template_version(), "patch")
+    add_changelog_release(repo, target)
     init_release_repo(repo)
-    run(["git", "checkout", "-q", "-b", "release/v1.1.2"], repo)
+    run(["git", "checkout", "-q", "-b", f"release/{target}"], repo)
     before = git_snapshot(repo)
 
     result = run(["make", "template-release-prepare", "BUMP=patch"], repo, expect_success=False)
@@ -322,9 +401,10 @@ def prepare_and_publish_release(tmp_path: Path) -> tuple[Path, Path, str, str]:
     """
     repo = tmp_path / "template"
     copy_template_repo(repo)
+    expected_version = bumped(current_template_version(), "patch")
+    add_changelog_release(repo, expected_version)
     init_release_repo(repo)
     origin = add_origin(repo, tmp_path)
-    expected_version = "v1.1.2"
 
     run(["git", "checkout", "-q", "-b", f"release/{expected_version}"], repo)
     result = run(["make", "template-release-prepare", "BUMP=patch"], repo)
@@ -348,9 +428,10 @@ def prepare_and_publish_release(tmp_path: Path) -> tuple[Path, Path, str, str]:
 def prepare_release_branch(tmp_path: Path, name: str) -> tuple[Path, Path, str, str]:
     repo = tmp_path / name
     copy_template_repo(repo)
+    version = bumped(current_template_version(), "patch")
+    add_changelog_release(repo, version)
     init_release_repo(repo)
     origin = add_origin(repo, tmp_path)
-    version = "v1.1.2"
     run(["git", "checkout", "-q", "-b", f"release/{version}"], repo)
     run(["make", "template-release-prepare", "BUMP=patch"], repo)
     run(["git", "push", "-q", "-u", "origin", f"release/{version}"], repo)
@@ -415,10 +496,11 @@ def test_template_release_tag_rejects_fake_release_subject_without_state_change(
 
 
 def test_template_release_tag_rejects_non_advancing_version_transition(tmp_path: Path) -> None:
-    repo, _origin, _sha, _version = prepare_and_publish_release(tmp_path)
+    repo, _origin, _sha, version = prepare_and_publish_release(tmp_path)
+    fallback = current_template_version()
     state = repo / "project" / "state.yaml"
     state.write_text(
-        state.read_text(encoding="utf-8").replace("version: v1.1.2", "version: v1.1.1"),
+        state.read_text(encoding="utf-8").replace(f"version: {version}", f"version: {fallback}"),
         encoding="utf-8",
     )
     run(["git", "add", "-A"], repo)

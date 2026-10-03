@@ -244,9 +244,14 @@ request and a failed CI check starts a fresh repair session on the same task,
 branch, worktree, claim, and pull request.
 
 Template release is a two-phase maintainer workflow that preserves the PR-only
-`main` rule. `make template-release-prepare BUMP=<major|minor|patch>`
+`main` rule. Every template change is a release: it bumps the version and adds
+an English entry under a dated `## vX.Y.Z - YYYY-MM-DD` section in
+`CHANGELOG.md`, which has no `Unreleased` section, and
+`make validate-template-docs` (part of `make check`) enforces that contract.
+`make template-release-prepare BUMP=<major|minor|patch>`
 (implemented in `tools/template_release.py`, outside the rendered template
-directory) validates, runs `make release-check`, and creates a normal
+directory) requires a matching `CHANGELOG.md` release section, validates, runs
+`make release-check`, and creates a normal
 `chore(release): vX.Y.Z` commit on a non-`main` release branch. It never tags
 or pushes and refuses to run on `main`; the version commit reaches `main` only
 through the normal pull request and human merge. After the merge,
