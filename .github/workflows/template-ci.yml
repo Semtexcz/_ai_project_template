@@ -74,6 +74,16 @@ jobs:
         run: npx --yes playwright@1.62.1 install --with-deps chromium
       - name: Run full release candidate gate
         run: make release-check
+      - name: Require the final release boundary (changelog == template.version)
+        run: make validate-template-release-ready
+      - name: Check out actual pull request head for release-boundary validation
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+      - name: Require the final release boundary (HEAD introduces template.version)
+        run: make validate-template-release-boundary
 
   render-matrix:
     runs-on: ubuntu-latest

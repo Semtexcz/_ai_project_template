@@ -337,6 +337,8 @@ checks:
     - uv run pytest tests/test_agent_context_routing.py
   "tests/test_template_release_workflow.py":
     - uv run pytest tests/test_template_release_workflow.py
+  "tests/test_template_changelog_policy.py":
+    - uv run pytest tests/test_template_changelog_policy.py
   "tests/test_copier_update_golden_path.py":
     - uv run pytest tests/test_copier_update_golden_path.py
   "tests/test_script_local_golden_path.py":

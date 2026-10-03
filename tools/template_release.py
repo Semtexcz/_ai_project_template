@@ -17,10 +17,12 @@ branch:
 
 1. validate the current template version and the requested SemVer bump;
 2. require a non-``main`` branch and a clean worktree;
-3. run ``make release-check``;
-4. validate the candidate project state;
-5. update ``project/state.yaml.template.version``;
-6. create a normal Git commit ``chore(release): vX.Y.Z`` on the branch.
+3. require a ``CHANGELOG.md`` release section for the target version, so every
+   template change carries a released version and its changelog entry;
+4. run ``make release-check``;
+5. validate the candidate project state;
+6. update ``project/state.yaml.template.version``;
+7. create a normal Git commit ``chore(release): vX.Y.Z`` on the branch.
 
 It creates no tag and pushes nothing. The version bump is a normal repository
 change and must reach ``main`` through the standard branch -> push -> pull
@@ -37,7 +39,8 @@ mutation and it creates only an annotated tag:
 4. require local ``main`` == ``origin/main`` (no stale/diverged main);
 5. verify ``HEAD`` is the release boundary: ``project/state.yaml`` records
    ``vX.Y.Z`` at ``HEAD`` and an older version at ``HEAD^1`` (the pre-merge
-   mainline parent for merge commits);
+   mainline parent for merge commits). Release PRs must make that version
+   transition their final commit so rebase history preserves the boundary;
 6. refuse an existing local tag;
 7. create an annotated ``vX.Y.Z`` tag pointing at ``HEAD``.
 
@@ -281,6 +284,64 @@ def git_file_version(project: Any, rev: str) -> str | None:
     return str(version) if version else None
 
 
+def validate_release_boundary(project: Any, state: dict[str, Any], *, tip_name: str) -> str:
+    """Prove that HEAD itself introduces the current template release version.
+
+    This read-only invariant is shared by PR/CI verification and post-merge
+    tagging. Callers own branch and freshness requirements; this function
+    intentionally works on a release branch as well as on ``main``.
+    """
+    if state.get("project", {}).get("type") != "template":
+        raise ReleaseError(
+            "Template releases are only supported in the template repository "
+            "(project.type=template)."
+        )
+    current_version = str(state.get("template", {}).get("version", ""))
+    parse_template_version(current_version)
+
+    head_version = git_file_version(project, "HEAD")
+    if head_version != current_version:
+        raise ReleaseError(
+            f"project/state.yaml at HEAD does not record version {current_version}. "
+            "Refusing to verify an unexpected release state."
+        )
+    if not git_has_parent():
+        raise ReleaseError(
+            "Refusing to verify the release boundary: HEAD has no first parent, so "
+            "the version transition cannot be verified as a committed release boundary."
+        )
+    parent_version = git_file_version(project, "HEAD^1")
+    try:
+        parse_template_version(parent_version or "")
+    except ReleaseError as exc:
+        raise ReleaseError(
+            "Refusing to verify the release boundary: could not read a valid previous "
+            "template version from HEAD^1. The version change must be an ordinary "
+            "committed change. " + str(exc)
+        ) from exc
+    if parent_version == current_version:
+        raise ReleaseError(
+            f"Version {current_version} was already present before the current {tip_name}. "
+            "The version-transition commit must be the final commit of the release PR."
+        )
+    if parse_template_version(current_version) <= parse_template_version(parent_version):
+        raise ReleaseError(
+            f"Refusing to verify the release boundary: template.version did not advance "
+            f"at the current {tip_name} ({parent_version} -> {current_version})."
+        )
+    return current_version
+
+
+def verify_template_release_boundary() -> None:
+    """Read-only PR/CI verification that the branch tip introduces this release."""
+    project = load_project_tool()
+    current_version = validate_release_boundary(project, project.read_state(), tip_name="branch tip")
+    print(
+        f"Verified template release boundary at HEAD: {current_version} was introduced "
+        "relative to HEAD^1. No repository state was modified."
+    )
+
+
 def state_file_mode() -> int:
     try:
         return stat.S_IMODE(STATE_PATH.stat().st_mode)
@@ -373,6 +434,43 @@ def require_git_identity() -> None:
         raise ReleaseError("Git user.name and user.email must be configured before release.")
 
 
+CHANGELOG_RELEASE_HEADING_RE = re.compile(
+    r"^##\s+(?P<version>v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))"
+    r"\s+-\s+\d{4}-\d{2}-\d{2}\s*$"
+)
+
+
+def changelog_release_versions() -> list[str]:
+    """Return released versions from CHANGELOG.md, newest first."""
+    path = ROOT / "CHANGELOG.md"
+    if not path.exists():
+        return []
+    versions: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = CHANGELOG_RELEASE_HEADING_RE.match(line.strip())
+        if match:
+            versions.append(match.group("version"))
+    return versions
+
+
+def require_changelog_release(next_version: str) -> None:
+    """Require a changelog release section for the version being prepared."""
+    versions = changelog_release_versions()
+    if not versions:
+        raise ReleaseError(
+            "CHANGELOG.md has no dated release section. Add a '## "
+            f"{next_version} - YYYY-MM-DD' section with this change's entries before "
+            "preparing the release."
+        )
+    if versions[0] != next_version:
+        raise ReleaseError(
+            f"CHANGELOG.md newest release is {versions[0]} but this release is "
+            f"{next_version}. Every template change is released with its own version "
+            f"and changelog entry: add the '## {next_version} - YYYY-MM-DD' section "
+            "first."
+        )
+
+
 def prepare_template_release(*, bump: str, dry_run: bool) -> None:
     project = load_project_tool()
     state = project.read_state()
@@ -402,6 +500,7 @@ def prepare_template_release(*, bump: str, dry_run: bool) -> None:
         raise ReleaseError(f"Git tag {next_version} already exists.")
     require_clean_worktree()
     require_git_identity()
+    require_changelog_release(next_version)
 
     print(f"Preparing template release {current_version} -> {next_version} ({bump}) on branch {branch}.")
     run_command(["make", "release-check"])
@@ -480,37 +579,7 @@ def tag_template_release() -> None:
             "or rewrites branches; update local main explicitly and retry."
         )
 
-    head_version = git_file_version(project, "HEAD")
-    if head_version != current_version:
-        raise ReleaseError(
-            f"project/state.yaml at HEAD does not record version {current_version}. "
-            "Refusing to tag an unexpected release state."
-        )
-    if not git_has_parent():
-        raise ReleaseError(
-            "Refusing to tag: HEAD has no first parent, so the version transition "
-            "cannot be verified as a committed release boundary."
-        )
-    parent_version = git_file_version(project, "HEAD^1")
-    try:
-        parse_template_version(parent_version or "")
-    except ReleaseError as exc:
-        raise ReleaseError(
-            "Refusing to tag: could not read a valid previous template version from "
-            "HEAD^1 (the pre-merge mainline state). The version change must be an "
-            "ordinary committed change. " + str(exc)
-        ) from exc
-    if parent_version == current_version:
-        raise ReleaseError(
-            f"Version {current_version} was already present before the current main tip. "
-            "Tag the release immediately after its PR merge or identify the intended "
-            "release commit explicitly."
-        )
-    if parse_template_version(current_version) <= parse_template_version(str(parent_version)):
-        raise ReleaseError(
-            f"Refusing to tag: template.version did not advance at the current main tip "
-            f"({parent_version} -> {current_version})."
-        )
+    validate_release_boundary(project, state, tip_name="main tip")
     if git_tag_exists(current_version):
         raise ReleaseError(f"Git tag {current_version} already exists locally.")
 
@@ -539,12 +608,18 @@ def main() -> None:
         "tag",
         help="Phase 2: create the annotated release tag on the merged main release commit.",
     )
+    subparsers.add_parser(
+        "verify",
+        help="Read-only PR/CI check that HEAD introduces template.version relative to HEAD^1.",
+    )
     args = parser.parse_args()
     try:
         if args.command == "prepare":
             prepare_template_release(bump=args.bump, dry_run=args.dry_run)
-        else:
+        elif args.command == "tag":
             tag_template_release()
+        else:
+            verify_template_release_boundary()
     except ReleaseError as exc:
         print(f"ERROR: {exc}")
         raise SystemExit(1) from exc

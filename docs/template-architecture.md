@@ -244,17 +244,23 @@ request and a failed CI check starts a fresh repair session on the same task,
 branch, worktree, claim, and pull request.
 
 Template release is a two-phase maintainer workflow that preserves the PR-only
-`main` rule. `make template-release-prepare BUMP=<major|minor|patch>`
+`main` rule. Every template change is a release: it bumps the version and adds
+an English entry under a dated `## vX.Y.Z - YYYY-MM-DD` section in
+`CHANGELOG.md`, which has no `Unreleased` section, and
+`make validate-template-docs` (part of `make check`) enforces that contract.
+`make template-release-prepare BUMP=<major|minor|patch>`
 (implemented in `tools/template_release.py`, outside the rendered template
-directory) validates, runs `make release-check`, and creates a normal
+directory) requires a matching `CHANGELOG.md` release section, validates, runs
+`make release-check`, and creates a normal
 `chore(release): vX.Y.Z` commit on a non-`main` release branch. It never tags
 or pushes and refuses to run on `main`; the version commit reaches `main` only
 through the normal pull request and human merge. After the merge,
 `make template-release-tag` runs on clean, up-to-date `main`, verifies local
 `main` equals `origin/main` and that the current main tip introduced the
 `template.version` transition, and creates an annotated `vX.Y.Z` tag pointing
-at that release boundary. The tip can be a merge commit, squash commit, or the
-release commit itself under fast-forward/rebase history. Tagging creates no
+at that release boundary. Merge, squash, fast-forward, and rebase histories are
+supported when the version-transition commit is final in the release PR, because
+a rebase preserves individual commit order. Tagging creates no
 commit, and a human publishes only the intended tag (`git push origin vX.Y.Z`)
 before Copier can use it. Validation targets, task review, and task completion
 do not create release commits or tags.

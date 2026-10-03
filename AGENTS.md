@@ -87,6 +87,25 @@ documents that the context bundle already resolves deterministically.
   creates the reviewable version commit on a non-`main` release branch, and
   `make template-release-tag` creates the annotated release tag only after the
   release PR is merged to `main` and local `main` matches `origin/main`.
+- Every template change is a release. As part of the same change, choose the
+  SemVer bump (`major` for breaking template or update contracts, `minor` for
+  new template capability, `patch` for fixes, tooling, or documentation that
+  preserve behavior) and add an English entry under a dated
+  `## vX.Y.Z - YYYY-MM-DD` section in `CHANGELOG.md` for exactly that version.
+  `CHANGELOG.md` must never contain an `Unreleased` section.
+  `make template-release-prepare` refuses to prepare a release whose newest
+  `CHANGELOG.md` section is not the version being prepared, and
+  `make validate-template-docs` (part of `make check`) rejects `Unreleased`
+  sections, malformed release headings, non-descending releases, an empty newest
+  section, and a changelog version that is neither the current `template.version`
+  nor exactly one SemVer bump ahead. That permissive window is intentional: it
+  lets release preparation run before the version commit exists.
+  `make validate-template-release-ready` (executed by Template CI after
+  `make release-check`) requires the newest `CHANGELOG.md` release to equal
+  `template.version` exactly. Template CI then runs
+  `make validate-template-release-boundary`, which proves `HEAD` itself
+  introduces that version relative to `HEAD^1`. The version transition must be
+  the final release-PR commit so rebase history remains taggable.
 
 Canonical agent procedures are in `.agents/`. Codex-specific adapter notes are
 in `.codex/`. Project-specific context is in `project/` and `docs/`.

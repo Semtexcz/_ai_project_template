@@ -216,20 +216,37 @@ Template releases use a two-phase, PR-only flow. They are maintainer actions in
 the template repository root (`tools/template_release.py`), never in generated
 projects, and they are never a backdoor for committing to `main`.
 
+Every template change is a release: it bumps
+`project/state.yaml.template.version` and adds an English entry under a dated
+`## vX.Y.Z - YYYY-MM-DD` section in `CHANGELOG.md`. There is no `Unreleased`
+section. `make validate-template-docs` (part of `make check`) rejects an
+`Unreleased` section, malformed or non-descending release headings, an empty
+newest release section, and a changelog version that is neither the current
+`template.version` nor exactly one SemVer bump ahead. That permissive window is
+intentional: it lets release preparation run before the version commit exists.
+`make validate-template-release-ready` is the state/content half of final
+readiness: it requires the newest `CHANGELOG.md` release to equal
+`template.version` exactly. Template CI then runs
+`make validate-template-release-boundary`, which proves `HEAD` itself introduces
+that version relative to `HEAD^1`. The version-transition commit must be the
+final commit of the release PR so rebase preserves the taggable boundary.
+
 Phase 1 (`make template-release-prepare BUMP=<major|minor|patch>`) prepares an
-ordinary, reviewable version commit on a non-`main` release branch. It runs the
-release gate, updates `project/state.yaml.template.version`, commits
-`chore(release): vX.Y.Z`, creates no tag, pushes nothing, and refuses to run on
-`main`. The commit reaches `main` only through the normal push -> pull request
--> CI -> human approval -> merge workflow.
+ordinary, reviewable version commit on a non-`main` release branch. It requires
+a matching `CHANGELOG.md` release section, runs the release gate, updates
+`project/state.yaml.template.version`, commits `chore(release): vX.Y.Z`, creates
+no tag, pushes nothing, and refuses to run on `main`. The commit reaches `main`
+only through the normal push -> pull request -> CI -> human approval -> merge
+workflow.
 
 Phase 2 (`make template-release-tag`) runs on clean, up-to-date `main` after
 the release PR is merged. It fetches `origin main` (remote-tracking ref only),
 verifies local `main` equals `origin/main`, verifies the current main tip
 introduced the `template.version` transition from its first parent, refuses
 existing local or remote tags, and creates an annotated tag at that release
-boundary. The boundary may be a merge commit, squash commit, or the release
-commit itself under fast-forward/rebase history. It never creates commits, never
+boundary. Merge, squash, fast-forward, and rebase histories are supported when
+the release PR ends with the version-transition commit; rebase preserves commit
+order. It never creates commits, never
 rewrites history, and never force-pushes. Tagging is post-merge release metadata
 and grants no exception to PR-only `main` governance.
 

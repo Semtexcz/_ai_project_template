@@ -378,6 +378,51 @@ once for that repair cycle, push the same pull request, and stop.
 `make release-check` is the exhaustive template gate; normal task implementation
 never runs it locally. Actual template release preparation still uses it - see
 the release workflow below.
+
+## Version And Changelog Policy
+
+Every template change is a release, so every change carries a version bump and a
+changelog entry. The changelog has no `Unreleased` section: instead, the change
+adds a dated release section for the version it will ship as.
+
+1. Choose the SemVer bump for the change: `major` for breaking template or Copier
+   update contracts, `minor` for new template capability, and `patch` for fixes,
+   tooling, or documentation that preserve behavior.
+2. Add an English entry under `## vX.Y.Z - YYYY-MM-DD` in `CHANGELOG.md`, where
+   `vX.Y.Z` is the bumped version.
+3. Run `make template-release-prepare BUMP=<major|minor|patch>` on a non-`main`
+   release branch to record that version in `project/state.yaml` and create the
+   reviewable `chore(release): vX.Y.Z` commit. The changelog section and the
+   version commit travel together in the same pull request.
+
+`CHANGELOG.md` is validated as part of `make validate-template-docs`
+(`make check` and `make release-check`). It rejects an `Unreleased` section,
+release headings that are not `## vX.Y.Z - YYYY-MM-DD`, releases that are not in
+descending order, an empty newest release section, and a newest version that is
+neither the current `project/state.yaml` `template.version` nor exactly one
+SemVer bump ahead of it. That permissive window is what lets a release be
+prepared before the version commit exists. `make template-release-prepare`
+additionally refuses to prepare a release whose newest changelog section is not
+the version being prepared.
+
+Final release readiness has three distinct checks:
+
+- `make validate-template-docs` validates changelog structure and permits one
+  pending SemVer bump so release preparation can run.
+- `make validate-template-release-ready` proves the newest changelog release
+  exactly equals `template.version`.
+- `make validate-template-release-boundary` proves `HEAD` itself introduces
+  `template.version` relative to `HEAD^1`.
+
+Template CI runs the latter two after `make release-check`. On `pull_request`,
+the Git release-boundary gate explicitly checks the actual PR head rather than
+GitHub's synthetic merge ref, because the boundary protects commit ordering for
+rebase/fast-forward histories. On a push to `main`, it checks the pushed main
+tip. The boundary check is what makes merge, squash, fast-forward, and rebase
+merges compatible with post-merge tagging: because a rebase merges every PR
+commit individually, the version-transition commit must be the final commit of
+the release PR.
+
 ## Template Releases (PR-only, two-phase)
 
 Template releases follow the same rule as every other change: all commits
@@ -417,10 +462,12 @@ make template-release-prepare BUMP=minor
 2. refuses to run on `main` (with instructions to create a release branch),
    rejects a detached HEAD and dirty worktrees, refuses an already-existing
    target tag, and checks Git identity;
-3. runs `make release-check`;
-4. validates the candidate project state;
-5. updates `template.version` in `project/state.yaml`;
-6. creates a normal Git commit `chore(release): v1.2.0` on the current branch.
+3. requires a dated `## vX.Y.Z - YYYY-MM-DD` section for the target version in
+   `CHANGELOG.md` (so every change ships a version and a changelog entry);
+4. runs `make release-check`;
+5. validates the candidate project state;
+6. updates `template.version` in `project/state.yaml`;
+7. creates a normal Git commit `chore(release): v1.2.0` on the current branch.
 
 It creates no Git tag and pushes nothing. The command leaves you on the release
 branch. Use `DRY_RUN=1` to preview the prepare without writing state or
@@ -462,8 +509,9 @@ make template-release-tag
 4. requires local `main` == `origin/main` and fails clearly when local main is
    behind, ahead, or diverged;
 5. reads `template.version` from `project/state.yaml`;
-6. verifies that `HEAD` records `vX.Y.Z` and its first parent (`HEAD^1`)
-   records a valid, strictly older template version;
+6. reuses the shared release-boundary validator to verify that `HEAD` records
+   `vX.Y.Z` and its first parent (`HEAD^1`) records a valid, strictly older
+   template version;
 7. refuses an already-existing local tag;
 8. creates an annotated `vX.Y.Z` tag pointing at `HEAD`.
 
@@ -500,10 +548,15 @@ the following hold:
   strictly older template version.
 
 This identifies the current main tip as the release boundary and prevents
-tagging arbitrary later commits. It supports merge commits, squash commits, and
-fast-forward/rebase history without depending on GitHub commit-message layout.
-The prepared `chore(release): vX.Y.Z` subject remains review evidence, but is
-not a tag-time requirement because merge strategies may rewrite it.
+tagging arbitrary later commits. It supports merge commits, squash commits,
+fast-forward, and rebase history without depending on GitHub commit-message
+layout, provided the version-transition commit is the final commit of the release
+PR: a rebase replays every PR commit in order, so a later repair commit would move
+the main tip past the transition and correctly fail the boundary check. The
+shared `make validate-template-release-boundary` gate enforces the same invariant
+on the PR tip before the merge, so the two cannot drift. The prepared
+`chore(release): vX.Y.Z` subject remains review evidence, but is not a tag-time
+requirement because merge strategies may rewrite it.
 
 ### Failure and recovery
 

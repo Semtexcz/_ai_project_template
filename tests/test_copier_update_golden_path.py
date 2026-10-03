@@ -68,6 +68,28 @@ def env_for(tmp_path: Path) -> dict[str, str]:
     }
 
 
+FIXTURE_RELEASE_DATE = "2026-01-01"
+
+
+def set_template_version(repo: Path, version: str) -> None:
+    state_path = repo / "project" / "state.yaml"
+    state = yaml.safe_load(state_path.read_text())
+    if not isinstance(state, dict):
+        raise AssertionError("project/state.yaml did not contain a mapping")
+    template = state.get("template")
+    if not isinstance(template, dict):
+        raise AssertionError("project/state.yaml did not contain a template mapping")
+    template["version"] = version
+    state_path.write_text(yaml.safe_dump(state, sort_keys=False))
+
+
+def write_fixture_changelog(repo: Path, *, releases: list[tuple[str, str]]) -> None:
+    sections = ["# Changelog"]
+    for version, entry in releases:
+        sections.extend(["", f"## {version} - {FIXTURE_RELEASE_DATE}", "", f"- {entry}"])
+    (repo / "CHANGELOG.md").write_text("\n".join(sections) + "\n")
+
+
 def copy_workspace_to_template_repo(target: Path) -> None:
     shutil.copytree(
         ROOT,
@@ -80,9 +102,11 @@ def copy_workspace_to_template_repo(target: Path) -> None:
             "__pycache__",
         ),
     )
-    state_path = target / "project" / "state.yaml"
-    state_text = state_path.read_text().replace("version: v1.1.1", "version: v1.0.0")
-    state_path.write_text(state_text)
+    set_template_version(target, "v1.0.0")
+    write_fixture_changelog(
+        target,
+        releases=[("v1.0.0", "Synthetic initial template release.")],
+    )
     makefile = target / "Makefile"
     # Stub out the real release-check recipe (which would otherwise run the
     # full nested pytest gate). Match the target line regardless of its
@@ -243,6 +267,13 @@ def create_template_v2(template_repo: Path, env: Mapping[str, str]) -> str:
             "## Quick Start\n\nTemplate update marker: v1.1.0.\n\n```bash\nmake setup\nmake check\nmake build\n```",
         )
     )
+    write_fixture_changelog(
+        template_repo,
+        releases=[
+            ("v1.1.0", "Synthetic Copier update fixture release."),
+            ("v1.0.0", "Synthetic initial template release."),
+        ],
+    )
     commit_all(template_repo, env, "template v1.1.0")
     # PR-only two-phase release: version bumps reach main only through a PR merge.
     origin = template_repo.parent / "origin-template.git"
@@ -252,6 +283,7 @@ def create_template_v2(template_repo: Path, env: Mapping[str, str]) -> str:
     run_command(["git", "--git-dir", str(origin), "symbolic-ref", "HEAD", "refs/heads/main"], template_repo, env)
     run_command(["git", "checkout", "-q", "-b", "release/v1.1.0"], template_repo, env)
     run_command(["make", "template-release-prepare", "BUMP=minor"], template_repo, env)
+    run_command(["make", "validate-template-release-ready"], template_repo, env)
     run_command(["git", "push", "-q", "-u", "origin", "release/v1.1.0"], template_repo, env)
     run_command(["git", "checkout", "-q", "main"], template_repo, env)
     # Simulate the human GitHub merge-commit PR merge: main advances at a release boundary.

@@ -166,6 +166,30 @@ def test_release_hygiene_gitignore_and_gate_are_declared() -> None:
     assert "`make release-check` runs the full" in readme
 
 
+def test_release_ci_checks_actual_pr_head_for_git_release_boundary() -> None:
+    workflow = (ROOT / ".github/workflows/template-ci.yml").read_text()
+    release_job = workflow.split("  release-check:\n", 1)[1].split("\n  render-matrix:", 1)[0]
+
+    release_check = "run: make release-check"
+    release_ready = "run: make validate-template-release-ready"
+    pr_head_checkout = "- name: Check out actual pull request head for release-boundary validation"
+    boundary = "run: make validate-template-release-boundary"
+
+    assert release_check in release_job
+    assert release_ready in release_job
+    assert release_job.index(release_check) < release_job.index(release_ready)
+    assert pr_head_checkout in release_job
+    assert "if: github.event_name == 'pull_request'" in release_job
+    assert "ref: ${{ github.event.pull_request.head.sha }}" in release_job
+    assert "fetch-depth: 2" in release_job
+    assert release_job.index(pr_head_checkout) < release_job.index(boundary)
+
+    boundary_step = release_job[release_job.index("- name: Require the final release boundary (HEAD introduces template.version)"):]
+    boundary_step = boundary_step.split("\n      - name:", 1)[0]
+    assert "if:" not in boundary_step
+    assert boundary in boundary_step
+
+
 def test_documentation_validation_targets_are_declared() -> None:
     makefile = (ROOT / "Makefile").read_text()
     generated_makefile = (ROOT / "template" / "Makefile.jinja").read_text()
@@ -230,6 +254,42 @@ def test_agent_workflow_strictness_is_configurable() -> None:
     assert "${{ github.token }}" in root_ci
     assert "${{ '{{' }} github.token {{ '}}' }}" in generated_ci
     assert "{% if workflow_mode == \"pr\" %}" in generated_ci
+
+
+def test_template_ci_release_gate_requires_the_strict_release_ready_boundary() -> None:
+    """Template CI must prove the strict final release boundary on every PR.
+
+    The ordinary release check stays permissive so `make template-release-prepare`
+    can run before the version commit exists. Ordinary checks are then followed by
+    two additional final steps: release-ready equality (newest changelog release
+    equals `project/state.yaml.template.version`) and the Git release boundary
+    (`HEAD` introduces `template.version` relative to `HEAD^1`).
+    """
+    root_ci = (ROOT / ".github" / "workflows" / "template-ci.yml").read_text()
+    makefile = (ROOT / "Makefile").read_text()
+
+    assert "release-check:" in root_ci
+    assert "make release-check" in root_ci
+    assert "make validate-template-release-ready" in root_ci
+    assert "make validate-template-release-boundary" in root_ci
+    # Both gates are additional final steps, not replacements for the permissive
+    # release check that release preparation still depends on.
+    assert root_ci.index("make release-check") < root_ci.index(
+        "make validate-template-release-ready"
+    )
+    assert root_ci.index("make validate-template-release-ready") < root_ci.index(
+        "make validate-template-release-boundary"
+    )
+
+    assert "\nvalidate-template-release-ready:" in makefile
+    recipe = makefile.split("\nvalidate-template-release-ready:", 1)[1].split("\n\n", 1)[0]
+    assert "tools/template_docs.py --release-ready" in recipe
+
+    assert "\nvalidate-template-release-boundary:" in makefile
+    boundary_recipe = makefile.split("\nvalidate-template-release-boundary:", 1)[1].split(
+        "\n\n", 1
+    )[0]
+    assert "tools/template_release.py verify" in boundary_recipe
 
 
 def test_template_ci_render_matrix_respects_governance_modes() -> None:
